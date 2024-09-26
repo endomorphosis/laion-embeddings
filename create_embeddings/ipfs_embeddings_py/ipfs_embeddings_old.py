@@ -1,5 +1,5 @@
-from .ipfs_multiformats import *
-from .ipfs_only_hash import *
+
+from ipfs_multiformats import *
 import requests
 import subprocess
 import json
@@ -20,7 +20,6 @@ from multiprocessing import Pool
 class ipfs_embeddings_py:
     def __init__(self, resources, metedata):
         self.multiformats = ipfs_multiformats_py(resources, metedata)
-        self.ipfs_only_hash = ipfs_only_hash_py(resources, metedata)
         self.https_endpoints = {}
         self.libp2p_endpoints = {}
         self.datasets = datasets.Dataset
@@ -42,11 +41,7 @@ class ipfs_embeddings_py:
         self.async_generator = self.async_generator
         self.add_https_endpoint = self.add_https_endpoint
         self.rm_https_endpoint = self.rm_https_endpoint
-        # self.queue_index_cid = self.queue_index_cid
-        # self.queue_index_knn = self.queue_index_knn
         self.choose_endpoint = self.choose_endpoint
-        # self.pop_index_knn = self.pop_index_knn
-        # self.pop_index_cid = self.pop_index_cid
         self.max_batch_size = self.max_batch_size
         return None
     
@@ -146,9 +141,9 @@ class ipfs_embeddings_py:
                 embed_fail = False
                 exponent += 1
                 batch_size = 2**exponent
-            except:
+            except Exception as e:
                 embed_fail = True
-                if isinstance(embeddings, ValueError):
+                if isinstance(e, ValueError):
                     fail_reason = embeddings.args[0]
                     if fail_reason.status == 413:
                         pass
@@ -191,41 +186,6 @@ class ipfs_embeddings_py:
                 knn_stack = query_response
             pass
         return knn_stack
-    
-    # def queue_index_cid(self, samples):
-    #     if type(samples) is None:
-    #         raise ValueError("samples must be a list")
-    #     if isinstance(samples, str):
-    #         samples = [samples]
-    #         self.knn_queue = iter(list(samples))
-    #         return True
-    #     if isinstance(samples, list):
-    #         self.knn_queue = list(self.knn_queue)
-    #         for this_sample in samples:
-    #             self.knn_queue.append(this_sample)
-    #         self.knn_queue = iter(self.knn_queue)
-    #         return True
-    #     else:
-    #         raise ValueError("samples must be a list")
-    
-    # def queue_index_knn(self, samples):
-    #     print("queue_index_knn")
-    #     print(samples)
-    #     print(type(samples))
-    #     if samples is None:
-    #         raise ValueError("samples must be a list")
-    #     if isinstance(samples, str):
-    #         samples = [samples]
-    #         self.knn_queue = iter(list(samples))
-    #         return True
-    #     if isinstance(samples, list):
-    #         self.knn_queue = list(self.knn_queue)
-    #         for this_sample in samples:
-    #             self.knn_queue.append(this_sample)
-    #         self.knn_queue = iter(self.knn_queue)
-    #         return True
-    #     else:
-    #         raise ValueError("samples must be a list")
 
     async def make_post_request(self, endpoint, data):
         headers = {'Content-Type': 'application/json'}
@@ -250,16 +210,7 @@ class ipfs_embeddings_py:
                 this_endpoint = random.choice(list(filtered_https_endpoints.keys()))
             print("chosen endpoint for " + model + " is " + this_endpoint)
             return this_endpoint
-        
-    # def https_index_cid(self, samples, endpoint):
-    #     endpoint_chunk_size = self.https_endpoints[endpoint]
-    #     all_chunk = []
-    #     this_chunk = []
-    #     for i in range(samples):
-    #         self
-    #         ## request endpoint
-    #         pass
-    #     return None
+
     
     def https_index_knn(self, selected_endpoint, model):
         batch_size = 0
@@ -284,30 +235,6 @@ class ipfs_embeddings_py:
                     return endpoint
         return None
 
-    # def pop_index_cid(self, number):
-    #     results = []
-    #     if number > len(self.cid_queue):
-    #         raise ValueError("number is greater than the queue size")
-    #     if number <= 0:
-    #         raise ValueError("number must be greater than 0")
-    #     for i in range(number):
-    #         results.push(self.cid_queue.pop())
-    #         i += 1
-    #     return results
-    
-    # def pop_index_knn(self, number):
-    #     results = []
-    #     knn_queue_list = list(self.knn_queue)
-    #     if number > len(knn_queue_list):
-    #         raise ValueError("number is greater than the queue size")
-    #     if number <= 0:
-    #         raise ValueError("number must be greater than 0")
-    #     for i in range(number):
-    #         results.append(knn_queue_list.pop())
-    #         i += 1
-    #     self.knn_queue = iter(knn_queue_list)
-    #     return results
-
     async def async_generator(self, iterable):
         for item in iterable:
             yield item
@@ -316,24 +243,18 @@ class ipfs_embeddings_py:
         batch = []
         if model_name not in self.index.keys():
             self.index[model_name] = datasets.Dataset.from_dict({"cid": [], "embedding": []})
-        
-        def process_batch(batch):
-            loop = asyncio.get_event_loop()
-            results = loop.run_until_complete(self.send_batch(batch, column, model_name))
-            return results
-        cores = os.cpu_count() or 1
-        with Pool(processes=cores) as pool:
-            while True:
-                item = await queue.get()  # Wait for item
-                batch.append(item)
-                if len(batch) >= batch_size:
-                    # Process batch
-                    results = await asyncio.get_event_loop().run_in_executor(None, process_batch, batch)
-                    for i in range(len(results)):
-                        self.index[model_name] = self.index[model_name].add_item({"cid": batch[i]["cid"], "embedding": results[i]})
-                    batch = []  # Clear batch after sending
-                    self.saved = False
-                queue.task_done()
+        while True:
+            item = await queue.get()  # Wait for item
+            batch.append(item)
+            if len(batch) >= batch_size:
+                # Process batch
+                results = await self.send_batch(batch, column, model_name)
+                for i in range(len(results)):
+                    self.index[model_name] = self.index[model_name].add_item({"cid": batch[i]["cid"], "embedding": results[i]})
+                batch = []  # Clear batch after sending
+                self.saved = False
+            queue.task_done()
+        return None
 
 
     async def producer(self, dataset_stream, column, queues):
@@ -428,7 +349,7 @@ class ipfs_embeddings_py:
         self.endpoint_status[endpoint] = status
         return None
 
-    async def index_dataset(self, dataset, column, dst_path, models):
+    async def main(self, dataset, column, dst_path, models):
         if not os.path.exists(dst_path):
             os.makedirs(dst_path)
         self.queues = {}
@@ -469,3 +390,34 @@ class ipfs_embeddings_py:
         await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
         return None 
     
+if __name__ == "__main__":
+    metadata = {
+        "dataset": "TeraflopAI/Caselaw_Access_Project",
+        "column": "text",
+        "models": [
+            "BAAI/bge-m3",
+            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            "dunzhang/stella_en_1.5B_v5",
+        ],
+        "dst_path": "/storage/teraflopai"
+    }
+    resources = {
+        "https_endpoints": [
+            ["BAAI/bge-m3", "http://62.146.169.111:8080/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
+            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8080/embed-large", 131072],
+            ["BAAI/bge-m3", "http://62.146.169.111:8081/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
+            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8081/embed-large", 131072],
+            ["BAAI/bge-m3", "http://62.146.169.111:8082/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8082/embed-large", 131072],
+            ["BAAI/bge-m3", "http://62.146.169.111:8083/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8083/embed-large", 131072],
+        ]
+    }
+    create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
+    asyncio.run(create_embeddings_batch.main(metadata["dataset"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+
+

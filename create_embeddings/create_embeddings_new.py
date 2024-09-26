@@ -4,7 +4,7 @@ from datasets import load_dataset, Dataset
 import os
 import sys
 import datasets
-from ipfs_embeddings_py import ipfs_embeddings_py_new
+from ipfs_embeddings_py import ipfs_embeddings_py
 import os
 import sys
 import subprocess
@@ -22,7 +22,7 @@ class create_embeddings:
         if len(list(metadata.keys())) > 0:
             for key in metadata.keys():
                 setattr(self, key, metadata[key])
-        self.ipfs_embeddings_py = ipfs_embeddings_py_new(resources, metadata)
+        self.ipfs_embeddings_py = ipfs_embeddings_py(resources, metadata)
         if "https_endpoints" in resources.keys():
             for endpoint in resources["https_endpoints"]:
                 self.ipfs_embeddings_py.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])
