@@ -12,9 +12,28 @@ import os
 import sys
 import subprocess
 from transformers import AutoTokenizer
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import asyncio
 from multiprocessing import Pool
+
+async def process_item(item, column, queues, index_cid, cid_list, new_dataset):
+    # Assuming `item` is a dictionary with required data
+    print(f"Processing item with CID {index_cid(item[column])[0]}")
+    column_names = item.keys()
+    this_cid = index_cid(item[column])[0]
+    if "cid" not in column_names:
+        item["cid"] = this_cid
+    # Check if cid is in index
+    if this_cid in cid_list:
+        print(f"CID {this_cid} already in index, skipping item.")
+    else:
+        cid_list.add(this_cid)
+        new_dataset = new_dataset.add_item(item)
+        print(f"Added item with CID {this_cid} to new_dataset.")
+        for queue in queues.values():
+            for q in queue.values():
+                await q.put(item)
+                print(f"Added item with CID {this_cid} to queue.")
 
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
@@ -24,6 +43,7 @@ class ipfs_embeddings_py:
         self.datasets = datasets.Dataset
         self.index =  {}
         self.queues = {}
+        self.batch_sizes = {}
         self.cid_list = set()
         self.cid_queue = iter([])
         self.knn_queue = iter([])
@@ -118,39 +138,97 @@ class ipfs_embeddings_py:
         exponent = 1
         batch = []
         batch_size = 2**exponent
+        token_length_size = round(self.https_endpoints[model][endpoint] * 0.99)
+        test_tokens = []
+        for i in range(token_length_size):
+            test_tokens.append(random.randint(0,65536))
+        if model not in self.tokenizer.keys():
+            self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu')
+        test_text = self.tokenizer[model].decode(test_tokens)
         if endpoint is None:
             endpoint = self.choose_endpoint(model)
         while not embed_fail:
-            batch = ["Hello World"] * batch_size
+            test_batch = []
+            for i in range(batch_size):
+                test_batch.append(test_text)
             try:
-                embeddings = await self.index_knn(batch, model, endpoint)
-                if not isinstance(embeddings[0], list):
-                    print("Embeddings not returned as list")
-                    raise Exception("Embeddings not returned as list")
+                embeddings = await self.index_knn(test_batch, model, endpoint)
+                if not isinstance(embeddings, list):
+                    if isinstance(embeddings, ValueError):
+                        fail_reason = embeddings.args[0]
+                        if "413" in str(fail_reason):
+                            error = fail_reason
+                            if error.status == 413:
+                                if error.reason == "Payload Too Large":
+                                    error_content = error.content._buffer[0].decode("utf-8")
+                                    error_content = json.loads(error_content)
+                                    if "error" in error_content.keys() and "error_type" in error_content.keys():
+                                        if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
+                                            expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
+                                            given = int(error_content["error"].split("Given: ")[1])
+                                            difference = given - expected
+                                            self.https_endpoints[model][endpoint] = self.https_endpoints[model][endpoint] - difference
+                                            return await self.max_batch_size(model, endpoint)
+                    raise Exception(embeddings)
                 exponent += 1
                 batch_size = 2**exponent
             except Exception as e:
+                fail_reason = e.args[0]
                 embed_fail = True
-                # Handle specific exceptions if needed
+                if isinstance(e, ValueError) or isinstance(e, Exception):
+                    if "413" in str(fail_reason):
+                        error = fail_reason.args[0]
+                        if error.status == 413:
+                            if error.reason == "Payload Too Large":
+                                error_content = error.content._buffer[0].decode("utf-8")
+                                error_content = json.loads(error_content)
+                                if "error" in error_content.keys() and "error_type" in error_content.keys():
+                                    if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
+                                        expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
+                                        given = int(error_content["error"].split("Given: ")[1])
+                                        difference = given - expected
+                                        self.https_endpoints[model][endpoint] = self.https_endpoints[model][endpoint] - difference
+                                        results = await self.max_batch_size(model, endpoint)
+                                        return results
+                        pass
+                    if "504" in str(fail_reason):
+                        self.endpoint_status[endpoint] = 0
+                        return 0
+                pass
         self.endpoint_status[endpoint] = 2**(exponent-1)
         return 2**(exponent-1)
 
-    async def index_knn(self, samples, model, chosen_endpoint=None):
+
+    def index_knn(self, samples, model, chosen_endpoint=None):
+        knn_stack = []
         if chosen_endpoint is None:
             chosen_endpoint = self.choose_endpoint(model)
-        if samples is None:
+        if type(samples) is None:
             raise ValueError("samples must be a list")
-        if isinstance(samples, str):
+        if type(samples) is str:
             samples = [samples]
-        this_query = {"inputs": samples}
-        try:
-            query_response = await self.make_post_request(chosen_endpoint, this_query)
-        except Exception as e:
-            raise e
-        if isinstance(query_response, dict) and "error" in query_response.keys():
-            raise Exception("error: " + query_response["error"])
-        else:
-            knn_stack = query_response
+        if type(samples) is iter:
+            this_query = {"inputs": samples}
+            try:
+                query_response = self.make_post_request(chosen_endpoint, this_query)
+            except Exception as e:
+                raise Exception(e)
+            if isinstance(query_response, dict) and "error" in query_response.keys():
+                raise Exception("error: " + query_response["error"])
+            else:
+                knn_stack = query_response
+            pass
+        if type(samples) is list:
+            this_query = {"inputs": samples}
+            try:
+                query_response = self.make_post_request(chosen_endpoint, this_query)
+            except Exception as e:
+                raise Exception(e)
+            if isinstance(query_response, dict) and "error" in query_response.keys():
+                raise Exception("error: " + query_response["error"])
+            else:
+                knn_stack = query_response
+            pass
         return knn_stack
 
     async def make_post_request(self, endpoint, data):
@@ -158,8 +236,7 @@ class ipfs_embeddings_py:
         async with ClientSession() as session:
             async with session.post(endpoint, headers=headers, json=data) as response:
                 if response.status != 200:
-                    content = await response.text()
-                    raise ValueError(f"HTTP {response.status}: {content}")
+                    return ValueError(response)
                 return await response.json()
 
     def choose_endpoint(self, model):
@@ -188,6 +265,7 @@ class ipfs_embeddings_py:
             yield item
 
     async def consumer(self, queue, column, batch_size, model_name, endpoint):
+        print("consumer started")
         batch = []
         if model_name not in self.index.keys():
             self.index[model_name] = datasets.Dataset.from_dict({"cid": [], "embedding": []})
@@ -205,21 +283,24 @@ class ipfs_embeddings_py:
         return None
 
     async def producer(self, dataset_stream, column, queues):
-        loop = asyncio.get_event_loop()
-        with ProcessPoolExecutor() as executor:
-            tasks = []
-            async for item in self.async_generator(dataset_stream):
-                tasks.append(loop.run_in_executor(executor, self.process_item, item, column, queues))
-                # Limit the number of concurrent tasks
-                if len(tasks) >= 1000:
-                    await asyncio.gather(*tasks)
-                    tasks = []
-            if tasks:
+        tasks = []
+        async for item in self.async_generator(dataset_stream):
+            task = process_item(item, column, queues, self.index_cid, self.cid_list, self.new_dataset)
+            tasks.append(task)
+            if len(tasks) >= 1:
                 await asyncio.gather(*tasks)
+                tasks = []
+            # Print the size of all queues
+            for model, endpoints in queues.items():
+                for endpoint, queue in endpoints.items():
+                    print(f"Queue size for model {model} at endpoint {endpoint}: {queue.qsize()}")
+        if tasks:
+            await asyncio.gather(*tasks)
         return None
 
     def process_item(self, item, column, queues):
         # Assuming `item` is a dictionary with required data
+        print(f"Processing item with CID {self.index_cid(item[column])[0]}")
         column_names = item.keys()
         this_cid = self.index_cid(item[column])[0]
         if "cid" not in column_names:
@@ -253,11 +334,37 @@ class ipfs_embeddings_py:
         results = None
         try:
             results = await self.index_knn(new_batch, model_name, endpoint)
-            print(f"Received embeddings for {len(results)} items")
         except Exception as e:
             print(e)
             raise e
-        return results
+        if isinstance(results, ValueError):
+            error = results.args[0]
+            if error.status == 413:
+                if error.reason == "Payload Too Large":
+                    error_content = error.content._buffer[0].decode("utf-8")
+                    error_content = json.loads(error_content)
+                    if "error" in error_content.keys() and "error_type" in error_content.keys():
+                        if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
+                            expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
+                            given = int(error_content["error"].split("Given: ")[1])
+                            difference = given - expected
+                            self.https_endpoints[model_name][endpoint] = self.https_endpoints[model_name][endpoint] - difference
+                            for item in new_batch:
+                                index = new_batch.index(item)
+                                item = { column : item[:self.https_endpoints[model_name][endpoint]] }
+                                new_batch[index] = item
+                            results = await self.send_batch_to_endpoint(new_batch, column, model_name, endpoint)
+                            return results
+            elif error.status == 504:
+                self.endpoint_status[endpoint] = 0
+                return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
+            elif error.status == 502:
+                self.endpoint_status[endpoint] = 0
+                return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
+            raise Exception(error)
+        else:
+            print(f"Received embeddings for {len(results)} items")
+            return results
 
     async def save_to_disk(self, dataset, dst_path, models):
         self.saved = False
@@ -285,7 +392,7 @@ class ipfs_embeddings_py:
         self.all_cid_list = {}
         consumer_tasks = {}
         batch_sizes = {}
-        self.dataset = load_dataset(dataset, split='train', streaming=True).shuffle(seed=42)
+        self.dataset = load_dataset(dataset, split='train', streaming=True).shuffle(random.randint(0,65536))
         columns = self.dataset.column_names
         columns.append("cid")
         new_dataset_dst_path = dst_path+"/"+ dataset.replace("/","---") + ".parquet"
@@ -295,7 +402,7 @@ class ipfs_embeddings_py:
         else:
             self.new_dataset = datasets.Dataset.from_dict({key: [] for key in columns })
             self.all_cid_list["new_dataset"] = set()
-
+        consumer_tasks = {}
         for model in models:
             endpoints = self.get_endpoints(model)
             if not endpoints:
@@ -310,10 +417,17 @@ class ipfs_embeddings_py:
                 self.index[model] = datasets.Dataset.from_dict({"cid": [], "embedding": []})
                 self.all_cid_list[model] = set()
             for endpoint in endpoints:
-                batch_size = await self.max_batch_size(model, endpoint)
-                self.queues[model][endpoint] = asyncio.Queue(maxsize=batch_size*10)
-                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-
+                batch_size = 0
+                if model not in self.batch_sizes:
+                    self.batch_sizes[model] = {}
+                if model not in self.queues:
+                    self.queues[model] = {}
+                if endpoint not in list(self.batch_sizes[model].keys()):
+                    batch_size = await self.max_batch_size(model, endpoint)
+                    self.batch_sizes[model][endpoint] = batch_size
+                if self.batch_sizes[model][endpoint] > 0:
+                    self.queues[model][endpoint] = asyncio.Queue(maxsize=self.batch_sizes[model][endpoint])
+                    consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
         # Compute common cids
         common_cids = set(self.all_cid_list["new_dataset"])
         for cid_list in self.all_cid_list.values():
@@ -343,12 +457,12 @@ if __name__ == "__main__":
             ["BAAI/bge-m3", "http://62.146.169.111:8081/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
             ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8081/embed-large", 131072],
-            ["BAAI/bge-m3", "http://62.146.169.111:8082/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
-            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8082/embed-large", 131072],
-            ["BAAI/bge-m3", "http://62.146.169.111:8083/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
-            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8083/embed-large", 131072],
+            # ["BAAI/bge-m3", "http://62.146.169.111:8082/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+            # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8082/embed-large", 131072],
+            # ["BAAI/bge-m3", "http://62.146.169.111:8083/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+            # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8083/embed-large", 131072],
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
