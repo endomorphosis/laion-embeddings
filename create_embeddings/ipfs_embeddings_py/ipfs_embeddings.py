@@ -182,7 +182,7 @@ class ipfs_embeddings_py:
         return 2**(exponent-1)
 
 
-    def index_knn(self, samples, model, chosen_endpoint=None):
+    async def index_knn(self, samples, model, chosen_endpoint=None):
         knn_stack = []
         if chosen_endpoint is None:
             chosen_endpoint = self.choose_endpoint(model)
@@ -204,7 +204,7 @@ class ipfs_embeddings_py:
         if type(samples) is list:
             this_query = {"inputs": samples}
             try:
-                query_response = self.make_post_request(chosen_endpoint, this_query)
+                query_response = await self.make_post_request(chosen_endpoint, this_query)
             except Exception as e:
                 raise Exception(e)
             if isinstance(query_response, dict) and "error" in query_response.keys():
@@ -277,9 +277,9 @@ class ipfs_embeddings_py:
                 await asyncio.gather(*tasks)
                 tasks = []
             # Print the size of all queues
-            for model, endpoints in queues.items():
-                for endpoint, queue in endpoints.items():
-                    print(f"Queue size for model {model} at endpoint {endpoint}: {queue.qsize()}")
+            # for model, endpoints in queues.items():
+            #     for endpoint, queue in endpoints.items():
+            #         print(f"Queue size for model {model} at endpoint {endpoint}: {queue.qsize()}")
         if tasks:
             await asyncio.gather(*tasks)
         return None
@@ -430,7 +430,8 @@ class ipfs_embeddings_py:
                     batch_size = await self.max_batch_size(model, endpoint)
                     self.batch_sizes[model][endpoint] = batch_size
                 if self.batch_sizes[model][endpoint] > 0:
-                    self.queues[model][endpoint] = asyncio.Queue(maxsize=self.batch_sizes[model][endpoint])
+                    self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
+                    # self.queues[model][endpoint] = asyncio.Queue(maxsize=self.batch_sizes[model][endpoint])
                     consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
         # Compute common cids
         common_cids = set(self.all_cid_list["new_dataset"])
@@ -455,20 +456,20 @@ if __name__ == "__main__":
     }
     resources = {
         "https_endpoints": [
-            # ["BAAI/bge-m3", "http://127.0.0.1:8080/embed", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8082/embed", 32768],
-            # # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8080/embed-large", 512],
-            # ["BAAI/bge-m3", "http://127.0.0.1:8081/embed", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8083/embed", 32768],
-            # # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8081/embed-large", 512],
-            ["BAAI/bge-m3", "http://62.146.169.111:8080/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 30000],
+            ["BAAI/bge-m3", "http://127.0.0.1:8080/embed", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8082/embed", 32768],
             # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8080/embed-large", 512],
-            ["BAAI/bge-m3", "http://62.146.169.111:8081/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 30000],
+            ["BAAI/bge-m3", "http://127.0.0.1:8081/embed", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8083/embed", 32768],
             # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8081/embed-large", 512],
+            # ["BAAI/bge-m3", "http://62.146.169.111:8080/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 30000],
+            # # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8080/embed-large", 512],
+            # ["BAAI/bge-m3", "http://62.146.169.111:8081/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 30000],
+            # # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8081/embed-large", 512],
             ["BAAI/bge-m3", "http://62.146.169.111:8082/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 30000],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 30000],
             # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8082/embed-large", 512],
             ["BAAI/bge-m3", "http://62.146.169.111:8083/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 30000],
