@@ -225,7 +225,7 @@ class ipfs_embeddings_py:
 
     async def make_post_request(self, endpoint, data):
         headers = {'Content-Type': 'application/json'}
-        timeout = ClientTimeout(total=120) 
+        timeout = ClientTimeout(total=300) 
         async with ClientSession(timeout=timeout) as session:
             async with session.post(endpoint, headers=headers, json=data) as response:
                 if response.status != 200:
