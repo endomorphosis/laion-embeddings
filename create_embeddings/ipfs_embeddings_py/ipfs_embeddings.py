@@ -310,9 +310,10 @@ class ipfs_embeddings_py:
             models = self.queues.keys()
             for model, model_queues in queues.items():
                 # Assign to the endpoint with the smallest queue
-                if this_cid not in self.all_cid_list[model]:
-                    endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
-                    queue.put_nowait(item)  # Non-blocking put
+                if len(model_queues) > 0:
+                    if this_cid not in self.all_cid_list[model]:
+                        endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
+                        queue.put_nowait(item)  # Non-blocking put
 
     async def send_batch_to_endpoint(self, batch, column, model_name, endpoint):
         print(f"Sending batch of size {len(batch)} to model {model_name} at endpoint {endpoint}")
@@ -467,18 +468,18 @@ if __name__ == "__main__":
     }
     resources = {
         "https_endpoints": [
-            ["Alibaba-NLP/gte-large-en-v1.5", "http://127.0.0.1:8080/embed", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8082/embed", 32000],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32000],
-            ["Alibaba-NLP/gte-large-en-v1.5", "http://127.0.0.1:8081/embed", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8083/embed", 32000],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32000],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32000],
+            # ["Alibaba-NLP/gte-large-en-v1.5", "http://127.0.0.1:8080/embed", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8082/embed", 32000],
             # # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32000],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32000],
+            # ["Alibaba-NLP/gte-large-en-v1.5", "http://127.0.0.1:8081/embed", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8083/embed", 32000],
             # # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32000],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32000],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32000],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32000],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32000],
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32000],
             # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8082/embed-large", 32000],
