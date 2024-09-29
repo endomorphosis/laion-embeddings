@@ -3,7 +3,7 @@ import uvicorn
 from fastapi import FastAPI, BackgroundTasks
 from search_embeddings import search_embeddings
 from create_embeddings import create_embeddings
-
+from ipfs_embeddings_py import ipfs_embeddings_py
 from pydantic import BaseModel
 
 class LoadIndexRequest(BaseModel):
@@ -30,28 +30,28 @@ resources = {
     "https_endpoints": [["BAAI/bge-m3", "http://62.146.169.111:80/embed",1]],
     "libp2p_endpoints": []
 }
+
 vector_search = search_embeddings.search_embeddings(resources, metadata)
 index_dataset = create_embeddings.create_embeddings(resources, metadata)
 
 app = FastAPI(port=9999)
 
+@app.post("/add_endpoint")
+def add_endpoint(request: dict):
+    model = request["model"]
+    endpoint = request["endpoint"]
+    ctx_length = request["ctx_length"]
+    create_embeddings.add_https_endpoint(model, endpoint, ctx_length)
+    search_embeddings.add_https_endpoint(model, endpoint, ctx_length)
+    return {"message": "Endpoint added"}
 
 async def create_index_task(request: LoadIndexRequest, background_tasks: BackgroundTasks):
     dataset = request.dataset
-    knn_index = request.knn_index
+    split = request.split
     column = request.column
-    if "dataset_split" in request.keys():
-        dataset_split = request.dataset_split
-    else:
-        dataset_split = None
-    if "knn_index_split" in request.keys():
-        knn_index_split = request.knn_index_split
-    else:
-        knn_index_split = None
-
-    start_qdrant = index_dataset.start_qdrant()
-    load_qdrant = await index_dataset.load_qdrant_iter(dataset, knn_index, dataset_split, knn_index_split)
-    ingest_qdrant = await index_dataset.ingest_qdrant_iter(column)
+    dst_path = request.dst_path
+    models = request.models
+    index_dataset = await create_embeddings.index_dataset(dataset, split, column, dst_path, models)
     return None
 
 @app.post("/create")

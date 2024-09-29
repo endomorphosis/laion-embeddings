@@ -1,5 +1,5 @@
 
-from ipfs_multiformats import *
+from .ipfs_multiformats import *
 import requests
 import subprocess
 import json

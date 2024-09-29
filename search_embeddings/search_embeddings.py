@@ -50,6 +50,7 @@ class search_embeddings:
                 print("Qdrant failed to start, fallback to faiss")
         else:
             self.qdrant_found = True
+        self.add_https_endpoint = self.add_https_endpoint
 
     def start_qdrant(self):
         docker_pull_cmd = "sudo docker pull qdrant/qdrant:latest"
@@ -75,6 +76,9 @@ class search_embeddings:
                 start_qdrant_cmd = "sudo docker run -d -p 6333:6333 -v /storage/qdrant:/qdrant/data qdrant/qdrant:latest"
                 os.system(start_qdrant_cmd + " > /dev/null 2>&1")
         return 1
+    
+    def add_https_endpoint(self, model, endpoint, ctx_length):
+        return self.ipfs_embeddings_py.add_https_endpoint(model, endpoint, ctx_length)
     
     def stop_qdrant(self):
         qdrant_port_ls = "sudo docker ps | grep 6333"

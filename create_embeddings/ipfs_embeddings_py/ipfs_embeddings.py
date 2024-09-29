@@ -5,7 +5,7 @@ import json
 import random
 import datasets
 import asyncio
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout
 from datasets import load_dataset
 import datasets
 from datasets import Dataset, concatenate_datasets, load_dataset
@@ -152,6 +152,12 @@ class ipfs_embeddings_py:
                                             difference = given - expected
                                             self.https_endpoints[model][endpoint] = token_length_size - difference
                                             return await self.max_batch_size(model, endpoint)
+                        if "502" in str(fail_reason):
+                            self.endpoint_status[endpoint] = 0
+                            return 0
+                        if "504" in str(fail_reason):
+                            self.endpoint_status[endpoint] = 0
+                            return 0
                     raise Exception(embeddings)
                 exponent += 1
                 batch_size = 2**exponent
@@ -175,6 +181,9 @@ class ipfs_embeddings_py:
                                         return results
                         pass
                     if "504" in str(fail_reason):
+                        self.endpoint_status[endpoint] = 0
+                        return 0
+                    if "502" in str(fail_reason):
                         self.endpoint_status[endpoint] = 0
                         return 0
                 pass
@@ -216,7 +225,8 @@ class ipfs_embeddings_py:
 
     async def make_post_request(self, endpoint, data):
         headers = {'Content-Type': 'application/json'}
-        async with ClientSession() as session:
+        timeout = ClientTimeout(total=120) 
+        async with ClientSession(timeout=timeout) as session:
             async with session.post(endpoint, headers=headers, json=data) as response:
                 if response.status != 200:
                     return ValueError(response)
@@ -246,7 +256,6 @@ class ipfs_embeddings_py:
     async def async_generator(self, iterable):
         for item in iterable:
             yield item
-
     async def consumer(self, queue, column, batch_size, model_name, endpoint):
         print("consumer started")
         batch = []
@@ -262,7 +271,6 @@ class ipfs_embeddings_py:
                 results = await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
                 for i in range(len(results)):
                     self.caches[model_name]["items"].append({"cid": batch[i]["cid"], "embedding": results[i]})
-                    # self.index[model_name] = self.index[model_name].add_item({"cid": batch[i]["cid"], "embedding": results[i]})
                 batch = []  # Clear batch after sending
                 self.saved = False
             queue.task_done()
@@ -276,10 +284,6 @@ class ipfs_embeddings_py:
             if len(tasks) >= 1:
                 await asyncio.gather(*tasks)
                 tasks = []
-            # Print the size of all queues
-            # for model, endpoints in queues.items():
-            #     for endpoint, queue in endpoints.items():
-            #         print(f"Queue size for model {model} at endpoint {endpoint}: {queue.qsize()}")
         if tasks:
             await asyncio.gather(*tasks)
         return None
@@ -288,24 +292,27 @@ class ipfs_embeddings_py:
         # Assuming `item` is a dictionary with required data
         if "new_dataset" not in list(self.caches.keys()):
             self.caches["new_dataset"] = {"items" : []}
-        print(f"Processing item with CID {index_cid(item[column])[0]}")
+        # print(f"Processing item with CID {index_cid(item[column])[0]}")
         column_names = item.keys()
         this_cid = index_cid(item[column])[0]
         if "cid" not in column_names:
             item["cid"] = this_cid
         # Check if cid is in index
         if this_cid in cid_list:
-            print(f"CID {this_cid} already in index, skipping item.")
+            # print(f"CID {this_cid} already in index, skipping item.")
+            pass
         else:
             cid_list.add(this_cid)
-            self.caches["new_dataset"]["items"].append(item)
+            if this_cid not in self.all_cid_list["new_dataset"]:
+                self.caches["new_dataset"]["items"].append(item)
             # new_dataset = new_dataset.add_item(item)
-            print(f"Added item with CID {this_cid} to new_dataset.")
+            # print(f"Added item with CID {this_cid} to new_dataset.")
             models = self.queues.keys()
-            for model in models:
-                random_queue = random.choice(list(queues[model].values()))
-                await random_queue.put(item)
-                print(f"Added item with CID {this_cid} to queue.")
+            for model, model_queues in queues.items():
+                # Assign to the endpoint with the smallest queue
+                if this_cid not in self.all_cid_list[model]:
+                    endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
+                    queue.put_nowait(item)  # Non-blocking put
 
     async def send_batch_to_endpoint(self, batch, column, model_name, endpoint):
         print(f"Sending batch of size {len(batch)} to model {model_name} at endpoint {endpoint}")
@@ -363,20 +370,22 @@ class ipfs_embeddings_py:
     async def save_to_disk(self, dataset, dst_path, models):
         self.saved = False
         while True:
-            await asyncio.sleep(60)
+            await asyncio.sleep(600)
             if self.saved == False:
-                if self.caches["new_dataset"]:
+                if self.caches["new_dataset"] and len(self.caches["new_dataset"]["items"]) > 0:
                     tmp_dataset = datasets.Dataset.from_dict(self.caches["new_dataset"])
                     self.caches["new_dataset"] = {"items" : []}
                     self.new_dataset = concatenate_datasets([self.new_dataset, tmp_dataset])
+                    print("Saved "+ str(len(tmp_dataset)) + " items to disk for dataset " + dataset + " at " + dst_path)
                 self.new_dataset.to_parquet(dst_path+"/"+dataset.replace("/","---")+".parquet")   
                 for model in models:
                     if model in self.caches.keys():
-                        if self.caches[model]:
+                        if self.caches[model] and len(self.caches[model]["items"]) > 0:
                             tmp_dataset = datasets.Dataset.from_dict(self.caches[model])
                             self.caches[model] = {"items" : []}
                             self.index[model] = concatenate_datasets([self.index[model], tmp_dataset])
-                    self.index[model].to_parquet(dst_path+"/"+model.replace("/","---")+".parquet")
+                            self.index[model].to_parquet(dst_path+"/"+model.replace("/","---")+".parquet")
+                            print("Saved "+ str(len(tmp_dataset)) + " items to disk for model " + model + " at " + dst_path)
                 self.saved = True
         return None 
 
@@ -387,7 +396,7 @@ class ipfs_embeddings_py:
         self.endpoint_status[endpoint] = status
         return None
 
-    async def main(self, dataset, column, dst_path, models):
+    async def index_dataset(self, dataset, split, column, dst_path, models):
         if not os.path.exists(dst_path):
             os.makedirs(dst_path)
         self.queues = {}
@@ -395,16 +404,19 @@ class ipfs_embeddings_py:
         self.all_cid_list = {}
         consumer_tasks = {}
         batch_sizes = {}
-        self.dataset = load_dataset(dataset, split='train', streaming=True).shuffle(random.randint(0,65536))
+        if split is None:
+            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+        else:
+            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
         columns = self.dataset.column_names
         columns.append("cid")
         new_dataset_dst_path = dst_path+"/"+ dataset.replace("/","---") + ".parquet"
+        self.all_cid_list["new_dataset"] = set()
         if os.path.isfile(new_dataset_dst_path):
-            self.new_dataset = datasets.Dataset.from_parquet(new_dataset_dst_path)
-            self.all_cid_list["new_dataset"] = set(self.new_dataset["cid"])
+            self.new_dataset = load_dataset('parquet', data_files=new_dataset_dst_path)['train']
+            self.all_cid_list["new_dataset"] = set(self.new_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"])
         else:
             self.new_dataset = datasets.Dataset.from_dict({key: [] for key in columns })
-            self.all_cid_list["new_dataset"] = set()
         consumer_tasks = {}
         for model in models:
             endpoints = self.get_endpoints(model)
@@ -413,13 +425,13 @@ class ipfs_embeddings_py:
             self.queues[model] = {}
             self.all_cid_list[model] = set()
             model_dst_path = dst_path + "/" + model.replace("/","---") + ".parquet"
+            self.all_cid_list[model] = set()
             if os.path.isfile(model_dst_path):
                 self.caches[model] = {"items" : []}
                 self.index[model] = datasets.Dataset.from_parquet(model_dst_path)
-                self.all_cid_list[model] = set(self.index[model]["cid"])
+                self.all_cid_list[model] = set(self.index[model].map(lambda x: {"cid": x["items"]["cid"]})["cid"])
             else:
                 self.index[model] = datasets.Dataset.from_dict({"cid": [], "embedding": []})
-                self.all_cid_list[model] = set()
             for endpoint in endpoints:
                 batch_size = 0
                 if model not in self.batch_sizes:
@@ -431,7 +443,6 @@ class ipfs_embeddings_py:
                     self.batch_sizes[model][endpoint] = batch_size
                 if self.batch_sizes[model][endpoint] > 0:
                     self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
-                    # self.queues[model][endpoint] = asyncio.Queue(maxsize=self.batch_sizes[model][endpoint])
                     consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
         # Compute common cids
         common_cids = set(self.all_cid_list["new_dataset"])
@@ -450,31 +461,31 @@ if __name__ == "__main__":
         "models": [
             "BAAI/bge-m3",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            # "dunzhang/stella_en_1.5B_v5",
+            # "Alibaba-NLP/gte-Qwen2-7B-instruct",
         ],
         "dst_path": "/storage/teraflopai/tmp"
     }
     resources = {
         "https_endpoints": [
-            ["BAAI/bge-m3", "http://127.0.0.1:8080/embed", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8082/embed", 32768],
-            # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8080/embed-large", 512],
-            ["BAAI/bge-m3", "http://127.0.0.1:8081/embed", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8083/embed", 32768],
-            # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8081/embed-large", 512],
-            # ["BAAI/bge-m3", "http://62.146.169.111:8080/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 30000],
-            # # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8080/embed-large", 512],
-            # ["BAAI/bge-m3", "http://62.146.169.111:8081/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 30000],
-            # # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8081/embed-large", 512],
-            ["BAAI/bge-m3", "http://62.146.169.111:8082/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 30000],
-            # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8082/embed-large", 512],
-            ["BAAI/bge-m3", "http://62.146.169.111:8083/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 30000],
-            # ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8083/embed-large", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://127.0.0.1:8080/embed", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8082/embed", 32000],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32000],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://127.0.0.1:8081/embed", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8083/embed", 32000],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32000],
+            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32000],
+            # # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32000],
+            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32000],
+            # # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32000],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32000],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8082/embed-large", 32000],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32000],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8083/embed-large", 32000],
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
-    asyncio.run(create_embeddings_batch.main(metadata["dataset"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], "train", metadata["column"], metadata["dst_path"], metadata["models"]))    
