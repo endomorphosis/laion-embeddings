@@ -399,7 +399,7 @@ class ipfs_embeddings_py:
         self.endpoint_status[endpoint] = status
         return None
 
-    async def index_dataset(self, dataset, split, column, dst_path, models):
+    async def index_dataset(self, dataset, split, column, dst_path, models = None):
         if not os.path.exists(dst_path):
             os.makedirs(dst_path)
         self.queues = {}
@@ -407,6 +407,11 @@ class ipfs_embeddings_py:
         self.all_cid_list = {}
         consumer_tasks = {}
         batch_sizes = {}
+        if models is None:
+            models = list(self.https_endpoints.keys())
+        for model in models:
+            if model not in self.queues:
+                self.queues[model] = {}
         if split is None:
             self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
         else:
@@ -425,7 +430,6 @@ class ipfs_embeddings_py:
             endpoints = self.get_endpoints(model)
             if not endpoints:
                 continue
-            self.queues[model] = {}
             self.all_cid_list[model] = set()
             model_dst_path = dst_path + "/" + model.replace("/","---") + ".parquet"
             self.all_cid_list[model] = set()
