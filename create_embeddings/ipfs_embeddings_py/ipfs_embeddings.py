@@ -452,10 +452,7 @@ class ipfs_embeddings_py:
                     self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
                     consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
         # Compute common cids
-        common_cids = set(self.all_cid_list["new_dataset"])
-        for cid_list in self.all_cid_list.values():
-            common_cids.intersection_update(cid_list)
-        self.cid_list = common_cids
+        self.cid_list = set.intersection(*self.all_cid_list.values())
         # for model in models:
         #     while len(self.queues[model]) < 1:
         #         await asyncio.sleep(1)
