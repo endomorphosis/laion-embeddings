@@ -310,14 +310,13 @@ class ipfs_embeddings_py:
             models = self.queues.keys()
             for model, model_queues in queues.items():
                 # Assign to the endpoint with the smallest queue
+                while len(model_queues) < 1:
+                    await asyncio.sleep(1)
                 if len(model_queues) > 0:
                     if this_cid not in self.all_cid_list[model]:
                         endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
                         queue.put_nowait(item)  # Non-blocking put
-                else:
-                    random_queue = random.choice(list(queues[model].values()))
-                    await random_queue.put_no_wait(item)
-                    
+
     async def send_batch_to_endpoint(self, batch, column, model_name, endpoint):
         print(f"Sending batch of size {len(batch)} to model {model_name} at endpoint {endpoint}")
         model_context_length = self.https_endpoints[model_name][endpoint]
