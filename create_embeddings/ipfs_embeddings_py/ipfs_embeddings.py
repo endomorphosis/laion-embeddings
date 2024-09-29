@@ -257,7 +257,7 @@ class ipfs_embeddings_py:
         for item in iterable:
             yield item
     async def consumer(self, queue, column, batch_size, model_name, endpoint):
-        print("consumer started")
+        print("consumer started for model " + model_name + " at endpoint " + endpoint)
         batch = []
         if model_name not in self.caches.keys():
             self.caches[model_name] = {"items" : []}
@@ -310,8 +310,8 @@ class ipfs_embeddings_py:
             models = self.queues.keys()
             for model, model_queues in queues.items():
                 # Assign to the endpoint with the smallest queue
-                while len(model_queues) < 1:
-                    await asyncio.sleep(1)
+                # while len(model_queues) < 1:
+                #     await asyncio.sleep(1)
                 if len(model_queues) > 0:
                     if this_cid not in self.all_cid_list[model]:
                         endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
@@ -452,6 +452,9 @@ class ipfs_embeddings_py:
         for cid_list in self.all_cid_list.values():
             common_cids.intersection_update(cid_list)
         self.cid_list = common_cids
+        # for model in models:
+        #     while len(self.queues[model]) < 1:
+        #         await asyncio.sleep(1)
         producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
         save_task = asyncio.create_task(self.save_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
@@ -462,7 +465,7 @@ if __name__ == "__main__":
         "dataset": "TeraflopAI/Caselaw_Access_Project",
         "column": "text",
         "models": [
-            "BAAI/bge-m3",
+            "Alibaba-NLP/gte-large-en-v1.5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             # "Alibaba-NLP/gte-Qwen2-7B-instruct",
         ],

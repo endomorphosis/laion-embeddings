@@ -75,7 +75,7 @@ if __name__ == "__main__":
         "split": "train",
         "column": "text",
         "models": [
-            "BAAI/bge-m3",
+            "Alibaba-NLP/gte-large-en-v1.5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             # "dunzhang/stella_en_1.5B_v5",
         ],
