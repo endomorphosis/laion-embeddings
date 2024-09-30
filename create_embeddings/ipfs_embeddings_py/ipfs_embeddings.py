@@ -158,6 +158,8 @@ class ipfs_embeddings_py:
                         if "504" in str(fail_reason):
                             self.endpoint_status[endpoint] = 0
                             return 0
+                        if "400" in str(fail_reason):
+                            return await self.max_batch_size(model, endpoint)
                     raise Exception(embeddings)
                 exponent += 1
                 batch_size = 2**exponent
@@ -215,6 +217,8 @@ class ipfs_embeddings_py:
             try:
                 query_response = await self.make_post_request(chosen_endpoint, this_query)
             except Exception as e:
+                if "413" in str(e):
+                    return ValueError(e)
                 raise Exception(e)
             if isinstance(query_response, dict) and "error" in query_response.keys():
                 raise Exception("error: " + query_response["error"])
@@ -359,11 +363,17 @@ class ipfs_embeddings_py:
                         if "Validation" in error_content["error_type"] and "cannot be empty":
                             print("error: " + error_content["error"])
                             return None
-            elif error.status == 504:
+            elif error.status == 504 or error.status == 502:
                 self.endpoint_status[endpoint] = 0
-                return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-            elif error.status == 502:
-                self.endpoint_status[endpoint] = 0
+                new_endpoint = self.choose_endpoint(model_name)
+                if new_endpoint:
+                    new_queue = self.queues[model_name][new_endpoint]
+                    for item in batch:
+                        await new_queue.put(item)
+                    return await self.send_batch_to_endpoint(batch, column, model_name, new_endpoint)
+                else:
+                    return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
+            elif error.status == 400:
                 return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
             raise Exception(error)
         else:
