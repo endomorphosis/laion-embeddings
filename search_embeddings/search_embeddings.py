@@ -89,14 +89,32 @@ class search_embeddings:
             stop_qdrant_cmd = "sudo docker stop " + docker_ps_results
             os.system(stop_qdrant_cmd + " > /dev/null 2>&1")
         return None
+
+    async def iter_splits(self, dataset, splits):
+        if splits is None:
+            splits = dataset.keys()
+        for split in splits:
+            yield dataset[split]
     
-    async def join_datasets(self, dataset, knn_index, join_column):
-        dataset_iter = iter(dataset)
-        knn_index_iter = iter(knn_index)
+    async def join_datasets(self, dataset, knn_index, join_column, dataset_splits = None, knn_splits = None):
+        if dataset_splits is not None:
+            dataset_iter = self.iter_splits(dataset, dataset_splits).__aiter__()
+        else:    
+            dataset_iter = self.iter_splits(dataset, dataset.keys()).__aiter__()
+
+        if knn_splits is not None:
+            knn_index_iter = self.iter_splits(knn_index, knn_splits).__aiter__()
+        else:
+            knn_index_iter = self.iter_splits(knn_index, knn_index.keys()).__aiter__()
+
+        knn_index_iter = knn_index_iter.__aiter__()
+        dataset_iter = dataset_iter.__aiter__()
+        dataset_item = await anext(dataset_iter)
+        knn_index_item = await anext(knn_index_iter)
         while True:
             try:
-                dataset_item = next(dataset_iter)
-                knn_index_item = next(knn_index_iter)
+                dataset_item = await anext(dataset_iter)
+                knn_index_item = await anext(knn_index_iter)
                 results = {}
                 for key in dataset_item.keys():
                     results[key] = dataset_item[key]
@@ -159,8 +177,8 @@ class search_embeddings:
             dataset_columns = self.dataset.column_names
         else:
             self.dataset = self.datasets.load_dataset(dataset, streaming=True)
-            dataset_columns = self.dataset.column_names[list(self.dataset.column_names.keys())[0]]
-
+            dataset_splits = list(self.dataset.keys())
+            dataset_columns = self.dataset[dataset_splits[0]].column_names
         if knn_index_split is not None:
             self.knn_index = self.datasets.load_dataset(knn_index, split=knn_index_split, streaming=True)
             if "Embeddings" in self.knn_index.column_names:
@@ -173,20 +191,23 @@ class search_embeddings:
             knn_columns = self.knn_index.column_names
         else:
             self.knn_index = self.datasets.load_dataset(knn_index, streaming=True)
-            if "Embeddings" in self.knn_index.column_names:
-                self.knn_index = self.knn_index.rename_column("Embeddings", "embeddings")
-            single_row = next(iter(self.knn_index.take(1)))
-            self.embedding_size = len(self.knn_index[list(self.knn_index.keys())[0]].select([0])['Embeddings'][0][0])
+            knn_splits = list(self.knn_index.keys())
+            knn_columns = self.knn_index[knn_splits[0]].column_names
+            if "Embeddings" in knn_columns:
+                for split in knn_splits:
+                    self.knn_index[split] = self.knn_index[split].rename_column("Embeddings", "embeddings")
+            for split in knn_splits:
+                single_row = next(iter(self.knn_index[split].take(1)))
+                self.embedding_size = len(single_row["embeddings"][0])
             self.knn_index = self.datasets.load_dataset(knn_index, streaming=True)
-            if "Embeddings" in self.knn_index.column_names:
-                self.knn_index = self.knn_index.rename_column("Embeddings", "embeddings")
-            knn_columns = self.knn_index.column_names[list(self.knn_index.column_names.keys())[0]]
-        
-
+            if "Embeddings" in knn_columns:
+                for split in knn_splits:
+                    self.knn_index[split] = self.knn_index[split].rename_column("Embeddings", "embeddings")
+                                                     
         self.dataset_name = dataset
         common_columns = set(dataset_columns).intersection(set(knn_columns))
         self.join_column = common_columns
-        self.joined_dataset = self.join_datasets(self.dataset, self.knn_index, self.join_column)
+        self.joined_dataset = self.join_datasets(self.dataset, self.knn_index, self.join_column, dataset_splits, knn_splits)
         return None
 
     async def ingest_qdrant_iter(self, column_name):
@@ -363,10 +384,10 @@ class search_embeddings:
                 }})       
         return results
     
-    def search(self, collection, query, n=5):
+    async def search(self, collection, query, n=5):
         if self.qdrant_found == True:
-            query_embeddings = self.ipfs_embeddings_py.index_knn(query, self.metadata["model"])
-            vector_search = self.search_qdrant(collection, query_embeddings, n)
+            query_embeddings = await self.ipfs_embeddings_py.index_knn(query, self.metadata["model"])
+            vector_search = await self.search_qdrant(collection, query_embeddings, n)
         else:
             print("Qdrant failed to start")
             ## Fallback to faiss
@@ -375,9 +396,14 @@ class search_embeddings:
 
     async def test_low_memory(self):
         start = self.start_qdrant()
-        load_qdrant = await self.load_qdrant_iter("laion/Wikipedia-X-Concat", "laion/Wikipedia-M3", "enwiki_concat", "enwiki_embed")
+        # load_qdrant = await self.load_qdrant_iter("laion/Wikipedia-X-Concat", "laion/Wikipedia-M3", "enwiki_concat", "enwiki_embed")
+        # ingest_qdrant = await self.ingest_qdrant_iter("Concat Abstract")
+        load_qdrant = await self.load_qdrant_iter("laion/English-ConcatX-Abstract", "laion/English-ConcatX-M3")
         ingest_qdrant = await self.ingest_qdrant_iter("Concat Abstract")
-        results = await search_embeddings.search("Machine Learning")
+        load_qdrant = await self.load_qdrant_iter("laion/German-ConcatX-Abstract", "laion/German-ConcatX-M3")
+        ingest_qdrant = await self.ingest_qdrant_iter("Concat Abstract")
+        results = await search_embeddings.search("laion/German-ConcatX-Abstract", "Machine Learning")
+        results = await search_embeddings.search("German-ConcatX-Abstract", "Machine Learning")
         return None
     
     async def test_high_memory(self):
