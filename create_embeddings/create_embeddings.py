@@ -26,9 +26,6 @@ class create_embeddings:
         if "https_endpoints" in resources.keys():
             for endpoint in resources["https_endpoints"]:
                 self.ipfs_embeddings_py.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])
-        else:
-            self.ipfs_embeddings_py.add_https_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed-small", 8192)
-            self.ipfs_embeddings_py.add_https_endpoint("Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:80/embed-medium", 32768 )
         self.join_column = None
         self.tokenizer = {}
         self.index_dataset = self.index_dataset
@@ -36,10 +33,11 @@ class create_embeddings:
     def add_https_endpoint(self, model, endpoint, ctx_length):
         return self.ipfs_embeddings_py.add_https_endpoint(model, endpoint, ctx_length)
 
-    def index_dataset(self, dataset, split, column, dst_path, models):
-        return self.ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
-    
-    async def main(self, dataset, column, split, dst_path, models):
+    async def index_dataset(self, dataset, split, column, dst_path, models):
+        await self.ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
+        return None
+           
+    async def main(self, dataset, split, column, dst_path, models):
         await self.ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
         return None
 
@@ -79,9 +77,9 @@ if __name__ == "__main__":
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             # "dunzhang/stella_en_1.5B_v5",
         ],
-        "dst_path": "/storage/teraflopai"
+        "dst_path": "/storage/teraflopai/tmp"
     }
     resources = {
     }
     create_embeddings_batch = create_embeddings(resources, metadata)
-    asyncio.run(create_embeddings_batch.main(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    asyncio.run(create_embeddings_batch.test(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    

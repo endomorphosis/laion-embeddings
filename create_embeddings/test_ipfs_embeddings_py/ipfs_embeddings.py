@@ -492,3 +492,35 @@ class ipfs_embeddings_py:
         await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
         return None 
 
+
+if __name__ == "__main__":
+    metadata = {
+        "dataset": "TeraflopAI/Caselaw_Access_Project",
+        "column": "text",
+        "split": "train",
+        "models": [
+            "BAAI/bge-m3",
+            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            "dunzhang/stella_en_1.5B_v5",
+        ],
+        "dst_path": "/storage/teraflopai"
+    }
+    resources = {
+        "https_endpoints": [
+            ["BAAI/bge-m3", "http://62.146.169.111:8080/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
+            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8080/embed-large", 131072],
+            ["BAAI/bge-m3", "http://62.146.169.111:8081/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
+            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8081/embed-large", 131072],
+            ["BAAI/bge-m3", "http://62.146.169.111:8082/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8082/embed-large", 131072],
+            ["BAAI/bge-m3", "http://62.146.169.111:8083/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8083/embed-large", 131072],
+        ]
+    }
+    create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
+    asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+
