@@ -40,7 +40,7 @@ class create_embeddings:
         return self.ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
     
     async def main(self, dataset, column, split, dst_path, models):
-        await ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
+        await self.ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
         return None
 
     async def test(self, dataset, split, column, dst_path, models):

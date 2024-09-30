@@ -36,6 +36,30 @@ class ipfs_embeddings_py:
         self.tokenizer = {}
         self.endpoint_status = {}
         self.new_dataset = {}
+        self.index_dataset = self.index_dataset
+        self.add_https_endpoint = self.add_https_endpoint
+        self.add_libp2p_endpoint = self.add_libp2p_endpoint
+        self.rm_https_endpoint = self.rm_https_endpoint
+        self.rm_libp2p_endpoint = self.rm_libp2p_endpoint
+        self.get_https_endpoint = self.get_https_endpoint
+        self.get_libp2p_endpoint = self.get_libp2p_endpoint
+        self.request_https_endpoint = self.request_https_endpoint
+        self.index_knn = self.index_knn
+        self.make_post_request = self.make_post_request
+        self.choose_endpoint = self.choose_endpoint
+        self.get_endpoints = self.get_endpoints
+        self.max_batch_size = self.max_batch_size
+        self.consumer = self.consumer
+        self.producer = self.producer
+        self.process_item = self.process_item
+        self.save_to_disk = self.save_to_disk
+        self.status = self.status
+        self.setStatus = self.setStatus
+        self.index_cid = self.index_cid
+        self.load_index = self.load_index
+        self.async_generator = self.async_generator
+        self.send_batch_to_endpoint = self.send_batch_to_endpoint
+        self.save_to_disk = self.save_to_disk
         self.saved = False  # Added missing attribute
         # Initialize endpoints
         for endpoint_info in resources.get('https_endpoints', []):
@@ -463,46 +487,8 @@ class ipfs_embeddings_py:
                     consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
         # Compute common cids
         self.cid_list = set.intersection(*self.all_cid_list.values())
-        # for model in models:
-        #     while len(self.queues[model]) < 1:
-        #         await asyncio.sleep(1)
         producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
         save_task = asyncio.create_task(self.save_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
         return None 
 
-if __name__ == "__main__":
-    metadata = {
-        "dataset": "TeraflopAI/Caselaw_Access_Project",
-        "column": "text",
-        "models": [
-            "Alibaba-NLP/gte-large-en-v1.5",
-            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            # "Alibaba-NLP/gte-Qwen2-7B-instruct",
-        ],
-        "dst_path": "/storage/teraflopai/tmp"
-    }
-    resources = {
-        "https_endpoints": [
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://127.0.0.1:8080/embed", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8082/embed", 32000],
-            # # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32000],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://127.0.0.1:8081/embed", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://127.0.0.1:8083/embed", 32000],
-            # # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32000],
-            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32000],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32000],
-            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32000],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32000],
-            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32000],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8082/embed-large", 32000],
-            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32000],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8083/embed-large", 32000],
-        ]
-    }
-    create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
-    asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], "train", metadata["column"], metadata["dst_path"], metadata["models"]))    
