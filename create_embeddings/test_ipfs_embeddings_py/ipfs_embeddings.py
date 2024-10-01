@@ -147,10 +147,20 @@ class ipfs_embeddings_py:
         batch_size = 2**exponent
         token_length_size = round(self.https_endpoints[model][endpoint] * 0.99)
         test_tokens = []
-        for i in range(token_length_size):
-            test_tokens.append(random.randint(0,65536))
+
         if model not in self.tokenizer.keys():
             self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu')
+        find_token_str = str("z")
+        find_token_int = self.tokenizer[model].encode(find_token_str)
+        if len(find_token_int) == 3:
+            find_token_int = find_token_int[1]
+        elif len(find_token_int) == 2:
+            find_token_int = find_token_int[1]
+        elif len(find_token_int) == 1:
+            find_token_int = find_token_int[0]
+
+        for i in range(token_length_size):
+             test_tokens.append(find_token_int)
         test_text = self.tokenizer[model].decode(test_tokens)
         if endpoint is None:
             endpoint = self.choose_endpoint(model)
@@ -243,6 +253,8 @@ class ipfs_embeddings_py:
             except Exception as e:
                 if "413" in str(e):
                     return ValueError(e)
+                if "can not write request body" in str(e):
+                    return ValueError(e)
                 raise Exception(e)
             if isinstance(query_response, dict) and "error" in query_response.keys():
                 raise Exception("error: " + query_response["error"])
@@ -255,10 +267,19 @@ class ipfs_embeddings_py:
         headers = {'Content-Type': 'application/json'}
         timeout = ClientTimeout(total=300) 
         async with ClientSession(timeout=timeout) as session:
-            async with session.post(endpoint, headers=headers, json=data) as response:
-                if response.status != 200:
-                    return ValueError(response)
-                return await response.json()
+            try:
+                async with session.post(endpoint, headers=headers, json=data) as response:
+                    if response.status != 200:
+                        return ValueError(response)
+                    return await response.json()
+            except Exception as e:
+                if "Can not write request body" in str(e):
+                    print( "endpoint " + endpoint + " is not accepting requests")
+                    return ValueError(e)
+                if "Timeout" in str(e):
+                    print("Timeout error")
+                    return ValueError(e)
+                raise e
 
     def choose_endpoint(self, model):
         https_endpoints = self.get_https_endpoint(model)
@@ -284,6 +305,7 @@ class ipfs_embeddings_py:
     async def async_generator(self, iterable):
         for item in iterable:
             yield item
+
     async def consumer(self, queue, column, batch_size, model_name, endpoint):
         print("consumer started for model " + model_name + " at endpoint " + endpoint)
         batch = []
@@ -368,26 +390,39 @@ class ipfs_embeddings_py:
             raise e
         if isinstance(results, ValueError):
             error = results.args[0]
-            if error.status == 413:
-                if error.reason == "Payload Too Large":
-                    error_content = error.content._buffer[0].decode("utf-8")
-                    error_content = json.loads(error_content)
-                    if "error" in error_content.keys() and "error_type" in error_content.keys():
-                        if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
-                            expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
-                            given = int(error_content["error"].split("Given: ")[1])
-                            difference = given - expected
-                            self.https_endpoints[model_name][endpoint] = model_context_length - difference
-                            for item in new_batch:
-                                index = new_batch.index(item)
-                                item = { column : item[:self.https_endpoints[model_name][endpoint]] }
-                                new_batch[index] = item
-                            results = await self.send_batch_to_endpoint(new_batch, column, model_name, endpoint)
-                            return results
-                        if "Validation" in error_content["error_type"] and "cannot be empty":
-                            print("error: " + error_content["error"])
-                            return None
-            elif error.status == 504 or error.status == 502:
+            if "status" in dir(error):
+                if error.status == 413:
+                    if error.reason == "Payload Too Large":
+                        error_content = error.content._buffer[0].decode("utf-8")
+                        error_content = json.loads(error_content)
+                        if "error" in error_content.keys() and "error_type" in error_content.keys():
+                            if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
+                                expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
+                                given = int(error_content["error"].split("Given: ")[1])
+                                difference = given - expected
+                                self.https_endpoints[model_name][endpoint] = model_context_length - difference
+                                for item in new_batch:
+                                    index = new_batch.index(item)
+                                    item = { column : item[:self.https_endpoints[model_name][endpoint]] }
+                                    new_batch[index] = item
+                                results = await self.send_batch_to_endpoint(new_batch, column, model_name, endpoint)
+                                return results
+                            if "Validation" in error_content["error_type"] and "cannot be empty":
+                                print("error: " + error_content["error"])
+                                return None
+                elif error.status == 504 or error.status == 502 or  "can not write request body" in str(error):
+                    self.endpoint_status[endpoint] = 0
+                    new_endpoint = self.choose_endpoint(model_name)
+                    if new_endpoint:
+                        new_queue = self.queues[model_name][new_endpoint]
+                        for item in batch:
+                            await new_queue.put(item)
+                        return await self.send_batch_to_endpoint(batch, column, model_name, new_endpoint)
+                    else:
+                        return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
+                elif error.status == 400:
+                    return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
+            elif "can not write request body" in str(error) or "Timeout" in str(error):
                 self.endpoint_status[endpoint] = 0
                 new_endpoint = self.choose_endpoint(model_name)
                 if new_endpoint:
@@ -397,9 +432,8 @@ class ipfs_embeddings_py:
                     return await self.send_batch_to_endpoint(batch, column, model_name, new_endpoint)
                 else:
                     return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-            elif error.status == 400:
-                return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
             raise Exception(error)
+                
         else:
             print(f"Received embeddings for {len(results)} items")
             return results
@@ -413,8 +447,8 @@ class ipfs_embeddings_py:
                     tmp_dataset = datasets.Dataset.from_dict(self.caches["new_dataset"])
                     self.caches["new_dataset"] = {"items" : []}
                     self.new_dataset = concatenate_datasets([self.new_dataset, tmp_dataset])
+                    self.new_dataset.to_parquet(dst_path+"/"+dataset.replace("/","---")+".parquet")   
                     print("Saved "+ str(len(tmp_dataset)) + " items to disk for dataset " + dataset + " at " + dst_path)
-                self.new_dataset.to_parquet(dst_path+"/"+dataset.replace("/","---")+".parquet")   
                 for model in models:
                     if model in self.caches.keys():
                         if self.caches[model] and len(self.caches[model]["items"]) > 0:
@@ -501,7 +535,7 @@ if __name__ == "__main__":
         "models": [
             "Alibaba-NLP/gte-large-en-v1.5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            # "dunzhang/stella_en_1.5B_v5",
+            # "Alibaba-NLP/gte-Qwen2-7B-instruct",
         ],
         "dst_path": "/storage/teraflopai/tmp"
     }
@@ -509,16 +543,16 @@ if __name__ == "__main__":
         "https_endpoints": [
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
-            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8080/embed-large", 131072],
+            ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32768],
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
-            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8081/embed-large", 131072],
+            ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32768],
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
-            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8082/embed-large", 131072],
+            ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8082/embed-large", 32768],
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
-            ["dunzhang/stella_en_1.5B_v5", "http://62.146.169.111:8083/embed-large", 131072],
+            ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8083/embed-large", 32768],
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
