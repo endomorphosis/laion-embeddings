@@ -1,27 +1,19 @@
-import os
-import sys
+
 import datasets
-import json
 from ipfs_embeddings_py import ipfs_embeddings_py
-import pandas as pd
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 from qdrant_client.models import Distance, VectorParams
 import numpy as np
 import os
-import sys
+import json
+import pandas as pd
 import subprocess
 import asyncio
 import hashlib
 import random
 from multiprocessing import Pool
 
-
-def hash_chunk(chunk):
-    this_hash_key = {}
-    for column in chunk:
-        this_hash_key[column] = chunk[column]
-    return hashlib.sha256(json.dumps(this_hash_key).encode()).hexdigest()
 
 class search_embeddings:
     def __init__(self, resources, metadata):
@@ -89,12 +81,6 @@ class search_embeddings:
             stop_qdrant_cmd = "sudo docker stop " + docker_ps_results
             os.system(stop_qdrant_cmd + " > /dev/null 2>&1")
         return None
-
-    async def iter_splits(self, dataset, splits):
-        if splits is None:
-            splits = dataset.keys()
-        for split in splits:
-            yield dataset[split]
  
     async def join_datasets(self, dataset, knn_index, join_column):
         dataset_iter = iter(dataset)

@@ -498,3 +498,63 @@ class ipfs_embeddings_py:
         save_task = asyncio.create_task(self.save_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
         return None 
+
+    async def join_datasets(self, dataset, knn_index, join_column):
+        dataset_iter = iter(dataset)
+        knn_index_iter = iter(knn_index)
+        while True:
+            try:
+                dataset_item = next(dataset_iter)
+                knn_index_item = next(knn_index_iter)
+                results = {}
+                for key in dataset_item.keys():
+                    results[key] = dataset_item[key]
+                same = True
+                for column in join_column:
+                    if dataset_item[column] != knn_index_item[column]:
+                        same = False
+                        break
+                if same:
+                    for key in knn_index_item.keys():
+                        results[key] = knn_index_item[key]
+                else:
+                    if not hasattr(self, 'knn_index_hash') or not hasattr(self, 'datasets_hash') or len(self.knn_index_hash) == 0 or len(self.datasets_hash) == 0:
+                        cores = os.cpu_count() or 1
+                        with Pool(processes=cores) as pool:
+                            self.knn_index_hash = []
+                            self.datasets_hash = []
+                            chunk = []
+                            async for item in self.ipfs_embeddings_py.async_generator(self.dataset):
+                                chunk.append(item)
+                                if len(chunk) == cores:
+                                    self.datasets_hash.extend(pool.map(hash_chunk, chunk))
+                                    chunk = []
+                            if chunk:
+                                self.datasets_hash.extend(pool.map(hash_chunk, chunk))
+                            chunk = []
+                            async for item in self.ipfs_embeddings_py.async_generator(self.knn_index):
+                                chunk.append(item)
+                                if len(chunk) == cores:
+                                    self.knn_index_hash.extend(pool.map(hash_chunk, chunk))
+                                    chunk = []
+                            if chunk:
+                                self.knn_index_hash.extend(pool.map(hash_chunk, chunk))
+                    this_hash_key = {}
+                    for column in join_column:
+                        this_hash_key[column] = dataset_item[column]
+                    this_hash_value = hashlib.md5(json.dumps(this_hash_key).encode()).hexdigest()
+                    if this_hash_value in self.knn_index_hash and this_hash_value in self.datasets_hash:
+                        knn_index_item = self.knn_index_hash.index(this_hash_value)
+                        for key in self.knn_index[knn_index_item].keys():
+                            results[key] = self.knn_index[knn_index_item][key]
+                        dataset_item = self.datasets_hash.index(this_hash_value)
+                        for key in self.dataset[dataset_item].keys():
+                            results[key] = self.dataset[dataset_item][key]
+                    else:
+                        continue
+                yield results
+            except StopIteration:
+                break
+            except StopAsyncIteration:
+                break
+    
