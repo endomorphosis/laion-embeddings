@@ -14,7 +14,6 @@ import hashlib
 import random
 from multiprocessing import Pool
 
-
 class search_embeddings:
     def __init__(self, resources, metadata):
         self.resources = resources
