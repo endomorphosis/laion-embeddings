@@ -251,6 +251,7 @@ class ipfs_embeddings_py:
             try:
                 query_response = await self.make_post_request(chosen_endpoint, this_query)
             except Exception as e:
+                print(str(e))
                 if "413" in str(e):
                     return ValueError(e)
                 if "can not write request body" in str(e):
@@ -273,6 +274,7 @@ class ipfs_embeddings_py:
                         return ValueError(response)
                     return await response.json()
             except Exception as e:
+                print(str(e))
                 if "Can not write request body" in str(e):
                     print( "endpoint " + endpoint + " is not accepting requests")
                     return ValueError(e)
@@ -435,7 +437,7 @@ class ipfs_embeddings_py:
             raise Exception(error)
                 
         else:
-            print(f"Received embeddings for {len(results)} items")
+            print(f"Received embeddings for {len(results)} items from model {model_name} at endpoint {endpoint}")
             return results
 
     async def save_to_disk(self, dataset, dst_path, models):

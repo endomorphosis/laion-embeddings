@@ -95,26 +95,14 @@ class search_embeddings:
             splits = dataset.keys()
         for split in splits:
             yield dataset[split]
-    
-    async def join_datasets(self, dataset, knn_index, join_column, dataset_splits = None, knn_splits = None):
-        if dataset_splits is not None:
-            dataset_iter = self.iter_splits(dataset, dataset_splits).__aiter__()
-        else:    
-            dataset_iter = self.iter_splits(dataset, dataset.keys()).__aiter__()
-
-        if knn_splits is not None:
-            knn_index_iter = self.iter_splits(knn_index, knn_splits).__aiter__()
-        else:
-            knn_index_iter = self.iter_splits(knn_index, knn_index.keys()).__aiter__()
-
-        knn_index_iter = knn_index_iter.__aiter__()
-        dataset_iter = dataset_iter.__aiter__()
-        dataset_item = await anext(dataset_iter)
-        knn_index_item = await anext(knn_index_iter)
+ 
+    async def join_datasets(self, dataset, knn_index, join_column):
+        dataset_iter = iter(dataset)
+        knn_index_iter = iter(knn_index)
         while True:
             try:
-                dataset_item = await anext(dataset_iter)
-                knn_index_item = await anext(knn_index_iter)
+                dataset_item = next(dataset_iter)
+                knn_index_item = next(knn_index_iter)
                 results = {}
                 for key in dataset_item.keys():
                     results[key] = dataset_item[key]
@@ -179,8 +167,12 @@ class search_embeddings:
             self.dataset = self.datasets.load_dataset(dataset, streaming=True)
             dataset_splits = list(self.dataset.keys())
             dataset_columns = self.dataset[dataset_splits[0]].column_names
+            
         if knn_index_split is not None:
             self.knn_index = self.datasets.load_dataset(knn_index, split=knn_index_split, streaming=True)
+            knn_index_splits = list(self.knn_index.keys())
+            shared_splits = set(dataset_splits).intersection(set(knn_index_splits))
+            self.shared_splits = shared_splits
             if "Embeddings" in self.knn_index.column_names:
                 self.knn_index = self.knn_index.rename_column("Embeddings", "embeddings")
             single_row = next(iter(self.knn_index.take(1)))
@@ -191,23 +183,30 @@ class search_embeddings:
             knn_columns = self.knn_index.column_names
         else:
             self.knn_index = self.datasets.load_dataset(knn_index, streaming=True)
-            knn_splits = list(self.knn_index.keys())
-            knn_columns = self.knn_index[knn_splits[0]].column_names
+            knn_index_splits = list(self.knn_index.keys())
+            shared_splits = set(dataset_splits).intersection(set(knn_index_splits))
+            self.shared_splits = shared_splits
+            knn_columns = self.knn_index[knn_index_splits[0]].column_names
             if "Embeddings" in knn_columns:
-                for split in knn_splits:
+                for split in knn_index_splits:
                     self.knn_index[split] = self.knn_index[split].rename_column("Embeddings", "embeddings")
-            for split in knn_splits:
+            for split in knn_index_splits:
                 single_row = next(iter(self.knn_index[split].take(1)))
                 self.embedding_size = len(single_row["embeddings"][0])
             self.knn_index = self.datasets.load_dataset(knn_index, streaming=True)
             if "Embeddings" in knn_columns:
-                for split in knn_splits:
+                for split in knn_index_splits:
                     self.knn_index[split] = self.knn_index[split].rename_column("Embeddings", "embeddings")
                                                      
         self.dataset_name = dataset
         common_columns = set(dataset_columns).intersection(set(knn_columns))
         self.join_column = common_columns
-        self.joined_dataset = self.join_datasets(self.dataset, self.knn_index, self.join_column, dataset_splits, knn_splits)
+        if dataset_splits is not None and knn_index_splits is not None:
+            self.joined_dataset_splits = {}
+            for split in shared_splits:
+                self.joined_dataset_splits[split] = self.join_datasets(self.dataset[split], self.knn_index[split], self.join_column)
+        else: 
+            self.joined_dataset = self.join_datasets(self.dataset, self.knn_index, self.join_column)
         return None
 
     async def ingest_qdrant_iter(self, column_name):
@@ -231,21 +230,38 @@ class search_embeddings:
         # Prepare the points to be inserted in chunks
         processed_rows = 0
         points = []
-        async for item in self.joined_dataset:
-            processed_rows += 1
-            points.append(models.PointStruct(
-                id=processed_rows,
-                vector=item["embeddings"][0],
-                payload={"text": item[column_name]}
-            ))
-            if len(points) == chunk_size:
-                print(f"Processing chunk {processed_rows-chunk_size} to {processed_rows}")
-                client.upsert(
-                    collection_name=collection_name,
-                    points=points
-                )
-                points = []        
-        
+        if "joined_dataset_splits" in dir(self):
+            for split in self.joined_dataset_splits:
+                async for item in self.joined_dataset_splits[split]:
+                    processed_rows += 1
+                    points.append(models.PointStruct(
+                        id=processed_rows,
+                        vector=item["embeddings"][0],
+                        payload={"text": item[column_name]}
+                    ))
+                    if len(points) == chunk_size:
+                        print(f"Processing chunk {processed_rows-chunk_size} to {processed_rows}")
+                        client.upsert(
+                            collection_name=collection_name,
+                            points=points
+                        )
+                        points = []
+        elif "joined_dataset" in dir(self):
+            async for item in self.joined_dataset:
+                processed_rows += 1
+                points.append(models.PointStruct(
+                    id=processed_rows,
+                    vector=item["embeddings"][0],
+                    payload={"text": item[column_name]}
+                ))
+                if len(points) == chunk_size:
+                    print(f"Processing chunk {processed_rows-chunk_size} to {processed_rows}")
+                    client.upsert(
+                        collection_name=collection_name,
+                        points=points
+                    )
+                    points = []        
+            
         print("Data successfully ingested into Qdrant")
         print("All data successfully ingested into Qdrant from huggingface dataset")
         return True
@@ -261,7 +277,6 @@ class search_embeddings:
             self.dataset = self.datasets.load_dataset(dataset).shuffle(seed=random.randint(0,65536))
             dataset_columns = self.dataset.column_names[list(self.dataset.column_names.keys())[0]]
             
-
         if knn_index_split is not None:
             self.knn_index = self.datasets.load_dataset(knn_index, split=knn_index_split)
             if "Embeddings" in self.knn_index.column_names:
