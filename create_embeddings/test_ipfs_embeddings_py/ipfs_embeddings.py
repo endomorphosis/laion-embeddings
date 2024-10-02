@@ -5,6 +5,7 @@ import json
 import random
 import datasets
 import asyncio
+import aiohttp
 from aiohttp import ClientSession, ClientTimeout
 from datasets import load_dataset
 import datasets
@@ -256,7 +257,7 @@ class ipfs_embeddings_py:
                     return ValueError(e)
                 if "can not write request body" in str(e):
                     return ValueError(e)
-                raise Exception(e)
+                return ValueError(e)
             if isinstance(query_response, dict) and "error" in query_response.keys():
                 raise Exception("error: " + query_response["error"])
             else:
@@ -281,7 +282,22 @@ class ipfs_embeddings_py:
                 if "Timeout" in str(e):
                     print("Timeout error")
                     return ValueError(e)
-                raise e
+                if "Payload is not completed" in str(e):
+                    print("Payload is not completed")
+                    return ValueError(e)
+                if "Can not write request body" in str(e):
+                    return ValueError(e)
+                pass
+            except aiohttp.ClientPayloadError as e:
+                print(f"ClientPayloadError: {str(e)}")
+                return ValueError(f"ClientPayloadError: {str(e)}")
+            except asyncio.TimeoutError as e:
+                print(f"Timeout error: {str(e)}")
+                return ValueError(f"Timeout error: {str(e)}")
+            except Exception as e:
+                print(f"Unexpected error: {str(e)}")
+                return ValueError(f"Unexpected error: {str(e)}")
+        
 
     def choose_endpoint(self, model):
         https_endpoints = self.get_https_endpoint(model)
@@ -389,9 +405,13 @@ class ipfs_embeddings_py:
             results = await self.index_knn(new_batch, model_name, endpoint)
         except Exception as e:
             print(e)
-            raise e
+            pass
+            # raise e
         if isinstance(results, ValueError):
             error = results.args[0]
+            strerror = None
+            if "strerror" in dir(error):
+                strerror = error.strerror
             if "status" in dir(error):
                 if error.status == 413:
                     if error.reason == "Payload Too Large":
@@ -424,7 +444,7 @@ class ipfs_embeddings_py:
                         return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
                 elif error.status == 400:
                     return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-            elif "can not write request body" in str(error) or "Timeout" in str(error):
+            elif "Can not write request body" in error.strerror or "Timeout" in error.strerror:
                 self.endpoint_status[endpoint] = 0
                 new_endpoint = self.choose_endpoint(model_name)
                 if new_endpoint:
@@ -434,9 +454,10 @@ class ipfs_embeddings_py:
                     return await self.send_batch_to_endpoint(batch, column, model_name, new_endpoint)
                 else:
                     return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-            raise Exception(error)
-                
+            raise Exception(error) 
         else:
+            if results is None:
+                return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
             print(f"Received embeddings for {len(results)} items from model {model_name} at endpoint {endpoint}")
             return results
 
