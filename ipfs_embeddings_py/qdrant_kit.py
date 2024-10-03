@@ -16,7 +16,7 @@ import asyncio
 import hashlib
 import random
 
-class qdrant_kit:
+class qdrant_kit_py:
     def __init__(self, resources: dict, metadata: dict):
         self.resources = resources
         self.metadata = metadata
@@ -28,6 +28,65 @@ class qdrant_kit:
             this_hash_key[column] = chunk[column]
         return hashlib.sha256(json.dumps(this_hash_key).encode()).hexdigest()
 
+
+    async def join_datasets(self, dataset, knn_index, join_column):
+        dataset_iter = iter(dataset)
+        knn_index_iter = iter(knn_index)
+        while True:
+            try:
+                dataset_item = next(dataset_iter)
+                knn_index_item = next(knn_index_iter)
+                results = {}
+                for key in dataset_item.keys():
+                    results[key] = dataset_item[key]
+                same = True
+                for column in join_column:
+                    if dataset_item[column] != knn_index_item[column]:
+                        same = False
+                        break
+                if same:
+                    for key in knn_index_item.keys():
+                        results[key] = knn_index_item[key]
+                else:
+                    if not hasattr(self, 'knn_index_hash') or not hasattr(self, 'datasets_hash') or len(self.knn_index_hash) == 0 or len(self.datasets_hash) == 0:
+                        cores = os.cpu_count() or 1
+                        with Pool(processes=cores) as pool:
+                            self.knn_index_hash = []
+                            self.datasets_hash = []
+                            chunk = []
+                            async for item in self.ipfs_embeddings_py.async_generator(self.dataset):
+                                chunk.append(item)
+                                if len(chunk) == cores:
+                                    self.datasets_hash.extend(pool.map(hash_chunk, chunk))
+                                    chunk = []
+                            if chunk:
+                                self.datasets_hash.extend(pool.map(hash_chunk, chunk))
+                            chunk = []
+                            async for item in self.ipfs_embeddings_py.async_generator(self.knn_index):
+                                chunk.append(item)
+                                if len(chunk) == cores:
+                                    self.knn_index_hash.extend(pool.map(hash_chunk, chunk))
+                                    chunk = []
+                            if chunk:
+                                self.knn_index_hash.extend(pool.map(hash_chunk, chunk))
+                    this_hash_key = {}
+                    for column in join_column:
+                        this_hash_key[column] = dataset_item[column]
+                    this_hash_value = hashlib.md5(json.dumps(this_hash_key).encode()).hexdigest()
+                    if this_hash_value in self.knn_index_hash and this_hash_value in self.datasets_hash:
+                        knn_index_item = self.knn_index_hash.index(this_hash_value)
+                        for key in self.knn_index[knn_index_item].keys():
+                            results[key] = self.knn_index[knn_index_item][key]
+                        dataset_item = self.datasets_hash.index(this_hash_value)
+                        for key in self.dataset[dataset_item].keys():
+                            results[key] = self.dataset[dataset_item][key]
+                    else:
+                        continue
+                yield results
+            except StopIteration:
+                break
+            except StopAsyncIteration:
+                break
 
     async def load_qdrant_iter(self, dataset, knn_index, dataset_split= None, knn_index_split=None):
         self.knn_index_hash = []
@@ -175,7 +234,7 @@ class qdrant_kit:
         print("All data successfully ingested into Qdrant from huggingface dataset")
         return True    
     
-    async def ingest_qdrant_iter(self, column_name):
+    async def ingest_qdrant_iter_bak(self, column_name):
         embedding_size = 0
         self.knn_index_length = 99999
         collection_name = self.dataset_name.split("/")[1]
@@ -185,7 +244,7 @@ class qdrant_kit:
         if (client.collection_exists(collection_name)):
             print(collection_name + " Collection already exists")
         else:
-            print("Creating collection" + collection_name)        
+            print("Creating collection " + collection_name)        
             client.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(size=self.embedding_size, distance=Distance.COSINE),
@@ -231,8 +290,73 @@ class qdrant_kit:
         print("Data successfully ingested into Qdrant")
         print("All data successfully ingested into Qdrant from huggingface dataset")
         return True
-        
-    def search_qdrant(self, collection_name, query_vector,  n=5):
+
+    
+    async def ingest_qdrant_iter(self, column_names):
+        if isinstance(column_names, str):
+            column_names = [column_names]
+        embedding_size = 0
+        self.knn_index_length = 99999
+        collection_name = self.dataset_name.split("/")[1]
+        client = QdrantClient(url="http://localhost:6333")
+        # Define the collection name
+        collection_name = self.dataset_name.split("/")[1]
+        if (client.collection_exists(collection_name)):
+            print(collection_name + " Collection already exists")
+        else:
+            print("Creating collection " + collection_name)        
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=self.embedding_size, distance=Distance.COSINE),
+            )
+
+        # Chunk size for generating points
+        chunk_size = 100
+        # Prepare the points to be inserted in chunks
+        processed_rows = 0
+        points = []
+        if "joined_dataset_splits" in dir(self):
+            for split in self.joined_dataset_splits:
+                async for item in self.joined_dataset_splits[split]:
+                    processed_rows += 1
+                    payload = {}
+                    for column_name in column_names:
+                        payload[column_name] = item[column_name]
+
+                    points.append(models.PointStruct(
+                        id=processed_rows,
+                        vector=item["embeddings"][0],
+                        payload=payload
+                    ))
+                    if len(points) == chunk_size:
+                        print(f"Processing chunk {processed_rows-chunk_size} to {processed_rows}")
+                        client.upsert(
+                            collection_name=collection_name,
+                            points=points
+                        )
+                        points = []
+        elif "joined_dataset" in dir(self):
+            async for item in self.joined_dataset:
+                processed_rows += 1
+                points.append(models.PointStruct(
+                    id=processed_rows,
+                    vector=item["embeddings"][0],
+                    payload={"text": item[column_name]}
+                ))
+                if len(points) == chunk_size:
+                    print(f"Processing chunk {processed_rows-chunk_size} to {processed_rows}")
+                    client.upsert(
+                        collection_name=collection_name,
+                        points=points
+                    )
+                    points = []        
+            
+        print("Data successfully ingested into Qdrant")
+        print("All data successfully ingested into Qdrant from huggingface dataset")
+        return True
+
+
+    async def search_qdrant(self, collection_name, query_vector,  n=5):
         query_vector = np.array(query_vector[0])
         client = QdrantClient(url="http://localhost:6333")
         search_result = client.search(
@@ -242,10 +366,12 @@ class qdrant_kit:
         )
         results = []
         for point in search_result:
-            results.append({point.id: {
-                    "text": point.payload["text"],
-                    "score": point.score
-                }})       
+            columns = point.payload.keys()
+            result = {}
+            for column in columns:
+                result[column] = point.payload[column]
+            result["score"] = point.score
+            results.append({point.id: result})      
         return results
 
     def stop_qdrant(self):

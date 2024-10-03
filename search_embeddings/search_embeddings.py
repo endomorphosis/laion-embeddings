@@ -1,7 +1,7 @@
 
 import datasets
 import sys
-sys.path.append('./ipfs_embeddings_py')
+sys.path.append('../ipfs_embeddings_py')
 import ipfs_embeddings_py
 from ipfs_embeddings_py import ipfs_embeddings_py, qdrant_kit_py
 import numpy as np
@@ -89,7 +89,7 @@ class search_embeddings:
         # load_qdrant = await self.load_qdrant_iter("laion/Wikipedia-X-Concat", "laion/Wikipedia-M3", "enwiki_concat", "enwiki_embed")
         # ingest_qdrant = await self.ingest_qdrant_iter("Concat Abstract")
         load_qdrant = await self.qdrant_kit_py.load_qdrant_iter("laion/English-ConcatX-Abstract", "laion/English-ConcatX-M3")
-        ingest_qdrant = await self.qdrant_kit_py.ingest_qdrant_iter("Concat Abstract")
+        ingest_qdrant = await self.qdrant_kit_py.ingest_qdrant_iter(["Concat Abstract","Title"])
         load_qdrant = await self.qdrant_kit_py.load_qdrant_iter("laion/German-ConcatX-Abstract", "laion/German-ConcatX-M3")
         ingest_qdrant = await self.qdrant_kit_py.ingest_qdrant_iter("Concat Abstract")
         results = await search_embeddings.search("laion/German-ConcatX-Abstract", "Machine Learning")

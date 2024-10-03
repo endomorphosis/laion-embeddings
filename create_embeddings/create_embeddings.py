@@ -4,6 +4,7 @@ from datasets import load_dataset, Dataset
 import os
 import sys
 import datasets
+sys.path.append('../ipfs_embeddings_py')
 from ipfs_embeddings_py import ipfs_embeddings_py
 import os
 import sys
