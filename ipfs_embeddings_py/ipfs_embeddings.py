@@ -466,19 +466,22 @@ class ipfs_embeddings_py:
         while True:
             await asyncio.sleep(3600)
             if self.saved == False:
+                if not os.path.exists(os.path.join(dst_path, "checkpoints")):
+                    os.makedirs(os.path.join(dst_path, "checkpoints"))
+                ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
                 if self.caches["new_dataset"] and len(self.caches["new_dataset"]["items"]) > 0:
                     tmp_dataset = datasets.Dataset.from_dict(self.caches["new_dataset"])
-                    self.caches["new_dataset"] = {"items" : []}
-                    self.new_dataset = concatenate_datasets([self.new_dataset, tmp_dataset])
-                    self.new_dataset.to_parquet(dst_path+"/"+dataset.replace("/","---")+".parquet")   
-                    print("Saved "+ str(len(tmp_dataset)) + " items to disk for dataset " + dataset + " at " + dst_path)
+                    new_dataset_shards = [x for x in ls_checkpoints if dataset.replace("/", "___") + "_shard" in x]
+                    next_filename_shard = f"{dataset.replace('/', '___')}_shard_{len(new_dataset_shards)}.parquet"
+                    tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard))
                 for model in models:
                     if model in self.caches.keys():
                         if self.caches[model] and len(self.caches[model]["items"]) > 0:
                             tmp_dataset = datasets.Dataset.from_dict(self.caches[model])
                             self.caches[model] = {"items" : []}
-                            self.index[model] = concatenate_datasets([self.index[model], tmp_dataset])
-                            self.index[model].to_parquet(dst_path+"/"+model.replace("/","---")+".parquet")
+                            this_model_shards = [x for x in ls_checkpoints if model.replace("/", "___") + "_shard" in x]
+                            next_filename_shard = f"{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard_{len(this_model_shards)}.parquet"
+                            tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard))
                             print("Saved "+ str(len(tmp_dataset)) + " items to disk for model " + model + " at " + dst_path)
                 self.saved = True
         return None 
@@ -509,10 +512,21 @@ class ipfs_embeddings_py:
             self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
         columns = self.dataset.column_names
         columns.append("cid")
-        new_dataset_dst_path = dst_path+"/"+ dataset.replace("/","---") + ".parquet"
+        new_dataset_dst_path = os.path.join(dst_path, dataset.replace("/","---") + ".parquet")
         self.all_cid_list["new_dataset"] = set()
         if os.path.isfile(new_dataset_dst_path):
-            self.new_dataset = load_dataset('parquet', data_files=new_dataset_dst_path)['train']
+            self.new_dataset = load_dataset('parquet', data_files=new_dataset_dst_path)[split]
+            self.all_cid_list["new_dataset"] = set(self.new_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"])
+        elif os.path.exists(os.path.join(dst_path, "checkpoints")):
+            ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+            new_dataset_shards = [x for x in ls_checkpoints if dataset.replace("/", "___") + "_shard" in x]
+            for shard in new_dataset_shards:
+                if self.new_dataset is None or isinstance(self.new_dataset, dict):
+                    tmp_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, "checkpoints", shard))[split]
+                    self.new_dataset = tmp_dataset
+                else:
+                    tmp_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, "checkpoints", shard))[split]
+                    self.new_dataset = concatenate_datasets([self.new_dataset, tmp_dataset])
             self.all_cid_list["new_dataset"] = set(self.new_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"])
         else:
             self.new_dataset = datasets.Dataset.from_dict({key: [] for key in columns })
@@ -527,6 +541,17 @@ class ipfs_embeddings_py:
             if os.path.isfile(model_dst_path):
                 self.caches[model] = {"items" : []}
                 self.index[model] = datasets.Dataset.from_parquet(model_dst_path)
+                self.all_cid_list[model] = set(self.index[model].map(lambda x: {"cid": x["items"]["cid"]})["cid"])
+            elif os.path.exists(os.path.join(dst_path, "checkpoints")):
+                ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+                this_model_shards = [x for x in ls_checkpoints if model.replace("/", "___") + "_shard" in x]
+                for shard in this_model_shards:
+                    if model not in list(self.index.keys()) or self.index[model] is None or isinstance(self.index[model], dict):
+                        tmp_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, "checkpoints", shard))[split]
+                        self.index[model] = tmp_dataset
+                    else:
+                        tmp_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, "checkpoints", shard))[split]
+                        self.index[model] = concatenate_datasets([self.index[model], tmp_dataset])
                 self.all_cid_list[model] = set(self.index[model].map(lambda x: {"cid": x["items"]["cid"]})["cid"])
             else:
                 self.index[model] = datasets.Dataset.from_dict({"cid": [], "embedding": []})
@@ -548,7 +573,6 @@ class ipfs_embeddings_py:
         save_task = asyncio.create_task(self.save_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
         return None 
-
 
 if __name__ == "__main__":
     metadata = {
