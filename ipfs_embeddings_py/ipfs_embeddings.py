@@ -631,6 +631,11 @@ class ipfs_embeddings_py:
             self.embedding_datasets[model].to_parquet(os.path.join(dst_path, model.replace("/","---") + ".parquet"))
         return None
 
+    async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_size, max_splits):
+
+        return None
+
+
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
@@ -661,4 +666,4 @@ if __name__ == "__main__":
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
     # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
-    asyncio.run
+    asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
