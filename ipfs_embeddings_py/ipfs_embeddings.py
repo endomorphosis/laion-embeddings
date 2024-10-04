@@ -636,6 +636,10 @@ class ipfs_embeddings_py:
         return None
 
 
+    async def upload_to_hf(self, dataset, split, columns, dst_path, models):
+        
+        return None
+
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
