@@ -442,7 +442,7 @@ class ipfs_embeddings_py:
                         return await self.send_batch_to_endpoint(batch, column, model_name, new_endpoint)
                     else:
                         return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-                elif error.status == 400:
+                elif error.status == 400 or error.status == 404:
                     return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
             elif "Can not write request body" in error.strerror or "Timeout" in error.strerror:
                 self.endpoint_status[endpoint] = 0
@@ -677,7 +677,7 @@ class ipfs_embeddings_py:
                         self.index[model] = concatenate_datasets([self.index[model], tmp_dataset])
                 self.all_cid_list[model] = list(self.index[model].map(lambda x: {"cid": x["items"]["cid"]})["cid"])
                 self.all_cid_set[model] = set(self.all_cid_list[model])
-        self.cid_list = set.intersection(*self.all_cid_list.values())
+        self.cid_list = set.intersection(*self.all_cid_set.values())
         columns = self.new_dataset.column_names
         self.new_dataset_combined = datasets.Dataset.from_dict({key: [] for key in columns })
         self.embedding_datasets = {}
