@@ -1,4 +1,4 @@
-from ipfs_multiformats import *
+from .ipfs_multiformats import *
 import requests
 import subprocess
 import json
@@ -624,20 +624,26 @@ class ipfs_embeddings_py:
         columns = self.new_dataset.column_names
         self.new_dataset_combined = datasets.Dataset.from_dict({key: [] for key in columns })
         self.embedding_datasets = {}
+        count_cids = 0
+        len_cids = len(self.cid_list)
         for model in models:
             self.embedding_datasets[model] = datasets.Dataset.from_dict({key: [] for key in columns })
+        
         for cid in self.cid_list:
             new_dataset_index = self.all_cid_list["new_dataset"].index(cid)
             new_dataset_item = self.new_dataset.select([new_dataset_index])[0]
-            self.new_dataset_combined = self.new_dataset_combined.add_item(new_dataset_item)
+            self.new_dataset_combined = self.new_dataset_combined.add_item(new_dataset_item["items"])
             for model in models:
                 if model in list(self.index.keys()):
                     embedding_dataset_index = self.all_cid_list[model].index(cid)
                     embedding_dataset_item = self.index[model].select([embedding_dataset_index])[0]
-                    self.embedding_datasets[model] = self.embedding_datasets[model].add_item(embedding_dataset_item)
+                    self.embedding_datasets[model] = self.embedding_datasets[model].add_item(embedding_dataset_item["items"])
+            count_cids += 1
+            if count_cids % 1000 == 0:
+                print("Sorted " + str(count_cids) + " of " + str(len_cids) + " cids")
         self.new_dataset_combined.to_parquet(os.path.join(dst_path, dataset.replace("/","___") + ".parquet"))
         for model in models:
-            self.embedding_datasets[model].to_parquet(os.path.join(dst_path, model.replace("/","___") + ".parquet"))
+            self.embedding_datasets[model].to_parquet(os.path.join(dst_path, dataset.replace("/","___") + "_" + model.replace("/","___") + ".parquet"))
         return None
 
     async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_size, max_splits):

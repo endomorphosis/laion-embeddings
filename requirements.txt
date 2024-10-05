@@ -5,7 +5,7 @@ pandas
 numpy
 qdrant-client
 multiformats
-ipfs_embeddings_py==0.0.15
+ipfs_embeddings_py==0.0.18
 datasets
 transformers
 aiohttp
