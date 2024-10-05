@@ -474,7 +474,7 @@ class ipfs_embeddings_py:
                     tmp_dataset_cids = tmp_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
                     self.all_cid_list["new_dataset"] += tmp_dataset_cids
                     self.all_cid_set["new_dataset"] = set(self.all_cid_set["new_dataset"].union(set(tmp_dataset_cids)))
-                    tmp_dataset_cids_dataset = datasets.Dataset.from_dict({"cid": tmp_dataset_cids})
+                    tmp_dataset_cids_dataset = datasets.Dataset.from_dict({"cids": tmp_dataset_cids})
                     new_dataset_shards = [x for x in ls_checkpoints if dataset.replace("/", "___") + "_shard" in x]
                     next_filename_shard = f"{dataset.replace('/', '___')}_shard_{len(new_dataset_shards)}"
                     tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
@@ -486,7 +486,7 @@ class ipfs_embeddings_py:
                             tmp_dataset_cids = tmp_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
                             self.all_cid_list[model] += tmp_dataset_cids
                             self.all_cid_set[model] = set(self.all_cid_set[model].union(set(tmp_dataset_cids)))
-                            tmp_dataset_cids_dataset = datasets.Dataset.from_dict({"cid": list(tmp_dataset_cids)})
+                            tmp_dataset_cids_dataset = datasets.Dataset.from_dict({"cids": list(tmp_dataset_cids)})
                             self.caches[model] = {"items" : []}
                             this_model_shards = [x for x in ls_checkpoints if model.replace("/", "___") + "_shard" in x]
                             next_filename_shard = f"{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard_{len(this_model_shards)}"
@@ -684,5 +684,5 @@ if __name__ == "__main__":
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
-    # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
