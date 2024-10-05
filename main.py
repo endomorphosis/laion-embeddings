@@ -11,7 +11,7 @@ class LoadIndexRequest(BaseModel):
     knn_index: str
     dataset_split: Union[str, None]
     knn_index_split: Union[str, None]
-    columns: str
+    columns: list
 
 class SearchRequest(BaseModel):
     collection: str
