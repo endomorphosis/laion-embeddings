@@ -96,6 +96,14 @@ class search_embeddings:
         results = await search_embeddings.search("German-ConcatX-Abstract", "Machine Learning")
         return None
     
+    async def load_qdrant_iter(self, dataset, knn_index, dataset_split=None, knn_index_split=None):
+        await self.qdrant_kit_py.load_qdrant_iter(dataset, knn_index, dataset_split, knn_index_split)
+        return None
+
+    async def ingest_qdrant_iter(self, columns):
+        await self.qdrant_kit_py.ingest_qdrant_iter(columns)
+        return None
+    
     async def test_high_memory(self):
         start = self.qdrant_kit_py.start_qdrant()
         load_qdrant = await self.qdrant_kit_py.load_qdrant("laion/Wikipedia-X-Concat", "laion/Wikipedia-M3", "enwiki_concat", "enwiki_embed")

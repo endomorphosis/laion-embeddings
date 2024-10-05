@@ -11,7 +11,7 @@ class LoadIndexRequest(BaseModel):
     knn_index: str
     dataset_split: Union[str, None]
     knn_index_split: Union[str, None]
-    column: str
+    columns: str
 
 class SearchRequest(BaseModel):
     collection: str
@@ -61,15 +61,15 @@ def create_index_post(request: CreateIndexRequest):
     create_index_task(resources, metadata)
     return {"message": "Index creation started in the background"}
 
-async def load_index_task(dataset: str, knn_index: str, dataset_split: Union[str, None], knn_index_split: Union[str, None], column: str):
+async def load_index_task(dataset: str, knn_index: str, dataset_split: Union[str, None], knn_index_split: Union[str, None], columns: str):
     vector_search = search_embeddings.search_embeddings(resources, metadata)
     await vector_search.load_qdrant_iter(dataset, knn_index, dataset_split, knn_index_split)
-    await vector_search.ingest_qdrant_iter(column)
+    await vector_search.ingest_qdrant_iter(columns)
     return None
 
 @app.post("/load")
 def load_index_post(request: LoadIndexRequest, background_tasks: BackgroundTasks):
-    background_tasks.add_task(load_index_task, request.dataset, request.knn_index, request.dataset_split, request.knn_index_split, request.column)
+    background_tasks.add_task(load_index_task, request.dataset, request.knn_index, request.dataset_split, request.knn_index_split, request.columns)
     return {"message": "Index loading started in the background"}
 
 async def search_item_task(collection: str, text: str):

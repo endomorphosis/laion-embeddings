@@ -103,9 +103,9 @@ class qdrant_kit_py:
             
         if knn_index_split is not None:
             self.knn_index = self.datasets.load_dataset(knn_index, split=knn_index_split, streaming=True)
-            knn_index_splits = list(self.knn_index.keys())
-            shared_splits = set(dataset_splits).intersection(set(knn_index_splits))
-            self.shared_splits = shared_splits
+            # knn_index_splits = list(self.knn_index.keys())
+            # shared_splits = set(dataset_splits).intersection(set(knn_index_splits))
+            # self.shared_splits = shared_splits
             if "Embeddings" in self.knn_index.column_names:
                 self.knn_index = self.knn_index.rename_column("Embeddings", "embeddings")
             single_row = next(iter(self.knn_index.take(1)))
@@ -134,12 +134,13 @@ class qdrant_kit_py:
         self.dataset_name = dataset
         common_columns = set(dataset_columns).intersection(set(knn_columns))
         self.join_column = common_columns
-        if dataset_splits is not None and knn_index_splits is not None:
+
+        if dataset_split is not None and knn_index_split is not None:
+            self.joined_dataset = self.join_datasets(self.dataset, self.knn_index, self.join_column)
+        elif dataset_splits is not None and knn_index_splits is not None:
             self.joined_dataset_splits = {}
             for split in shared_splits:
-                self.joined_dataset_splits[split] = self.join_datasets(self.dataset[split], self.knn_index[split], self.join_column)
-        else: 
-            self.joined_dataset = self.join_datasets(self.dataset, self.knn_index, self.join_column)
+                self.joined_dataset_splits[split] = self.join_datasets(self.dataset[split], self.knn_index[split], self.join_column)  
         return None
 
 
@@ -338,10 +339,13 @@ class qdrant_kit_py:
         elif "joined_dataset" in dir(self):
             async for item in self.joined_dataset:
                 processed_rows += 1
+                payload = {}
+                for column_name in column_names:
+                    payload[column_name] = item[column_name]
                 points.append(models.PointStruct(
                     id=processed_rows,
                     vector=item["embeddings"][0],
-                    payload={"text": item[column_name]}
+                    payload=payload
                 ))
                 if len(points) == chunk_size:
                     print(f"Processing chunk {processed_rows-chunk_size} to {processed_rows}")
