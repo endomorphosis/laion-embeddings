@@ -646,14 +646,69 @@ class ipfs_embeddings_py:
             self.embedding_datasets[model].to_parquet(os.path.join(dst_path, dataset.replace("/","___") + "_" + model.replace("/","___") + ".parquet"))
         return None
 
+
+    async def start_elasticsearch(self, dataset, split, columns, dst_path, models):
+
+        command = [
+            "docker", "run", "-d",
+            "-p", "9200:9200", "-p", "9300:9300",
+            "-e", "discovery.type=single-node",
+            "-e", "ES_JAVA_OPTS=-Xms512m -Xmx512m",
+            "elasticsearch:7.10.1"
+        ]
+
+        result = subprocess.run(command, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print(f"Failed to start Elasticsearch container: {result.stderr}")
+            return None
+
+        container_id = result.stdout.strip()
+        print(f"Started Elasticsearch container with ID: {container_id}")
+        return container_id
+
+    async def stop_elasticsearch(self, container_id):
+
+        command = ["docker", "stop", container_id]
+        result = subprocess.run(command, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print(f"Failed to stop Elasticsearch container: {result.stderr}")
+            return None
+
+        print(f"Stopped Elasticsearch container with ID: {container_id}")
+        return None
+
+    async def send_batch_to_elasticsearch(self, dataset, split, columns, dst_path, models):
+        from elasticsearch import AsyncElasticsearch
+
+        es = AsyncElasticsearch([{'host': 'localhost', 'port': 9200}])
+
+        index_name = f"{dataset.replace('/', '_')}_{split}"
+
+        # Create index if it doesn't exist
+        if not await es.indices.exists(index=index_name):
+            await es.indices.create(index=index_name)
+
+        # Prepare data for indexing
+        data = {
+            "dataset": dataset,
+            "split": split,
+            "columns": columns,
+            "dst_path": dst_path,
+            "models": models
+        }
+
+        # Index the data
+        await es.index(index=index_name, document=data)
+
+        await es.close()
+        return None
+    
     async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_size, max_splits):
 
         return None
 
-
-    async def upload_to_hf(self, dataset, split, columns, dst_path, models):
-
-        return None
 
 if __name__ == "__main__":
     metadata = {
@@ -684,5 +739,6 @@ if __name__ == "__main__":
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
-    asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
-    asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
+    # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
+    asyncio.run(create_embeddings_batch.start_elasticsearch(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))

@@ -10,3 +10,4 @@ datasets
 transformers
 aiohttp
 multiformats
+elasticsearch
