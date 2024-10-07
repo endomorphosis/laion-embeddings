@@ -663,7 +663,7 @@ if __name__ == "__main__":
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             # "Alibaba-NLP/gte-Qwen2-7B-instruct",
         ],
-        "dst_path": "/storage/teraflopai/tmp2"
+        "dst_path": "/storage/teraflopai/tmp"
     }
     resources = {
         "https_endpoints": [
@@ -682,7 +682,5 @@ if __name__ == "__main__":
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
-    # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
-    asyncio.run(create_embeddings_batch.stop_elasticsearch())
-    asyncio.run(create_embeddings_batch.start_elasticsearch())
