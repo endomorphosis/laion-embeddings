@@ -5,6 +5,9 @@ import datasets
 from datasets import load_dataset, Dataset, concatenate_datasets, load_from_disk
 import asyncio
 from elasticsearch import AsyncElasticsearch
+from elasticsearch import Elasticsearch
+from elasticsearch.exceptions import ConnectionError
+import time
 
 class elasticsearch_kit:
     def __init__(self, resources, metadata):
@@ -40,10 +43,10 @@ class elasticsearch_kit:
 
             command = [
                 "sudo", "docker", "run", "-d",
-                "-p", "9200:9200", "-p", "9300:9300",
+                "--name", "elasticsearch", "-p", "9200:9200",
                 "-e", "discovery.type=single-node",
-                "-e", "ES_JAVA_OPTS=-Xms512m -Xmx512m",
-                "elasticsearch:8.15.2"
+                "-e", "xpack.security.enabled=false",
+                "elasticsearch:8.10.2"
             ]
 
             result = subprocess.run(command, capture_output=True, text=True)
@@ -76,17 +79,43 @@ class elasticsearch_kit:
             return None
 
     async def send_batch_to_elasticsearch(self, batch, columns, dataset, split):
-        es = AsyncElasticsearch(hosts=[{'host': 'localhost', 'port': 9200, 'scheme': 'http'}])
+        print("Sending batch to Elasticsearch")
+
+        es = None
+        for _ in range(5):  # Retry up to 5 times
+            try:
+                es = Elasticsearch("http://localhost:9200")
+
+                if es.ping():
+                    print("Connected to Elasticsearch")
+                    break
+            except Exception as e:
+                print(f"Connection failed: {e}")
+                time.sleep(3)  # Wait for 2 seconds before retrying
+        
+        if es is None or not es.ping():
+            print("Failed to connect to Elasticsearch after multiple attempts")
+            return
 
         index_name = f"{dataset.replace('/', '____')}_{split}".lower()
 
         try:
             # Create index if it doesn't exist
-            if not await es.indices.exists(index=index_name):
-                await es.indices.create(index=index_name)
+            if not es.indices.exists(index=index_name):
+                es.indices.create(index=index_name)
 
             # Insert batch into the index
-            await es.bulk(index=index_name, body=batch)
+            actions = [
+                {
+                    "index": {
+                        "_index": index_name
+                    }
+                }
+                for doc in batch
+            ]
+            for i, doc in enumerate(batch):
+                actions.insert(2 * i + 1, doc)
+            es.bulk(body=actions)
 
         except Exception as e:
             if "not Elasticsearch" in str(e):
@@ -94,7 +123,7 @@ class elasticsearch_kit:
             else:
                 print(f"An error occurred: {e}")
         finally:
-            await es.close()
+            es.close()
 
     async def save_elasticsearch_snapshot(self, dataset, split, columns, dst_path, models):
 
