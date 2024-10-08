@@ -16,6 +16,7 @@ class elasticsearch_kit:
         self.datasets = datasets
         self.index =  {}
         self.cid_list = []
+        self.es = Elasticsearch("http://localhost:9200")
         if len(list(metadata.keys())) > 0:
             for key in metadata.keys():
                 setattr(self, key, metadata[key])
@@ -57,7 +58,21 @@ class elasticsearch_kit:
 
             container_id = result.stdout.strip()
             print(f"Started Elasticsearch container with ID: {container_id}")
-            return container_id
+            return None
+    
+    async def create_elasticsearch_index(self, dataset, split):
+        index_name = f"{dataset.replace('/', '____')}_{split}".lower()
+        try:
+            # Create index if it doesn't exist
+            if not self.es.indices.exists(index=index_name):
+                self.es.indices.create(index=index_name)
+                print(f"Created index '{index_name}'")
+            else:
+                print(f"Index '{index_name}' already exists")
+        except ConnectionError as e:
+            print(f"Could not connect to Elasticsearch: {e}")
+            return None
+        return None
 
     async def stop_elasticsearch(self):
         ps_command = ["sudo", "docker", "ps", "-q", "--filter", "ancestor=elasticsearch:8.15.2"]
@@ -78,53 +93,31 @@ class elasticsearch_kit:
             print("Elasticsearch container is not running")
             return None
 
-    async def send_batch_to_elasticsearch(self, batch, columns, dataset, split):
-        print("Sending batch to Elasticsearch")
-
-        es = None
-        for _ in range(5):  # Retry up to 5 times
-            try:
-                es = Elasticsearch("http://localhost:9200")
-
-                if es.ping():
-                    print("Connected to Elasticsearch")
-                    break
-            except Exception as e:
-                print(f"Connection failed: {e}")
-                time.sleep(3)  # Wait for 2 seconds before retrying
-        
-        if es is None or not es.ping():
-            print("Failed to connect to Elasticsearch after multiple attempts")
-            return
-
-        index_name = f"{dataset.replace('/', '____')}_{split}".lower()
-
+    async def send_item_to_elasticsearch(self, item, index_name):
         try:
-            # Create index if it doesn't exist
-            if not es.indices.exists(index=index_name):
-                es.indices.create(index=index_name)
+            # Insert item into the index
+            response = self.es.index(index=index_name, document=item)
+            print(f"Indexed document {item['id']}: {response['result']}")
+        except ConnectionError as e:
+            print(f"Could not connect to Elasticsearch: {e}")
+            return None
+        return None
 
-            # Insert batch into the index
-            actions = [
-                {
-                    "index": {
-                        "_index": index_name
-                    }
+    async def send_batch_to_elasticsearch(self, batch, index_name):
+        print("Sending batch to Elasticsearch")
+        # Insert batch into the index
+        actions = [
+            {
+                "index": {
+                    "_index": index_name
                 }
-                for doc in batch
-            ]
-            for i, doc in enumerate(batch):
-                actions.insert(2 * i + 1, doc)
-            es.bulk(body=actions)
-
-        except Exception as e:
-            if "not Elasticsearch" in str(e):
-                print("The client noticed that the server is not Elasticsearch and we do not support this unknown product.")
-            else:
-                print(f"An error occurred: {e}")
-        finally:
-            es.close()
-
+            }
+            for doc in batch
+        ]
+        for i, doc in enumerate(batch):
+            actions.insert(2 * i + 1, doc)
+        self.es.bulk(body=actions)
+        return None
     async def save_elasticsearch_snapshot(self, dataset, split, columns, dst_path, models):
 
         return None

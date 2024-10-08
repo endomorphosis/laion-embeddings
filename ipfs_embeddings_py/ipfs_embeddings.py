@@ -434,12 +434,12 @@ class ipfs_embeddings_py:
                                 print("error: " + error_content["error"])
                                 return None
                 elif error.status == 504 or error.status == 502 or  "can not write request body" in str(error):
-                    self.endpoint_status[endpoint] = 0
+                    # self.endpoint_status[endpoint] = 0
                     new_endpoint = self.choose_endpoint(model_name)
                     if new_endpoint:
-                        new_queue = self.queues[model_name][new_endpoint]
-                        for item in batch:
-                            await new_queue.put(item)
+                        # new_queue = self.queues[model_name][new_endpoint]
+                        # for item in batch:
+                        #     await new_queue.put(item)
                         return await self.send_batch_to_endpoint(batch, column, model_name, new_endpoint)
                     else:
                         return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)

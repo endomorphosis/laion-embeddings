@@ -345,10 +345,14 @@ class ipfs_embeddings_py:
             queue.task_done()
         return None
 
+    async def index_elasticsearch(self, dataset, split, columns, dst_path, models):
+        await self.elasticsearch.index_elasticsearch(dataset, split, columns, dst_path, models)
+        return None
+
     async def producer(self, dataset_stream, column, queues):
         tasks = []
         async for item in self.async_generator(dataset_stream):
-            task = self.process_item(item, column, queues, self.index_cid, self.cid_list, self.new_dataset)
+            task = self.process_item(item, column, queues, self.index_cid, self.index_elasticsearch, self.cid_list, self.new_dataset)
             tasks.append(task)
             if len(tasks) >= 1:
                 await asyncio.gather(*tasks)
@@ -357,7 +361,7 @@ class ipfs_embeddings_py:
             await asyncio.gather(*tasks)
         return None
 
-    async def process_item(self, item, column, queues, index_cid, cid_list, new_dataset):
+    async def process_item(self, item, column, queues, index_cid, index_elasticsearch, cid_list, new_dataset):
         # Assuming `item` is a dictionary with required data
         if "new_dataset" not in list(self.caches.keys()):
             self.caches["new_dataset"] = {"items" : []}
@@ -371,16 +375,12 @@ class ipfs_embeddings_py:
             # print(f"CID {this_cid} already in index, skipping item.")
             pass
         else:
+            index_elasticsearch(item, "train", column_names, "/storage/teraflopai/tmp2", ["Alibaba-NLP/gte-large-en-v1.5", "Alibaba-NLP/gte-Qwen2-1.5B-instruct"])
             cid_list.add(this_cid)
             if this_cid not in self.all_cid_list["new_dataset"]:
                 self.caches["new_dataset"]["items"].append(item)
-            # new_dataset = new_dataset.add_item(item)
-            # print(f"Added item with CID {this_cid} to new_dataset.")
             models = self.queues.keys()
             for model, model_queues in queues.items():
-                # Assign to the endpoint with the smallest queue
-                # while len(model_queues) < 1:
-                #     await asyncio.sleep(1)
                 if len(model_queues) > 0:
                     if this_cid not in self.all_cid_list[model]:
                         endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
