@@ -60,8 +60,7 @@ class elasticsearch_kit:
             print(f"Started Elasticsearch container with ID: {container_id}")
             return None
     
-    async def create_elasticsearch_index(self, dataset, split):
-        index_name = f"{dataset.replace('/', '____')}_{split}".lower()
+    async def create_elasticsearch_index(self, index_name):
         try:
             # Create index if it doesn't exist
             if not self.es.indices.exists(index=index_name):
@@ -124,7 +123,24 @@ class elasticsearch_kit:
         # Save the snapshot
         snapshot_name = f"{index_name}_snapshot"
         snapshot_path = os.path.join(dst_path, snapshot_name)
-        self.es.snapshot.create(repository="snapshot", snapshot=snapshot_name, body={"indices": index_name})
+
+        #create folder if not exists
+        os.makedirs(snapshot_path, exist_ok=True)
+        #create folder in docker container if not exists
+        command = ["sudo", "docker", "exec", "elasticsearch", "mkdir", "-p", f"/usr/share/elasticsearch/data/snapshot/{snapshot_name}"]
+        subprocess.run(command, check=True)
+        # Create snapshot repository if it doesn't exist
+        if not self.es.snapshot.get(repository="snapshot", snapshot="_all"):
+            self.es.snapshot.create_repository(
+                repository="snapshot",
+                body={
+                    "type": "fs",
+                    "settings": {
+                        "location": "/usr/share/elasticsearch/data/snapshot"
+                    }
+                }
+            )
+
 
         # Move the snapshot to the destination path
         os.makedirs(dst_path, exist_ok=True)
@@ -137,9 +153,8 @@ class elasticsearch_kit:
         
         return None
 
-    async def empty_elasticsearch_index(self, dataset, split, columns, dst_path, models):
+    async def empty_elasticsearch_index(self, index_name):
         print("Emptying Elasticsearch index")
-        index_name = f"{dataset.replace('/', '____')}_{split}".lower()
         try:
             # Delete the index
             self.es.indices.delete(index=index_name)
@@ -147,20 +162,20 @@ class elasticsearch_kit:
         except ConnectionError as e:
             print(f"Could not connect to Elasticsearch: {e}")
             return None
-        
         return None
 
     async def test(self):
         await self.start_elasticsearch()
-
         this_dataset = load_dataset("TeraflopAI/Caselaw_Access_Project", split="train", streaming=True)
         batch = []
         for item in this_dataset:
             batch.append(item)
             if len(batch) == 100:
-                await self.send_batch_to_elasticsearch(batch, ["text"], "TeraflopAI/Caselaw_Access_Project", "train")
+                await self.create_elasticsearch_index("caselaw_access_project_train")
+                await self.send_batch_to_elasticsearch(batch, "caselaw_access_project_train")
+                await self.save_elasticsearch_snapshot("caselaw_access_project_train", "/storage/teraflopai/tmp")
+                await self.empty_elasticsearch_index("caselaw_access_project_train")
                 batch = []
-        
         return None
     
 if __name__ == "__main__":
