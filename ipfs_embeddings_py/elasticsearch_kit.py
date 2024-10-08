@@ -118,12 +118,36 @@ class elasticsearch_kit:
             actions.insert(2 * i + 1, doc)
         self.es.bulk(body=actions)
         return None
-    async def save_elasticsearch_snapshot(self, dataset, split, columns, dst_path, models):
 
+    async def save_elasticsearch_snapshot(self, index_name, dst_path):
+        print("Saving Elasticsearch snapshot")
+        # Save the snapshot
+        snapshot_name = f"{index_name}_snapshot"
+        snapshot_path = os.path.join(dst_path, snapshot_name)
+        self.es.snapshot.create(repository="snapshot", snapshot=snapshot_name, body={"indices": index_name})
+
+        # Move the snapshot to the destination path
+        os.makedirs(dst_path, exist_ok=True)
+        command = ["sudo", "docker", "cp", f"elasticsearch:/usr/share/elasticsearch/data/snapshot/{snapshot_name}", snapshot_path]
+        result = subprocess.run(command, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print(f"Failed to save Elasticsearch snapshot: {result.stderr}")
+            return None
+        
         return None
 
     async def empty_elasticsearch_index(self, dataset, split, columns, dst_path, models):
-            
+        print("Emptying Elasticsearch index")
+        index_name = f"{dataset.replace('/', '____')}_{split}".lower()
+        try:
+            # Delete the index
+            self.es.indices.delete(index=index_name)
+            print(f"Deleted index '{index_name}'")
+        except ConnectionError as e:
+            print(f"Could not connect to Elasticsearch: {e}")
+            return None
+        
         return None
 
     async def test(self):
