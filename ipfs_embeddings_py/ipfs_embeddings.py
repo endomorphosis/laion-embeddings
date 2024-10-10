@@ -30,6 +30,7 @@ class ipfs_embeddings_py:
         self.caches = {}
         self.batch_sizes = {}
         self.cid_list = set()
+        self.cid_set = set()
         self.cid_queue = iter([])
         self.knn_queue = iter([])
         self.cid_index = {}
@@ -348,7 +349,7 @@ class ipfs_embeddings_py:
     async def producer(self, dataset_stream, column, queues):
         tasks = []
         async for item in self.async_generator(dataset_stream):
-            task = self.process_item(item, column, queues, self.index_cid, self.cid_list, self.new_dataset)
+            task = self.process_item(item, column, queues, self.index_cid, self.cid_set, self.new_dataset)
             tasks.append(task)
             if len(tasks) >= 1:
                 await asyncio.gather(*tasks)
@@ -357,7 +358,7 @@ class ipfs_embeddings_py:
             await asyncio.gather(*tasks)
         return None
 
-    async def process_item(self, item, column, queues, index_cid, cid_list, new_dataset):
+    async def process_item(self, item, column, queues, index_cid, cid_set, new_dataset):
         # Assuming `item` is a dictionary with required data
         if "new_dataset" not in list(self.caches.keys()):
             self.caches["new_dataset"] = {"items" : []}
@@ -367,24 +368,25 @@ class ipfs_embeddings_py:
         if "cid" not in column_names:
             item["cid"] = this_cid
         # Check if cid is in index
-        if this_cid in cid_list:
+        if this_cid in cid_set:
             # print(f"CID {this_cid} already in index, skipping item.")
             pass
         else:
-            cid_list.add(this_cid)
-            if this_cid not in self.all_cid_list["new_dataset"]:
+            cid_set.add(this_cid)
+            if this_cid not in self.all_cid_set["new_dataset"]:
                 self.caches["new_dataset"]["items"].append(item)
             # new_dataset = new_dataset.add_item(item)
             # print(f"Added item with CID {this_cid} to new_dataset.")
             models = self.queues.keys()
             for model, model_queues in queues.items():
-                # Assign to the endpoint with the smallest queue
-                # while len(model_queues) < 1:
-                #     await asyncio.sleep(1)
                 if len(model_queues) > 0:
-                    if this_cid not in self.all_cid_list[model]:
+                    if this_cid not in self.all_cid_set[model]:
                         endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
                         queue.put_nowait(item)  # Non-blocking put
+                # if len(model_queues) > 0:
+                #     if this_cid not in self.all_cid_set[model]:
+                #         queue = random.choice(list(model_queues.values()))
+                #         queue.put_nowait(item)  # Non-blocking put
 
     async def send_batch_to_endpoint(self, batch, column, model_name, endpoint):
         print(f"Sending batch of size {len(batch)} to model {model_name} at endpoint {endpoint}")
@@ -508,7 +510,7 @@ class ipfs_embeddings_py:
         if not os.path.exists(dst_path):
             os.makedirs(dst_path)
         self.queues = {}
-        self.cid_list = set()
+        self.cid_set = set()
         self.all_cid_list = {}
         consumer_tasks = {}
         batch_sizes = {}
@@ -542,7 +544,7 @@ class ipfs_embeddings_py:
                     self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
                     consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
         # Compute commonn
-        self.cid_list = set.intersection(*self.all_cid_set.values())
+        self.cid_set = set.intersection(*self.all_cid_set.values())
         producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
         save_task = asyncio.create_task(self.save_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
@@ -617,7 +619,7 @@ class ipfs_embeddings_py:
                         del tmp_model_cid_dataset
                 if model not in list(self.index.keys()) or self.index[model] is None or isinstance(self.index[model], dict):
                     self.index[model] = load_dataset('parquet', data_files=this_model_shards)[split]
-        self.cid_list = set.intersection(*self.all_cid_set.values())
+        self.cid_set = set.intersection(*self.all_cid_set.values())
         return None
     
     async def combine_checkpoints(self, dataset, split, columns, dst_path, models):
@@ -626,11 +628,11 @@ class ipfs_embeddings_py:
         self.new_dataset_combined = datasets.Dataset.from_dict({key: [] for key in columns })
         self.embedding_datasets = {}
         count_cids = 0
-        len_cids = len(self.cid_list)
+        len_cids = len(self.cid_set)
         for model in models:
             self.embedding_datasets[model] = datasets.Dataset.from_dict({key: [] for key in columns })
         
-        for cid in self.cid_list:
+        for cid in self.cid_set:
             new_dataset_index = self.all_cid_list["new_dataset"].index(cid)
             new_dataset_item = self.new_dataset.select([new_dataset_index])[0]
             self.new_dataset_combined = self.new_dataset_combined.add_item(new_dataset_item["items"])
@@ -679,6 +681,18 @@ if __name__ == "__main__":
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
             ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8083/embed-large", 32768],
+            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32768],
+            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32768],
+            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8082/embed-large", 32768],
+            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8083/embed-large", 32768],
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)

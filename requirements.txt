@@ -11,3 +11,5 @@ transformers
 aiohttp
 multiformats
 elasticsearch
+nltk
+rank_bm25

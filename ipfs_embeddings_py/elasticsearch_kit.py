@@ -178,6 +178,12 @@ class elasticsearch_kit:
                 batch = []
         return None
     
+
+    async def test2(self):
+        await self.start_elasticsearch()
+        this_dataset = load_dataset("TeraflopAI/Caselaw_Access_Project", split="train")
+        this_dataset = this_dataset.add_elasticsearch_index("text", host="localhost", port=9200)
+
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
@@ -193,5 +199,5 @@ if __name__ == "__main__":
     resources = {
     }
     elasticsearch_kit = elasticsearch_kit(resources, metadata)
-    asyncio.run(elasticsearch_kit.test())
+    asyncio.run(elasticsearch_kit.test2())
     
