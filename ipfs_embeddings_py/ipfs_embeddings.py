@@ -349,7 +349,7 @@ class ipfs_embeddings_py:
     async def producer(self, dataset_stream, column, queues):
         tasks = []
         async for item in self.async_generator(dataset_stream):
-            task = self.process_item(item, column, queues, self.index_cid, self.cid_set, self.new_dataset)
+            task = self.process_item(item, column, queues, self.index_cid)
             tasks.append(task)
             if len(tasks) >= 1:
                 await asyncio.gather(*tasks)
@@ -358,7 +358,7 @@ class ipfs_embeddings_py:
             await asyncio.gather(*tasks)
         return None
 
-    async def process_item(self, item, column, queues, index_cid, cid_set, new_dataset):
+    async def process_item(self, item, column, queues, index_cid):
         # Assuming `item` is a dictionary with required data
         if "new_dataset" not in list(self.caches.keys()):
             self.caches["new_dataset"] = {"items" : []}
@@ -368,11 +368,11 @@ class ipfs_embeddings_py:
         if "cid" not in column_names:
             item["cid"] = this_cid
         # Check if cid is in index
-        if this_cid in cid_set:
+        if this_cid in self.cid_set:
             # print(f"CID {this_cid} already in index, skipping item.")
             pass
         else:
-            cid_set.add(this_cid)
+            self.cid_set.add(this_cid)
             if this_cid not in self.all_cid_set["new_dataset"]:
                 self.caches["new_dataset"]["items"].append(item)
             # new_dataset = new_dataset.add_item(item)
