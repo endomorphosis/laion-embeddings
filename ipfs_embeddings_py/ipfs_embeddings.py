@@ -349,7 +349,7 @@ class ipfs_embeddings_py:
     async def producer(self, dataset_stream, column, queues):
         tasks = []
         async for item in self.async_generator(dataset_stream):
-            task = self.process_item(item, column, queues, self.index_cid)
+            task = self.process_item(item, column, queues)
             tasks.append(task)
             if len(tasks) >= 1:
                 await asyncio.gather(*tasks)
@@ -358,13 +358,20 @@ class ipfs_embeddings_py:
             await asyncio.gather(*tasks)
         return None
 
-    async def process_item(self, item, column, queues, index_cid):
+    async def process_item(self, item, column=None, queues=None):
         # Assuming `item` is a dictionary with required data
         if "new_dataset" not in list(self.caches.keys()):
             self.caches["new_dataset"] = {"items" : []}
         # print(f"Processing item with CID {index_cid(item[column])[0]}")
+        if queues is None:
+            queues = self.queues
         column_names = item.keys()
-        this_cid = index_cid(item[column])[0]
+        if column is None:
+            this_cid = self.index_cid(json.dumps(item))[0]
+        elif column not in column_names:
+            this_cid = self.index_cid(json.dumps(item))[0]
+        else:
+            this_cid = self.index_cid(item[column])[0]
         if "cid" not in column_names:
             item["cid"] = this_cid
         # Check if cid is in index
@@ -375,18 +382,12 @@ class ipfs_embeddings_py:
             self.cid_set.add(this_cid)
             if this_cid not in self.all_cid_set["new_dataset"]:
                 self.caches["new_dataset"]["items"].append(item)
-            # new_dataset = new_dataset.add_item(item)
-            # print(f"Added item with CID {this_cid} to new_dataset.")
             models = self.queues.keys()
             for model, model_queues in queues.items():
                 if len(model_queues) > 0:
                     if this_cid not in self.all_cid_set[model]:
                         endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
                         queue.put_nowait(item)  # Non-blocking put
-                # if len(model_queues) > 0:
-                #     if this_cid not in self.all_cid_set[model]:
-                #         queue = random.choice(list(model_queues.values()))
-                #         queue.put_nowait(item)  # Non-blocking put
 
     async def send_batch_to_endpoint(self, batch, column, model_name, endpoint):
         print(f"Sending batch of size {len(batch)} to model {model_name} at endpoint {endpoint}")
