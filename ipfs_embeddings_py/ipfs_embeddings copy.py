@@ -33,7 +33,10 @@ class ipfs_embeddings_py:
         self.caches = {}
         self.batch_sizes = {}
         self.cid_list = set()
-        self.cid_set = set()
+        self.cid_set = set()        
+        self.new_dataset = None
+        self.all_cid_list = {}
+        self.all_cid_set = {}
         self.cid_queue = iter([])
         self.knn_queue = iter([])
         self.cid_index = {}
@@ -517,7 +520,7 @@ class ipfs_embeddings_py:
                     next_filename_shard = f"{dataset.replace('/', '___')}_bm25_shard_{len(bm25_shards)}"
                     tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + ".parquet"))
                     tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
-                    
+
                 for model in models:
                     if model in self.caches.keys():
                         if self.caches[model] and len(self.caches[model]["items"]) > 0:
@@ -587,12 +590,6 @@ class ipfs_embeddings_py:
         return None 
     
     async def load_checkpoints(self, dataset, split, columns, dst_path, models):
-        if "new_dataset" not in list(dir(self)):
-            self.new_dataset = None
-        if "all_cid_list" not in list(dir(self)):
-            self.all_cid_list = {}
-        if "all_cid_set" not in list(dir(self)):
-            self.all_cid_set = {}
         for model in models:
             if model not in list(self.index.keys()):
                 self.index[model] = None
@@ -690,6 +687,10 @@ class ipfs_embeddings_py:
 
         return None
 
+    async def dataset_size(self, dataset):
+        dataset = load_dataset(dataset)
+        rows = dataset.num_rows
+        print(f"Dataset has {rows} rows")
 
 if __name__ == "__main__":
     metadata = {
@@ -697,6 +698,7 @@ if __name__ == "__main__":
         "column": "text",
         "split": "train",
         "models": [
+            "thenlper/gte-small",
             "Alibaba-NLP/gte-large-en-v1.5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             # "Alibaba-NLP/gte-Qwen2-7B-instruct",
@@ -732,5 +734,6 @@ if __name__ == "__main__":
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
-    asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    asyncio.run(create_embeddings_batch.dataset_size(metadata["dataset"]))
+    # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))

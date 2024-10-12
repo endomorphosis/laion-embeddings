@@ -14,14 +14,13 @@ import datasets
 from datasets import Dataset, concatenate_datasets, load_dataset
 import ipfs_multiformats
 from ipfs_multiformats import *
-import elasticsearch_kit
-from elasticsearch_kit import *
-
+from chunker import Chunker
 
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
         self.datasets = datasets.Dataset
+        self.chunker = Chunker(resources, metadata)
         # self.elasticsearch = elasticsearch_kit(resources, metadata)
         self.https_endpoints = {}
         self.libp2p_endpoints = {}
@@ -42,6 +41,7 @@ class ipfs_embeddings_py:
         self.tokenizer = {}
         self.endpoint_status = {}
         self.new_dataset = {}
+        self.new_dataset_children = {}
         self.saved = False
 
         self.index_dataset = self.index_dataset
@@ -154,9 +154,6 @@ class ipfs_embeddings_py:
         batch_size = 2**exponent
         token_length_size = round(self.https_endpoints[model][endpoint] * 0.99)
         test_tokens = []
-
-        if model not in self.tokenizer.keys():
-            self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu')
         find_token_str = str("z")
         find_token_int = self.tokenizer[model].encode(find_token_str)
         if len(find_token_int) == 3:
@@ -353,14 +350,42 @@ class ipfs_embeddings_py:
     async def producer(self, dataset_stream, column, queues):
         tasks = []
         async for item in self.async_generator(dataset_stream):
-            task = self.process_item(item, column, queues)
-            tasks.append(task)
+            processed_item = await self.process_item(item, column, queues)
+            tasks.append(processed_item)
             if len(tasks) >= 1:
-                await asyncio.gather(*tasks)
+                # await asyncio.gather(*tasks)
+                for this_processed_item in tasks:
+                    if this_processed_item is not None:
+                        await self.chunk_item(this_processed_item, column, queues)
                 tasks = []
         if tasks:
-            await asyncio.gather(*tasks)
+            # await asyncio.gather(*tasks)
+            for this_processed_item in tasks:
+                if this_processed_item is not None:
+                    await self.chunk_item(this_processed_item, column, queues)
         return None
+    
+    async def chunk_item(self,item, column, queues):
+        # Assuming `item` is a dictionary with required data
+        if item["cid"] not in list(self.caches.keys()):
+            self.caches[item["cid"]] = {"items" : []}
+        if column is None:
+            content = json.dumps(item)
+        elif column not in list(item.keys()):
+            content = json.dumps(item)
+        else:
+            content = item[column]
+        chunked_content = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "sentences")
+        parent_cid = item["cid"]
+        if parent_cid in self.caches.keys():
+            pass
+        else:
+            self.caches[parent_cid] = {"items" : []}    
+            for chunk in chunked_content:
+                child_cid = self.multiformats.get_cid(chunk)
+                child_content = {"cid": child_cid, "parent_cid": parent_cid, "content": chunk}
+                self.caches[parent_cid]["items"].append(child_content)
+        
 
     async def process_item(self, item, column=None, queues=None):
         # Assuming `item` is a dictionary with required data
@@ -475,7 +500,7 @@ class ipfs_embeddings_py:
     async def save_to_disk(self, dataset, dst_path, models):
         self.saved = False
         while True:
-            await asyncio.sleep(3600)
+            await asyncio.sleep(1)
             if self.saved == False:
                 if not os.path.exists(os.path.join(dst_path, "checkpoints")):
                     os.makedirs(os.path.join(dst_path, "checkpoints"))
@@ -536,6 +561,7 @@ class ipfs_embeddings_py:
         await self.load_checkpoints( dataset, split, dst_path, models)
         consumer_tasks = {}
         for model in models:
+            self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu')
             endpoints = self.get_endpoints(model)
             if not endpoints:
                 continue
@@ -559,6 +585,12 @@ class ipfs_embeddings_py:
         return None 
     
     async def load_checkpoints(self, dataset, split, dst_path, models):
+        if "new_dataset" not in list(dir(self)):
+            self.new_dataset = None
+        if "all_cid_list" not in list(dir(self)):
+            self.all_cid_list = {}
+        if "all_cid_set" not in list(dir(self)):
+            self.all_cid_set = {}
         for model in models:
             if model not in list(self.index.keys()):
                 self.index[model] = None
@@ -589,7 +621,12 @@ class ipfs_embeddings_py:
                         del tmp_new_dataset_cids
                         del tmp_new_dataset_cid_dataset
                 if self.new_dataset is None or isinstance(self.new_dataset, dict):
-                    self.new_dataset = load_dataset('parquet', data_files=new_dataset_shards)[split]
+                    if len(new_dataset_shards) > 0:
+                        self.new_dataset = load_dataset('parquet', data_files=new_dataset_shards)[split]
+                    else:
+                        columns = self.dataset.column_names
+                        columns.append("cid")
+                        self.new_dataset = datasets.Dataset.from_dict({key: [] for key in columns })
         for model in models:
             if model not in list(self.index.keys()):
                 self.index[model] = None
@@ -620,7 +657,10 @@ class ipfs_embeddings_py:
                         del tmp_model_cids
                         del tmp_model_cid_dataset
                 if model not in list(self.index.keys()) or self.index[model] is None or isinstance(self.index[model], dict):
-                    self.index[model] = load_dataset('parquet', data_files=this_model_shards)[split]
+                    if len(this_model_shards) > 0:
+                        self.index[model] = load_dataset('parquet', data_files=this_model_shards)[split]
+                    else:
+                        self.index[model] = datasets.Dataset.from_dict({"cid": [], "embedding": [] })
         self.cid_set = set.intersection(*self.all_cid_set.values())
         return None
     
@@ -663,28 +703,17 @@ if __name__ == "__main__":
         "column": "text",
         "split": "train",
         "models": [
+            "thenlper/gte-small",
             "Alibaba-NLP/gte-large-en-v1.5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             # "Alibaba-NLP/gte-Qwen2-7B-instruct",
         ],
-        "dst_path": "/storage/teraflopai/tmp"
+        "dst_path": "/storage/teraflopai/tmp2"
     }
     resources = {
         "https_endpoints": [
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
-            ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32768],
-            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
-            ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32768],
-            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
-            ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8082/embed-large", 32768],
-            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
-            ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8083/embed-large", 32768],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
             # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32768],
             # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
             # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
@@ -694,7 +723,7 @@ if __name__ == "__main__":
             # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8082/embed-large", 32768],
             # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
             # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8083/embed-large", 32768],
+            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8083/embed-large", 32768]
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)

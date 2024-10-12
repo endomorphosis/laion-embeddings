@@ -15,7 +15,8 @@ import subprocess
 import asyncio
 import hashlib
 import random
-
+import multiprocessing
+from multiprocessing import Pool
 class qdrant_kit_py:
     def __init__(self, resources: dict, metadata: dict):
         self.resources = resources
@@ -57,18 +58,18 @@ class qdrant_kit_py:
                             async for item in self.ipfs_embeddings_py.async_generator(self.dataset):
                                 chunk.append(item)
                                 if len(chunk) == cores:
-                                    self.datasets_hash.extend(pool.map(hash_chunk, chunk))
+                                    self.datasets_hash.extend(pool.map(self.hash_chunk, chunk))
                                     chunk = []
                             if chunk:
-                                self.datasets_hash.extend(pool.map(hash_chunk, chunk))
+                                self.datasets_hash.extend(pool.map(self.hash_chunk, chunk))
                             chunk = []
                             async for item in self.ipfs_embeddings_py.async_generator(self.knn_index):
                                 chunk.append(item)
                                 if len(chunk) == cores:
-                                    self.knn_index_hash.extend(pool.map(hash_chunk, chunk))
+                                    self.knn_index_hash.extend(pool.map(self.hash_chunk, chunk))
                                     chunk = []
                             if chunk:
-                                self.knn_index_hash.extend(pool.map(hash_chunk, chunk))
+                                self.knn_index_hash.extend(pool.map(self.hash_chunk, chunk))
                     this_hash_key = {}
                     for column in join_column:
                         this_hash_key[column] = dataset_item[column]

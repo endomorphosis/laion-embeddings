@@ -1,7 +1,7 @@
 import bisect
 import logging
 from typing import Dict, List, Optional, Tuple, Union
-
+import llama_index
 from llama_index.core.node_parser import SemanticSplitterNodeParser
 from llama_index.core.schema import Document
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
@@ -10,19 +10,30 @@ from transformers import AutoTokenizer
 # Set the logging level to WARNING to suppress INFO and DEBUG messages
 logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
 
-CHUNKING_STRATEGIES = ['semantic', 'fixed', 'sentences']
-
+CHUNKING_STRATEGIES = ['semantic', 'fixed', 'sentences', 'sliding_window']
 
 class Chunker:
     def __init__(
         self,
-        chunking_strategy: str,
+        resources,
+        metadata,
     ):
+        self.resources = resources
+        self.metadata = metadata
+        if "chunking_strategy" in metadata.keys():
+            chunking_strategy = metadata["chunking_strategy"]
+        else:
+            chunking_strategy = "semantic"
         if chunking_strategy not in CHUNKING_STRATEGIES:
             raise ValueError("Unsupported chunking strategy: ", chunking_strategy)
         self.chunking_strategy = chunking_strategy
-        self.embed_model = None
-        self.embedding_model_name = None
+        
+        if len(list(metadata["models"])) > 0:
+            self.embedding_model_name = metadata["models"][0]
+            self.embed_model = metadata["models"][0]
+        else:
+            self.embedding_model_name = None
+            self.embed_model = None
 
     def _setup_semantic_chunking(self, embedding_model_name):
         if embedding_model_name:
@@ -44,8 +55,11 @@ class Chunker:
         tokenizer: 'AutoTokenizer',
         embedding_model_name: Optional[str] = None,
     ) -> List[Tuple[int, int]]:
-        if self.embed_model is None:
-            self._setup_semantic_chunking(embedding_model_name)
+        if self.embed_model is not None:
+            if embedding_model_name is None:
+                self._setup_semantic_chunking(self.embedding_model_name)
+            else:
+                self._setup_semantic_chunking(embedding_model_name)
 
         # Get semantic nodes
         nodes = [
@@ -131,6 +145,26 @@ class Chunker:
                     count_chunks = 0
         if len(tokens.tokens(0)) - chunk_start > 1:
             chunk_spans.append((chunk_start, len(tokens.tokens(0))))
+        return chunk_spans
+    
+    def chunk_by_sliding_window(
+        self,
+        text: str,
+        window_size: int,
+        step_size: int,
+        tokenizer
+    ) -> List[Tuple[int, int, int]]:
+        tokens = tokenizer.encode_plus(
+            text, return_offsets_mapping=True, add_special_tokens=False
+        )
+        token_offsets = tokens.offset_mapping
+
+        chunk_spans = []
+        for i in range(0, len(token_offsets), step_size):
+            chunk_end = min(i + window_size, len(token_offsets))
+            if chunk_end - i > 0:
+                chunk_spans.append((i, chunk_end))
+
         return chunk_spans
 
     def chunk(
