@@ -377,7 +377,7 @@ class ipfs_embeddings_py:
         else:
             content = item[column]
         if embed_model is None:
-            if len(list(self.metadata["models"].keys())) == 0:
+            if len(self.metadata["models"]) == 0:
                 embed_model = "thenlper/gte-small"
             else:
                 embed_model = self.metadata["models"][0]
