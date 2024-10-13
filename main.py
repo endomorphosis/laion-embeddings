@@ -28,7 +28,6 @@ metadata = {
     "model": "BAAI/bge-m3"
 }
 resources = {
-    # "https_endpoints": [["BAAI/bge-m3", "http://62.146.169.111:80/embed",1]],
     # "https_endpoints": [["BAAI/bge-m3", "http://127.0.0.1:8080/embed",1]],
     "https_endpoints": [],
     "libp2p_endpoints": []
