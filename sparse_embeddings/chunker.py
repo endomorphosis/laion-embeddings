@@ -13,11 +13,7 @@ logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
 CHUNKING_STRATEGIES = ['semantic', 'fixed', 'sentences', 'sliding_window']
 
 class Chunker:
-    def __init__(
-        self,
-        resources,
-        metadata,
-    ):
+    def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
         if "chunking_strategy" in metadata.keys():
@@ -52,9 +48,16 @@ class Chunker:
     def chunk_semantically(
         self,
         text: str,
-        tokenizer: 'AutoTokenizer',
+        tokenizer: Optional['AutoTokenizer'] = None,
         embedding_model_name: Optional[str] = None,
     ) -> List[Tuple[int, int]]:
+        if embedding_model_name is None and self.embedding_model_name is not None:
+            embedding_model_name = self.embedding_model_name
+        if tokenizer is None and self.embedding_model_name is not None:
+            tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name, device='cpu', use_fast=True)
+        elif tokenizer is None:
+            raise ValueError("Tokenizer must be provided")
+
         if self.embed_model is not None:
             if embedding_model_name is None:
                 self._setup_semantic_chunking(self.embedding_model_name)
@@ -103,9 +106,22 @@ class Chunker:
     def chunk_by_tokens(
         self,
         text: str,
-        chunk_size: int,
-        tokenizer: 'AutoTokenizer',
+        chunk_size: Optional[int] = None,
+        tokenizer: Optional['AutoTokenizer'] = None,
+        embedding_model_name: Optional[str] = None,
     ) -> List[Tuple[int, int, int]]:
+        if embedding_model_name is None and self.embedding_model_name is not None:
+            embedding_model_name = self.embedding_model_name
+        if tokenizer is None and self.embedding_model_name is not None:
+            tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name, use_fast=True, device='cpu')
+        elif tokenizer is None:
+            raise ValueError("Tokenizer must be provided")
+
+        if chunk_size is None:
+            chunk_size = 512
+        if chunk_size < 4:
+            chunk_size = 4
+
         tokens = tokenizer.encode_plus(
             text, return_offsets_mapping=True, add_special_tokens=False
         )
@@ -122,9 +138,20 @@ class Chunker:
     def chunk_by_sentences(
         self,
         text: str,
-        n_sentences: int,
-        tokenizer: 'AutoTokenizer',
+        n_sentences: Optional[int] = None,
+        tokenizer: Optional['AutoTokenizer'] = None,
+        embedding_model_name: Optional[str] = None,
     ) -> List[Tuple[int, int, int]]:
+        if embedding_model_name is None and self.embedding_model_name is not None:
+            embedding_model_name = self.embedding_model_name
+        if tokenizer is None and self.embedding_model_name is not None:
+            tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name, use_fast=True, device='cpu')
+        elif tokenizer is None:
+            raise ValueError("Tokenizer must be provided")
+
+        if n_sentences is None:
+            n_sentences = 8
+
         tokens = tokenizer.encode_plus(
             text, return_offsets_mapping=True, add_special_tokens=False
         )
@@ -150,10 +177,23 @@ class Chunker:
     def chunk_by_sliding_window(
         self,
         text: str,
-        window_size: int,
-        step_size: int,
-        tokenizer
+        window_size: Optional[int] = None,
+        step_size: Optional[int] = None,
+        tokenizer: Optional['AutoTokenizer'] = None,
+        embedding_model_name: Optional[str] = None,
     ) -> List[Tuple[int, int, int]]:
+        if embedding_model_name is None and self.embedding_model_name is not None:
+            embedding_model_name = self.embedding_model_name
+        if tokenizer is None and self.embedding_model_name is not None:
+            tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name, use_fast=True, device='cpu')
+        elif tokenizer is None:
+            raise ValueError("Tokenizer must be provided")
+
+        if window_size is None:
+            window_size = 512
+        if step_size is None:
+            step_size = 256
+
         tokens = tokenizer.encode_plus(
             text, return_offsets_mapping=True, add_special_tokens=False
         )
@@ -170,24 +210,38 @@ class Chunker:
     def chunk(
         self,
         text: str,
-        tokenizer: 'AutoTokenizer',
-        chunking_strategy: str = None,
+        tokenizer: Optional['AutoTokenizer'] = None,
+        chunking_strategy: Optional[str] = None,
         chunk_size: Optional[int] = None,
         n_sentences: Optional[int] = None,
+        step_size: Optional[int] = None,
         embedding_model_name: Optional[str] = None,
     ):
+        if embedding_model_name is None and self.embedding_model_name is not None:
+            embedding_model_name = self.embedding_model_name
+        if tokenizer is None and self.embedding_model_name is not None:
+            tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name, use_fast=True, device='cpu')
+        elif tokenizer is None:
+            raise ValueError("Tokenizer must be provided")
+        if chunk_size is None:
+            chunk_size = 512
+        if n_sentences is None:
+            n_sentences = 8
+        if step_size is None:
+            step_size = 256
+        if chunking_strategy is None:
+            chunking_strategy = "semantic"
+        
         chunking_strategy = chunking_strategy or self.chunking_strategy
         if chunking_strategy == "semantic":
-            return self.chunk_semantically(
-                text,
-                embedding_model_name=embedding_model_name,
-                tokenizer=tokenizer,
-            )
+            return self.chunk_semantically(text, tokenizer, embedding_model_name)
         elif chunking_strategy == "fixed":
             if chunk_size < 4:
-                raise ValueError("Chunk size must be >= 4.")
-            return self.chunk_by_tokens(text, chunk_size, tokenizer)
+                chunk_size = 4
+            return self.chunk_by_tokens(text, chunk_size, tokenizer, embedding_model_name)
         elif chunking_strategy == "sentences":
-            return self.chunk_by_sentences(text, n_sentences, tokenizer)
+            return self.chunk_by_sentences(text, n_sentences, tokenizer, embedding_model_name)
+        elif chunking_strategy == "sliding_window":
+            return self.chunk_by_sliding_window(text, chunk_size, step_size, tokenizer, embedding_model_name)
         else:
             raise ValueError("Unsupported chunking strategy")

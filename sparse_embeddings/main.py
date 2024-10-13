@@ -43,7 +43,8 @@ class ipfs_embeddings_py:
         self.new_dataset = {}
         self.new_dataset_children = {}
         self.saved = False
-
+        self.resources = resources
+        self.metadata = metadata
         self.index_dataset = self.index_dataset
         self.add_https_endpoint = self.add_https_endpoint
         self.add_libp2p_endpoint = self.add_libp2p_endpoint
@@ -365,7 +366,7 @@ class ipfs_embeddings_py:
                     await self.chunk_item(this_processed_item, column, queues)
         return None
     
-    async def chunk_item(self,item, column, queues):
+    async def chunk_item(self,item, column, method, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
         # Assuming `item` is a dictionary with required data
         if item["cid"] not in list(self.caches.keys()):
             self.caches[item["cid"]] = {"items" : []}
@@ -375,7 +376,30 @@ class ipfs_embeddings_py:
             content = json.dumps(item)
         else:
             content = item[column]
-        chunked_content = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "sentences")
+        if embed_model is None:
+            if len(list(self.metadata["models"].keys())) == 0:
+                embed_model = "thenlper/gte-small"
+            else:
+                embed_model = self.metadata["models"][0]
+        if chunk_size is None:
+            chunk_size = 512
+        if n_sentences is None:
+            n_sentences = 8
+        if step_size is None:
+            step_size = 256
+        if tokenizer is None:
+            if len(list(self.tokenizer.keys())) == 0:
+                self.tokenizer = AutoTokenizer.from_pretrained(embed_model, device='cpu')
+            else:
+                tokenizer = self.tokenizer[list(self.tokenizer.keys())[0]]
+        if method is None:
+            fixed_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "fixed", 512, 8, 256, self.metadata["models"][0]) 
+            semantic_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "semantic", 512, 8, 256, self.metadata["models"][0])
+            sentences_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "sentences", 512, 8, 256, self.metadata["models"][0] )
+            sliding_window_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "sliding_window", 512, 8, 256, self.metadata["models"][0])
+            chunked_content = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
+        else:
+            chunked_content = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
         parent_cid = item["cid"]
         if parent_cid in self.caches.keys():
             pass
