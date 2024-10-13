@@ -7,10 +7,12 @@ import asyncio
 import subprocess
 import aiohttp
 import requests
+import torch
 from aiohttp import ClientSession, ClientTimeout
 from multiprocessing import Pool
 from transformers import AutoTokenizer
 import datasets
+from transformers import AutoModel
 from datasets import Dataset, concatenate_datasets, load_dataset
 try:
     import ipfs_multiformats
@@ -243,28 +245,30 @@ class ipfs_embeddings_py:
             raise ValueError("samples must be a list")
         if type(samples) is str:
             samples = [samples]
-        if type(samples) is iter:
+        if type(samples) is list or type(samples) is iter:
             this_query = {"inputs": samples}
-            try:
-                query_response = self.make_post_request(chosen_endpoint, this_query)
-            except Exception as e:
-                raise Exception(e)
-            if isinstance(query_response, dict) and "error" in query_response.keys():
-                raise Exception("error: " + query_response["error"])
+            if chosen_endpoint is None:
+                if "chosen_endpoint" not in list(dir(self)) or self.chosen_local_endpoint is None or self.chosen_local_endpoint_model != model:
+                    self.chosen_local_endpoint_model = model
+                    self.chosen_local_endpoint = AutoModel.from_pretrained(model)
+                    if model not in self.tokenizer.keys():
+                        self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
+                chosen_endpoint = self.chosen_local_endpoint
+                chosen_endpoint.eval()
+                inputs = self.tokenizer[model](samples, return_tensors="pt")
+                with torch.no_grad():
+                    query_response = chosen_endpoint(**inputs).last_hidden_state
+                    query_response = query_response.tolist()[0]
             else:
-                knn_stack = query_response
-            pass
-        if type(samples) is list:
-            this_query = {"inputs": samples}
-            try:
-                query_response = await self.make_post_request(chosen_endpoint, this_query)
-            except Exception as e:
-                print(str(e))
-                if "413" in str(e):
+                try:
+                    query_response = await self.make_post_request(chosen_endpoint, this_query)
+                except Exception as e:
+                    print(str(e))
+                    if "413" in str(e):
+                        return ValueError(e)
+                    if "can not write request body" in str(e):
+                        return ValueError(e)
                     return ValueError(e)
-                if "can not write request body" in str(e):
-                    return ValueError(e)
-                return ValueError(e)
             if isinstance(query_response, dict) and "error" in query_response.keys():
                 raise Exception("error: " + query_response["error"])
             else:

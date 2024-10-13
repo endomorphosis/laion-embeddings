@@ -15,3 +15,4 @@ nltk
 rank_bm25
 llama-index-embeddings-huggingface
 llama-index
+torch
