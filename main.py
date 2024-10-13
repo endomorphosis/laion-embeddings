@@ -16,6 +16,7 @@ class LoadIndexRequest(BaseModel):
 class SearchRequest(BaseModel):
     collection: str
     text: str
+    n: int
 
 class CreateIndexRequest(BaseModel):
     resources: dict
@@ -74,12 +75,12 @@ def load_index_post(request: LoadIndexRequest, background_tasks: BackgroundTasks
     background_tasks.add_task(load_index_task, request.dataset, request.knn_index, request.dataset_split, request.knn_index_split, request.columns)
     return {"message": "Index loading started in the background"}
 
-async def search_item_task(collection: str, text: str):
-    return await vector_search.search(collection, text)
+async def search_item_task(collection: str, text: str, n: int):
+    return await vector_search.search(collection, text, n)
 
 @app.post("/search")
 async def search_item_post(request: SearchRequest, background_tasks: BackgroundTasks):
-    search_results = await vector_search.search(request.collection, request.text)
+    search_results = await vector_search.search(request.collection, request.text, request.n)
     return search_results
 
 uvicorn.run(app, host="0.0.0.0", port=9999)
