@@ -12,10 +12,11 @@ from multiprocessing import Pool
 from transformers import AutoTokenizer
 import datasets
 from datasets import Dataset, concatenate_datasets, load_dataset
-import ipfs_multiformats
-from ipfs_multiformats import *
-import elasticsearch_kit
-from elasticsearch_kit import *
+try:
+    import ipfs_multiformats
+    from ipfs_multiformats import *
+except ImportError:
+    from .ipfs_multiformats import *
 
 
 class ipfs_embeddings_py:

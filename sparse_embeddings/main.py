@@ -357,19 +357,17 @@ class ipfs_embeddings_py:
                 # await asyncio.gather(*tasks)
                 for this_processed_item in tasks:
                     if this_processed_item is not None:
-                        await self.chunk_item(this_processed_item, column, queues)
+                        await self.chunk_item(this_processed_item, column)
                 tasks = []
         if tasks:
             # await asyncio.gather(*tasks)
             for this_processed_item in tasks:
                 if this_processed_item is not None:
-                    await self.chunk_item(this_processed_item, column, queues)
+                    await self.chunk_item(this_processed_item, column)
         return None
     
-    async def chunk_item(self,item, column, method, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
+    async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
         # Assuming `item` is a dictionary with required data
-        if item["cid"] not in list(self.caches.keys()):
-            self.caches[item["cid"]] = {"items" : []}
         if column is None:
             content = json.dumps(item)
         elif column not in list(item.keys()):
@@ -389,7 +387,7 @@ class ipfs_embeddings_py:
             step_size = 256
         if tokenizer is None:
             if len(list(self.tokenizer.keys())) == 0:
-                self.tokenizer = AutoTokenizer.from_pretrained(embed_model, device='cpu')
+                self.tokenizer = AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
             else:
                 tokenizer = self.tokenizer[list(self.tokenizer.keys())[0]]
         if method is None:
@@ -397,20 +395,24 @@ class ipfs_embeddings_py:
             semantic_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "semantic", 512, 8, 256, self.metadata["models"][0])
             sentences_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "sentences", 512, 8, 256, self.metadata["models"][0] )
             sliding_window_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "sliding_window", 512, 8, 256, self.metadata["models"][0])
-            chunked_content = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
+            content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
         else:
-            chunked_content = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
+            content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
         parent_cid = item["cid"]
-        if parent_cid in self.caches.keys():
+        content_tokens = tokenizer.encode(content)
+        if parent_cid in list(self.caches.keys()):
             pass
         else:
             self.caches[parent_cid] = {"items" : []}    
-            for chunk in chunked_content:
-                child_cid = self.multiformats.get_cid(chunk)
-                child_content = {"cid": child_cid, "parent_cid": parent_cid, "content": chunk}
+            for chunk in content_chunks:
+                chunk_index = content_chunks.index(chunk)
+                chunk_content = content_tokens[chunk[0]:chunk[1]]
+                chunk_text = tokenizer.decode(chunk_content)
+                child_cid = self.multiformats.get_cid(chunk_text)
+                child_content = {"cid": child_cid, "parent_cid": parent_cid, "index": chunk_index, "content": chunk_text}
                 self.caches[parent_cid]["items"].append(child_content)
+        return None
         
-
     async def process_item(self, item, column=None, queues=None):
         # Assuming `item` is a dictionary with required data
         if "new_dataset" not in list(self.caches.keys()):
@@ -450,7 +452,7 @@ class ipfs_embeddings_py:
         model_context_length = self.https_endpoints[model_name][endpoint]
         new_batch = []
         if model_name not in self.tokenizer.keys():
-            self.tokenizer[model_name] = AutoTokenizer.from_pretrained(model_name, device='cpu')
+            self.tokenizer[model_name] = AutoTokenizer.from_pretrained(model_name, device='cpu', use_fast=True)
         for item in batch:
             this_item_tokens = len(self.tokenizer[model_name].encode(item[column]))
             if this_item_tokens > model_context_length:
@@ -585,7 +587,7 @@ class ipfs_embeddings_py:
         await self.load_checkpoints( dataset, split, dst_path, models)
         consumer_tasks = {}
         for model in models:
-            self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu')
+            self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
             endpoints = self.get_endpoints(model)
             if not endpoints:
                 continue

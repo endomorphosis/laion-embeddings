@@ -1,9 +1,7 @@
 
 import datasets
 import sys
-sys.path.append('../ipfs_embeddings_py')
 import ipfs_embeddings_py
-from ipfs_embeddings_py import ipfs_embeddings_py, qdrant_kit_py
 import numpy as np
 import os
 import json
@@ -23,8 +21,8 @@ class search_embeddings:
         if len(list(metadata.keys())) > 0:
             for key in metadata.keys():
                 setattr(self, key, metadata[key])
-        self.ipfs_embeddings_py = ipfs_embeddings_py(resources, metadata)
-        self.qdrant_kit_py = qdrant_kit_py(resources, metadata)
+        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
+        self.qdrant_kit_py = ipfs_embeddings_py.qdrant_kit_py(resources, metadata)
         if "https_endpoints" in resources.keys():
             for endpoint in resources["https_endpoints"]:
                 self.ipfs_embeddings_py.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])

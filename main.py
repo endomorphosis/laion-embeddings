@@ -76,8 +76,8 @@ async def search_item_task(collection: str, text: str):
     return await vector_search.search(collection, text)
 
 @app.post("/search")
-def search_item_post(request: SearchRequest, background_tasks: BackgroundTasks):
-    search_results = vector_search.search(request.collection, request.text)
+async def search_item_post(request: SearchRequest, background_tasks: BackgroundTasks):
+    search_results = await vector_search.search(request.collection, request.text)
     return search_results
 
 uvicorn.run(app, host="0.0.0.0", port=9999)
