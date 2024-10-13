@@ -405,7 +405,7 @@ class ipfs_embeddings_py:
         else:
             self.caches[parent_cid] = {"items" : []}    
             for chunk in content_chunks:
-                chunk_index = content_chunks.index(chunk)
+                chunk_index = chunk
                 chunk_content = content_tokens[chunk[0]:chunk[1]]
                 chunk_text = tokenizer.decode(chunk_content)
                 child_cid = self.multiformats.get_cid(chunk_text)
