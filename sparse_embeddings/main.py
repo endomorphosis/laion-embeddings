@@ -27,6 +27,10 @@ class ipfs_embeddings_py:
         self.index =  {}
         self.queues = {}
         self.caches = {}
+        self.chunk_cache = {}
+        self.chunk_embeddings = {}
+        self.cid_chunk_list = []
+        self.cid_chunk_set = set()
         self.batch_sizes = {}
         self.cid_list = set()
         self.cid_set = set()
@@ -231,7 +235,6 @@ class ipfs_embeddings_py:
         self.endpoint_status[endpoint] = 2**(exponent-1)
         return 2**(exponent-1)
 
-
     async def index_knn(self, samples, model, chosen_endpoint=None):
         knn_stack = []
         if chosen_endpoint is None:
@@ -400,17 +403,27 @@ class ipfs_embeddings_py:
             content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
         parent_cid = item["cid"]
         content_tokens = tokenizer.encode(content)
+        ## sort content_chunks by the firt element of each tuple then the second element
+        content_chunks = sorted(content_chunks, key=lambda x: (x[0], x[1]))
+        ## filter content_chunks to remove duplicates
+        seen_chunks = set()
+        unique_content_chunks = []
+        for chunk in content_chunks:
+            if chunk not in seen_chunks:
+                unique_content_chunks.append(chunk)
+                seen_chunks.add(chunk)
+        content_chunks = unique_content_chunks
         if parent_cid in list(self.caches.keys()):
             pass
         else:
-            self.caches[parent_cid] = {"items" : []}    
+            self.caches[parent_cid] = {"items" : []}
             for chunk in content_chunks:
                 chunk_index = chunk
                 chunk_content = content_tokens[chunk[0]:chunk[1]]
                 chunk_text = tokenizer.decode(chunk_content)
                 child_cid = self.multiformats.get_cid(chunk_text)
-                child_content = {"cid": child_cid, "parent_cid": parent_cid, "index": chunk_index, "content": chunk_text}
-                self.caches[parent_cid]["items"].append(child_content)
+                child_content = {"cid": child_cid, "index": chunk_index, "content": chunk_text}
+                self.chunk_cache[parent_cid]["items"].append(child_content)
         return None
         
     async def process_item(self, item, column=None, queues=None):
@@ -523,13 +536,17 @@ class ipfs_embeddings_py:
             print(f"Received embeddings for {len(results)} items from model {model_name} at endpoint {endpoint}")
             return results
 
-    async def save_to_disk(self, dataset, dst_path, models):
+    async def save_checkpoints_to_disk(self, dataset, dst_path, models):
         self.saved = False
         while True:
             await asyncio.sleep(1)
             if self.saved == False:
                 if not os.path.exists(os.path.join(dst_path, "checkpoints")):
                     os.makedirs(os.path.join(dst_path, "checkpoints"))
+                if not os.path.exists(os.path.join(dst_path, "checkpoints", "sparse_chunks")):
+                    os.makedirs(os.path.join(dst_path, "checkpoints", "sparse_sparse_chunks"))
+                if not os.path.exists(os.path.join(dst_path, "checkpoints", "sparse_embeddings")):
+                    os.makedirs(os.path.join(dst_path, "checkpoints", "sparse_embeddings"))
                 ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
                 if self.caches["new_dataset"] and len(self.caches["new_dataset"]["items"]) > 0:
                     tmp_dataset = datasets.Dataset.from_dict(self.caches["new_dataset"])
@@ -555,6 +572,13 @@ class ipfs_embeddings_py:
                             tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + ".parquet"))
                             tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
                             print("Saved "+ str(len(tmp_dataset)) + " items to disk for model " + model + " at " + dst_path)
+                for this_cid in self.chunk_cache.keys():
+                    if this_cid not in self.cid_chunk_set:
+                        this_cid_dataset = datasets.Dataset.from_dict(self.chunk_cache[this_cid])
+                        this_cid_dataset.to_parquet(os.path.join(dst_path, "checkpoints", "sparse_chunks", this_cid + ".parquet"))
+                        print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + this_cid + " at " + dst_path)
+                        self.cid_chunk_set.add(this_cid)
+                        self.cid_chunk_list.append(this_cid)
                 self.saved = True
         return None 
 
@@ -606,7 +630,7 @@ class ipfs_embeddings_py:
         # Compute commonn
         self.cid_set = set.intersection(*self.all_cid_set.values())
         producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
-        save_task = asyncio.create_task(self.save_to_disk(dataset, dst_path, models))
+        save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
         return None 
     
@@ -717,11 +741,9 @@ class ipfs_embeddings_py:
             self.embedding_datasets[model].to_parquet(os.path.join(dst_path, dataset.replace("/","___") + "_" + model.replace("/","___") + ".parquet"))
         return None
 
-
     async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_size, max_splits):
 
         return None
-
 
 if __name__ == "__main__":
     metadata = {
