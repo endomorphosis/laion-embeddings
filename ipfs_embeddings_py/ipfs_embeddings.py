@@ -26,6 +26,9 @@ class ipfs_embeddings_py:
         self.multiformats = ipfs_multiformats_py(resources, metadata)
         self.datasets = datasets.Dataset
         # self.elasticsearch = elasticsearch_kit(resources, metadata)
+        self.consumer_task_done = {}
+        self.producer_task_done = False
+        self.save_to_disk_task_done = False
         self.https_endpoints = {}
         self.libp2p_endpoints = {}
         self.index =  {}
@@ -308,7 +311,6 @@ class ipfs_embeddings_py:
             except Exception as e:
                 print(f"Unexpected error: {str(e)}")
                 return ValueError(f"Unexpected error: {str(e)}")
-        
 
     def choose_endpoint(self, model):
         https_endpoints = self.get_https_endpoint(model)
@@ -337,6 +339,7 @@ class ipfs_embeddings_py:
 
     async def consumer(self, queue, column, batch_size, model_name, endpoint):
         print("consumer started for model " + model_name + " at endpoint " + endpoint)
+        self.consumer_task_done[(model_name, endpoint)] = False
         batch = []
         if model_name not in self.caches.keys():
             self.caches[model_name] = {"items" : []}
@@ -353,10 +356,14 @@ class ipfs_embeddings_py:
                 batch = []  # Clear batch after sending
                 self.saved = False
             queue.task_done()
+            if self.producer_task_done and queue.empty():
+                self.consumer_task_done[(model_name, endpoint)] = True
+                break
         return None
 
     async def producer(self, dataset_stream, column, queues):
         tasks = []
+        self.producer_task_done = False
         async for item in self.async_generator(dataset_stream):
             task = self.process_item(item, column, queues)
             tasks.append(task)
@@ -365,6 +372,7 @@ class ipfs_embeddings_py:
                 tasks = []
         if tasks:
             await asyncio.gather(*tasks)
+        self.producer_task_done = True
         return None
 
     async def process_item(self, item, column=None, queues=None):
@@ -510,6 +518,9 @@ class ipfs_embeddings_py:
                             tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
                             print("Saved "+ str(len(tmp_dataset)) + " items to disk for model " + model + " at " + dst_path)
                 self.saved = True
+            if self.producer_task_done and all(self.consumer_task_done.values()):
+                self.save_to_disk_task_done = True
+                break
         return None 
 
     def status(self):
