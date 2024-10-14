@@ -351,6 +351,31 @@ class ipfs_embeddings_py:
             queue.task_done()
         return None
 
+    async def chunk_producer(self):
+        chunk_tasks = []
+        async for item in self.async_generator(self.chunk_cache):
+            processed_chunk = await self.process_chunk(item)
+            chunk_tasks.append(processed_chunk)
+            if len(chunk_tasks) >= 1:
+                await asyncio.gather(*chunk_tasks)
+                chunk_tasks = []
+        if chunk_tasks:
+            await asyncio.gather(*chunk_tasks)
+        return None
+
+    async def chunk_consumer(self, batch_size, model_name, endpoint):
+        print("chunk consumer started")
+        batch = []
+        while True:
+            item = await self.cid_queue.get()
+            batch.append(item)
+            if len(batch) >= batch_size:
+                results = await self.send_batch_to_endpoint(batch, "content", model_name, endpoint)
+                for i in range(len(results)):
+                    self.chunk_embeddings[batch[i]["cid"]] = results[i]
+                batch = []
+            self.cid_queue.task_done()
+
     async def producer(self, dataset_stream, column, queues):
         tasks = []
         async for item in self.async_generator(dataset_stream):
@@ -754,7 +779,6 @@ if __name__ == "__main__":
             "thenlper/gte-small",
             "Alibaba-NLP/gte-large-en-v1.5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            # "Alibaba-NLP/gte-Qwen2-7B-instruct",
         ],
         "dst_path": "/storage/teraflopai/tmp2"
     }
@@ -762,16 +786,16 @@ if __name__ == "__main__":
         "https_endpoints": [
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8080/embed-large", 32768],
+            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
             # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
             # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8081/embed-large", 32768],
+            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
             # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
             # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8082/embed-large", 32768],
+            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
             # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
             # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
-            # ["Alibaba-NLP/gte-Qwen2-7B-instruct", "http://62.146.169.111:8083/embed-large", 32768]
+            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512]
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
