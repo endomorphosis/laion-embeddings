@@ -786,16 +786,16 @@ if __name__ == "__main__":
         "https_endpoints": [
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8080/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
-            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
-            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
-            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
-            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512]
+            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512]
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
