@@ -409,6 +409,7 @@ class ipfs_embeddings_py:
             self.cid_set.add(this_cid)
             if this_cid not in self.all_cid_set["new_dataset"]:
                 self.caches["new_dataset"]["items"].append(item)
+                self.saved = False
             models = self.queues.keys()
             for model, model_queues in queues.items():
                 if len(model_queues) > 0:
@@ -507,7 +508,7 @@ class ipfs_embeddings_py:
                     self.all_cid_list["new_dataset"] += tmp_dataset_cids
                     self.all_cid_set["new_dataset"] = set(self.all_cid_set["new_dataset"].union(set(tmp_dataset_cids)))
                     tmp_dataset_cids_dataset = datasets.Dataset.from_dict({"cids": tmp_dataset_cids})
-                    new_dataset_shards = [x for x in ls_checkpoints if dataset.replace("/", "___") + "_shard" in x and "_cids" not in x]
+                    new_dataset_shards = [x for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x]
                     next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_shard_{len(new_dataset_shards)}"
                     tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
                     tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + ".parquet"))
