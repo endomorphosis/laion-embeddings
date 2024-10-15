@@ -37,8 +37,7 @@ class ipfs_embeddings_py:
         self.new_dataset = None
         self.all_cid_list = {}
         self.all_cid_set = {}
-        self.cid_queue = iter([])
-        self.knn_queue = iter([])
+        self.cid_chunk_queue = None
         self.cid_index = {}
         self.knn_index = {}
         self.join_column = None
@@ -65,14 +64,14 @@ class ipfs_embeddings_py:
         self.consumer = self.consumer
         self.producer = self.producer
         self.process_item = self.process_item
-        self.save_to_disk = self.save_to_disk
+        self.save_checkpoints_to_disk = self.save_checkpoints_to_disk
         self.status = self.status
         self.setStatus = self.setStatus
         self.index_cid = self.index_cid
         self.load_index = self.load_index
         self.async_generator = self.async_generator
         self.send_batch_to_endpoint = self.send_batch_to_endpoint
-        self.save_to_disk = self.save_to_disk
+        # self.save_to_disk = self.save_to_disk
         # Initialize endpoints
         for endpoint_info in resources.get('https_endpoints', []):
             model, endpoint, context_length = endpoint_info
@@ -351,47 +350,44 @@ class ipfs_embeddings_py:
             queue.task_done()
         return None
 
-    async def chunk_producer(self):
+    async def chunk_producer(self, dataset_stream, column):
         chunk_tasks = []
-        async for item in self.async_generator(self.chunk_cache):
-            processed_chunk = await self.process_chunk(item)
-            chunk_tasks.append(processed_chunk)
-            if len(chunk_tasks) >= 1:
-                await asyncio.gather(*chunk_tasks)
-                chunk_tasks = []
-        if chunk_tasks:
-            await asyncio.gather(*chunk_tasks)
+        async for item in self.async_generator(dataset_stream):
+            chunked_item = await self.chunk_item(item, column)
+            self.cid_chunk_queue.put_nowait(chunked_item)
+        #     if len(chunk_tasks) >= 1:
+        #         await asyncio.gather(*chunk_tasks)
+        #         chunk_tasks = []
+        # if chunk_tasks:
+        #     await asyncio.gather(*chunk_tasks)
         return None
 
     async def chunk_consumer(self, batch_size, model_name, endpoint):
         print("chunk consumer started")
         batch = []
         while True:
-            item = await self.cid_queue.get()
-            batch.append(item)
-            if len(batch) >= batch_size:
+            chunked_item = await self.cid_chunk_queue.get()
+            for item in chunked_item:
+                batch.append(item)
+            if len(batch) >= batch_size or len(batch) == len(chunked_item["items"]):
                 results = await self.send_batch_to_endpoint(batch, "content", model_name, endpoint)
                 for i in range(len(results)):
                     self.chunk_embeddings[batch[i]["cid"]] = results[i]
                 batch = []
-            self.cid_queue.task_done()
+            self.cid_chunk_queue.task_done()
 
     async def producer(self, dataset_stream, column, queues):
         tasks = []
+        self.producer_task_done = False
         async for item in self.async_generator(dataset_stream):
-            processed_item = await self.process_item(item, column, queues)
-            tasks.append(processed_item)
+            task = self.process_item(item, column, queues)
+            tasks.append(task)
             if len(tasks) >= 1:
-                # await asyncio.gather(*tasks)
-                for this_processed_item in tasks:
-                    if this_processed_item is not None:
-                        await self.chunk_item(this_processed_item, column)
+                await asyncio.gather(*tasks)
                 tasks = []
         if tasks:
-            # await asyncio.gather(*tasks)
-            for this_processed_item in tasks:
-                if this_processed_item is not None:
-                    await self.chunk_item(this_processed_item, column)
+            await asyncio.gather(*tasks)
+        self.producer_task_done = True
         return None
     
     async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
@@ -426,10 +422,12 @@ class ipfs_embeddings_py:
             content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
         else:
             content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
-        parent_cid = item["cid"]
+        parent_cid = item["items"]["cid"]
         content_tokens = tokenizer.encode(content)
         ## sort content_chunks by the firt element of each tuple then the second element
         content_chunks = sorted(content_chunks, key=lambda x: (x[0], x[1]))
+        ## filter out chunks that are larger than the chunk_size
+        content_chunks = [chunk for chunk in content_chunks if chunk[1] - chunk[0] <= chunk_size]
         ## filter content_chunks to remove duplicates
         seen_chunks = set()
         unique_content_chunks = []
@@ -441,7 +439,7 @@ class ipfs_embeddings_py:
         if parent_cid in list(self.caches.keys()):
             pass
         else:
-            self.caches[parent_cid] = {"items" : []}
+            self.chunk_cache[parent_cid] = {"items" : [], "parent_cid": parent_cid}
             for chunk in content_chunks:
                 chunk_index = chunk
                 chunk_content = content_tokens[chunk[0]:chunk[1]]
@@ -449,7 +447,7 @@ class ipfs_embeddings_py:
                 child_cid = self.multiformats.get_cid(chunk_text)
                 child_content = {"cid": child_cid, "index": chunk_index, "content": chunk_text}
                 self.chunk_cache[parent_cid]["items"].append(child_content)
-        return None
+        return self.chunk_cache[parent_cid]
         
     async def process_item(self, item, column=None, queues=None):
         # Assuming `item` is a dictionary with required data
@@ -599,7 +597,8 @@ class ipfs_embeddings_py:
                             print("Saved "+ str(len(tmp_dataset)) + " items to disk for model " + model + " at " + dst_path)
                 for this_cid in self.chunk_cache.keys():
                     if this_cid not in self.cid_chunk_set:
-                        this_cid_dataset = datasets.Dataset.from_dict(self.chunk_cache[this_cid])
+                        this_chunk = self.chunk_cache[this_cid]
+                        this_cid_dataset = datasets.Dataset.from_dict(this_chunk)
                         this_cid_dataset.to_parquet(os.path.join(dst_path, "checkpoints", "sparse_chunks", this_cid + ".parquet"))
                         print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + this_cid + " at " + dst_path)
                         self.cid_chunk_set.add(this_cid)
@@ -654,9 +653,12 @@ class ipfs_embeddings_py:
                     consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
         # Compute commonn
         self.cid_set = set.intersection(*self.all_cid_set.values())
-        producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
+        self.cid_chunk_queue = asyncio.Queue()
+        producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))
+        chunker_task = asyncio.create_task(self.chunk_producer(self.new_dataset, self.metadata["models"][0]))
+        chunk_embedding_task = asyncio.create_task(self.chunk_consumer(self.batch_sizes[model][endpoint], model, endpoint))        
         save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
-        await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
+        await asyncio.gather(producer_task, save_task, *consumer_tasks.values(), chunker_task, chunk_embedding_task)
         return None 
     
     async def load_checkpoints(self, dataset, split, dst_path, models):
@@ -766,10 +768,6 @@ class ipfs_embeddings_py:
             self.embedding_datasets[model].to_parquet(os.path.join(dst_path, dataset.replace("/","___") + "_" + model.replace("/","___") + ".parquet"))
         return None
 
-    async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_size, max_splits):
-
-        return None
-
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
@@ -777,10 +775,17 @@ if __name__ == "__main__":
         "split": "train",
         "models": [
             "thenlper/gte-small",
-            "Alibaba-NLP/gte-large-en-v1.5",
-            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            # "Alibaba-NLP/gte-large-en-v1.5",
+            # "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         ],
-        "dst_path": "/storage/teraflopai/tmp2"
+        "chunk_settings": {
+            "chunk_size": 512,
+            "n_sentences": 8,
+            "step_size": 256,
+            "method": "fixed",
+            "embed_model": "thenlper/gte-small"
+        },
+        "dst_path": "/storage/teraflopai/tmp2",
     }
     resources = {
         "https_endpoints": [
@@ -789,13 +794,13 @@ if __name__ == "__main__":
             ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
-            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["thenlper/gte-small", "http://62.146.169.111:8081/embed-tiny", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
-            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["thenlper/gte-small", "http://62.146.169.111:8082/embed-tiny", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
-            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512]
+            ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
