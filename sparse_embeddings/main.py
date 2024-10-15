@@ -782,7 +782,7 @@ class ipfs_embeddings_py:
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
-        # "column": "text",
+        "column": None,
         "split": "train",
         "models": [
             "thenlper/gte-small",
