@@ -15,6 +15,7 @@ from datasets import Dataset, concatenate_datasets, load_dataset
 import ipfs_multiformats
 from ipfs_multiformats import *
 from chunker import Chunker
+import time
 
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
@@ -354,7 +355,14 @@ class ipfs_embeddings_py:
         chunk_tasks = []
         async for item in self.async_generator(dataset_stream):
             chunked_item = await self.chunk_item(item, column)
-            self.cid_chunk_queue.put_nowait(chunked_item)
+            added = False
+            try:
+                self.cid_chunk_queue.put_nowait(chunked_item)
+                added = True
+            except Exception as e:
+                await asyncio.sleep(15)
+                self.cid_chunk_queue.put_nowait(chunked_item)
+                pass
         #     if len(chunk_tasks) >= 1:
         #         await asyncio.gather(*chunk_tasks)
         #         chunk_tasks = []
@@ -365,15 +373,17 @@ class ipfs_embeddings_py:
     async def chunk_consumer(self, batch_size, model_name, endpoint):
         print("chunk consumer started")
         batch = []
+        batch_results = []
         while True:
             chunked_item = await self.cid_chunk_queue.get()
-            for item in chunked_item:
+            for item in chunked_item["items"]:
                 batch.append(item)
-            if len(batch) >= batch_size or len(batch) == len(chunked_item["items"]):
-                results = await self.send_batch_to_endpoint(batch, "content", model_name, endpoint)
-                for i in range(len(results)):
-                    self.chunk_embeddings[batch[i]["cid"]] = results[i]
-                batch = []
+                if len(batch) >= batch_size or len(batch) == len(chunked_item["items"]):
+                    results = await self.send_batch_to_endpoint(batch, "content", model_name, endpoint)
+                    for i in range(len(results)):
+                        batch_results.append({"cid": batch[i]["cid"], "embedding": results[i]})
+                    batch = []
+            self.chunk_cache[chunked_item["parent_cid"]] = {"items": batch_results, "parent_cid": chunked_item["parent_cid"]}
             self.cid_chunk_queue.task_done()
 
     async def producer(self, dataset_stream, column, queues):
@@ -562,12 +572,12 @@ class ipfs_embeddings_py:
     async def save_checkpoints_to_disk(self, dataset, dst_path, models):
         self.saved = False
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(6)
             if self.saved == False:
                 if not os.path.exists(os.path.join(dst_path, "checkpoints")):
                     os.makedirs(os.path.join(dst_path, "checkpoints"))
                 if not os.path.exists(os.path.join(dst_path, "checkpoints", "sparse_chunks")):
-                    os.makedirs(os.path.join(dst_path, "checkpoints", "sparse_sparse_chunks"))
+                    os.makedirs(os.path.join(dst_path, "checkpoints", "sparse_chunks"))
                 if not os.path.exists(os.path.join(dst_path, "checkpoints", "sparse_embeddings")):
                     os.makedirs(os.path.join(dst_path, "checkpoints", "sparse_embeddings"))
                 ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
@@ -598,8 +608,9 @@ class ipfs_embeddings_py:
                 for this_cid in self.chunk_cache.keys():
                     if this_cid not in self.cid_chunk_set:
                         this_chunk = self.chunk_cache[this_cid]
-                        this_cid_dataset = datasets.Dataset.from_dict(this_chunk)
+                        this_cid_dataset = datasets.Dataset.from_dict({"items":this_chunk["items"]})
                         this_cid_dataset.to_parquet(os.path.join(dst_path, "checkpoints", "sparse_chunks", this_cid + ".parquet"))
+                        del self.chunk_cache[this_cid]
                         print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + this_cid + " at " + dst_path)
                         self.cid_chunk_set.add(this_cid)
                         self.cid_chunk_list.append(this_cid)
@@ -653,7 +664,7 @@ class ipfs_embeddings_py:
                     consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
         # Compute commonn
         self.cid_set = set.intersection(*self.all_cid_set.values())
-        self.cid_chunk_queue = asyncio.Queue()
+        self.cid_chunk_queue = asyncio.Queue(maxsize=64)
         producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))
         chunker_task = asyncio.create_task(self.chunk_producer(self.new_dataset, self.metadata["models"][0]))
         chunk_embedding_task = asyncio.create_task(self.chunk_consumer(self.batch_sizes[model][endpoint], model, endpoint))        
@@ -771,7 +782,7 @@ class ipfs_embeddings_py:
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
-        "column": "text",
+        # "column": "text",
         "split": "train",
         "models": [
             "thenlper/gte-small",

@@ -526,9 +526,9 @@ class ipfs_embeddings_py:
                             tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
                             print("Saved "+ str(len(tmp_dataset)) + " items to disk for model " + model + " at " + dst_path)
                 self.saved = True
-            if self.producer_task_done and all(self.consumer_task_done.values()):
-                self.save_to_disk_task_done = True
-                break
+            # if self.producer_task_done and all(self.consumer_task_done.values()):
+            #     self.save_to_disk_task_done = True
+            #     break
         return None 
 
     def status(self):
