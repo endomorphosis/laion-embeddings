@@ -512,6 +512,11 @@ class ipfs_embeddings_py:
                     next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_shard_{len(new_dataset_shards)}"
                     tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
                     tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + ".parquet"))
+                    del tmp_dataset
+                    del tmp_dataset_cids
+                    del tmp_dataset_cids_dataset
+                    del self.caches["new_dataset"]
+                    self.caches["new_dataset"] = {"items" : []}
                 for model in models:
                     if model in self.caches.keys():
                         if self.caches[model] and len(self.caches[model]["items"]) > 0:

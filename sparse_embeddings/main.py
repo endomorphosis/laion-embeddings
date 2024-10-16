@@ -504,14 +504,15 @@ class ipfs_embeddings_py:
         if model_name not in self.tokenizer.keys():
             self.tokenizer[model_name] = AutoTokenizer.from_pretrained(model_name, device='cpu', use_fast=True)
         for item in batch:
-            this_item_tokens = len(self.tokenizer[model_name].encode(item[column]))
-            if this_item_tokens > model_context_length:
-                encoded_item = self.tokenizer[model_name](item[column], return_tensors="pt")["input_ids"].tolist()[0]
-                truncated_encoded_item = encoded_item[:model_context_length]
-                unencode_item = self.tokenizer[model_name].decode(truncated_encoded_item)
-                new_batch.append(unencode_item)
-            else:
-                new_batch.append(item[column])
+            if column in list(item.keys()):
+                this_item_tokens = len(self.tokenizer[model_name].encode(item[column]))
+                if this_item_tokens > model_context_length:
+                    encoded_item = self.tokenizer[model_name](item[column], return_tensors="pt")["input_ids"].tolist()[0]
+                    truncated_encoded_item = encoded_item[:model_context_length]
+                    unencode_item = self.tokenizer[model_name].decode(truncated_encoded_item)
+                    new_batch.append(unencode_item)
+                else:
+                    new_batch.append(item[column])
         results = None
         try:
             results = await self.index_knn(new_batch, model_name, endpoint)
@@ -595,6 +596,9 @@ class ipfs_embeddings_py:
                     next_filename_shard = f"{dataset.replace('/', '___')}_shard_{len(new_dataset_shards)}"
                     tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
                     tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + ".parquet"))
+                    del tmp_dataset
+                    del tmp_dataset_cids
+                    del tmp_dataset_cids_dataset
                     self.caches["new_dataset"] = {"items" : []}
                 for model in models:
                     if model in self.caches.keys():
@@ -609,16 +613,19 @@ class ipfs_embeddings_py:
                             tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + ".parquet"))
                             tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
                             print("Saved "+ str(len(tmp_dataset)) + " items to disk for model " + model + " at " + dst_path)
+                            del tmp_dataset
+                            del tmp_dataset_cids
+                            del tmp_dataset_cids_dataset
                             self.caches[model] = {"items" : []}
                 for this_cid in list(self.chunk_cache.keys()):
-                    if this_cid not in self.cid_chunk_set:
-                        this_chunk = self.chunk_cache[this_cid]
-                        this_cid_dataset = datasets.Dataset.from_dict({"items":this_chunk["items"]})
-                        this_cid_dataset.to_parquet(os.path.join(dst_path, "checkpoints", "sparse_chunks", this_cid + ".parquet"))
-                        del self.chunk_cache[this_cid]
-                        print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + this_cid + " at " + dst_path)
-                        self.cid_chunk_set.add(this_cid)
-                        self.cid_chunk_list.append(this_cid)
+                    this_chunk = self.chunk_cache[this_cid]
+                    this_cid_dataset = datasets.Dataset.from_dict({"items":this_chunk["items"]})
+                    this_cid_dataset.to_parquet(os.path.join(dst_path, "checkpoints", "sparse_chunks", this_cid + ".parquet"))
+                    del self.chunk_cache[this_cid]
+                    del this_cid_dataset
+                    print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + this_cid + " at " + dst_path)
+                    self.cid_chunk_set.add(this_cid)
+                    self.cid_chunk_list.append(this_cid)
                 self.saved = True
         return None 
 
