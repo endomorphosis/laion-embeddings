@@ -621,11 +621,11 @@ class ipfs_embeddings_py:
                     this_chunk = self.chunk_cache[this_cid]
                     this_cid_dataset = datasets.Dataset.from_dict({"items":this_chunk["items"]})
                     this_cid_dataset.to_parquet(os.path.join(dst_path, "checkpoints", "sparse_chunks", this_cid + ".parquet"))
-                    del self.chunk_cache[this_cid]
-                    del this_cid_dataset
                     print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + this_cid + " at " + dst_path)
                     self.cid_chunk_set.add(this_cid)
                     self.cid_chunk_list.append(this_cid)
+                    del self.chunk_cache[this_cid]
+                    del this_cid_dataset
                 self.saved = True
         return None 
 
