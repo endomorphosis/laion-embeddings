@@ -30,7 +30,6 @@ class ipfs_embeddings_py:
         self.consumer_task_done = {}
         self.producer_task_done = False
         self.save_to_disk_task_done = False
-
         self.https_endpoints = {}
         self.libp2p_endpoints = {}
         self.index =  {}
@@ -89,6 +88,15 @@ class ipfs_embeddings_py:
     def load_index(self, index):
         self.index = index
         return None 
+    
+    async def load_dataset(self, dataset, split=None):
+        if split is None:
+            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+        else:
+            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+        columns = self.dataset.column_names
+        columns.append("cid")
+        return None
 
     def add_https_endpoint(self, model, endpoint, context_length):
         if model not in self.https_endpoints:
@@ -783,45 +791,98 @@ class ipfs_embeddings_py:
                         self.index[model] = load_dataset('parquet', data_files=this_model_shards)[split]
                     else:
                         self.index[model] = datasets.Dataset.from_dict({"cid": [], "embedding": [] })
-                ls_chunks = os.listdir(os.path.join(dst_path, "checkpoints", "sparse_chunks"))
-                for chunk in ls_chunks:
-                    chunk_cid = chunk.replace(".parquet","")
-                    if chunk.replace(".parquet","") not in self.cid_chunk_set:
-                        self.cid_chunk_set.add(chunk_cid)
-                        self.cid_chunk_list.append(chunk_cid)
-                del ls_chunks
+                if os.path.exists(os.path.join(dst_path, "checkpoints", "sparse_chunks")):
+                    ls_chunks = os.listdir(os.path.join(dst_path, "checkpoints", "sparse_chunks"))
+                    for chunk in ls_chunks:
+                        chunk_cid = chunk.replace(".parquet","")
+                        if chunk.replace(".parquet","") not in self.cid_chunk_set:
+                            self.cid_chunk_set.add(chunk_cid)
+                            self.cid_chunk_list.append(chunk_cid)
+                    del ls_chunks
                 del this_model_shards
-                del ls_checkpoints
-                del new_dataset_shards
+            del ls_checkpoints
+        try:
+            del new_dataset_shards
+        except:
+            pass
         self.cid_set = set.intersection(*self.all_cid_set.values())
         return None
     
     async def combine_checkpoints(self, dataset, split, columns, dst_path, models):
+        await self.load_dataset(dataset, split)
         await self.load_checkpoints(dataset, split, dst_path, models)
-        columns = self.new_dataset.column_names
-        self.new_dataset_combined = datasets.Dataset.from_dict({key: [] for key in columns })
+        del self.dataset
+        self.new_dataset_combined = {}
         self.embedding_datasets = {}
+        ## get first row from self.new_datasets
+        first_row = self.new_dataset.select([0])
+        for item in first_row:
+            new_dataset_columns = list(item["items"].keys())
+            for column in new_dataset_columns:
+                self.new_dataset_combined[column] = []
+                
         count_cids = 0
         len_cids = len(self.cid_set)
-        for model in models:
-            self.embedding_datasets[model] = datasets.Dataset.from_dict({key: [] for key in columns })
+        for model in list(self.index.keys()):
+            first_row = self.index[model].select([0])
+            embedding_dataset_columns = []
+            self.embedding_datasets[model] = {}
+            for item in first_row:
+                embedding_dataset_columns = list(item["items"].keys())
+                for column in embedding_dataset_columns:
+                    self.embedding_datasets[model][column] = []
+            del self.index[model]
         
-        for cid in self.cid_set:
-            new_dataset_index = self.all_cid_list["new_dataset"].index(cid)
-            new_dataset_item = self.new_dataset.select([new_dataset_index])[0]
-            self.new_dataset_combined = self.new_dataset_combined.add_item(new_dataset_item["items"])
-            for model in models:
-                if model in list(self.index.keys()):
-                    embedding_dataset_index = self.all_cid_list[model].index(cid)
-                    embedding_dataset_item = self.index[model].select([embedding_dataset_index])[0]
-                    self.embedding_datasets[model] = self.embedding_datasets[model].add_item(embedding_dataset_item["items"])
-            count_cids += 1
-            if count_cids % 1000 == 0:
-                print("Sorted " + str(count_cids) + " of " + str(len_cids) + " cids")
-        self.new_dataset_combined.to_parquet(os.path.join(dst_path, dataset.replace("/","___") + ".parquet"))
-        for model in models:
-            self.embedding_datasets[model].to_parquet(os.path.join(dst_path, dataset.replace("/","___") + "_" + model.replace("/","___") + ".parquet"))
-        return None
+        if not os.path.exists(os.path.join(dst_path, "combined")):
+            os.makedirs(os.path.join(dst_path, "combined"))
+        self.new_dataset_combined_cids = set()
+        self.new_dataset_combined_cids2 = set()
+        if not os.path.exists(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + ".parquet")):
+            for item in self.new_dataset:
+                this_item = item["items"]
+                if this_item["cid"] in self.new_dataset_combined_cids and this_item["secondary_cid"] in self.new_dataset_combined_cids2:
+                    pass
+                else:
+                    for column in list(this_item.keys()):
+                        if column in new_dataset_columns:
+                            self.new_dataset_combined[column].append(this_item[column])                    
+                    self.new_dataset_combined_cids.add(this_item["cid"])
+                    self.new_dataset_combined_cids2.add(this_item["secondary_cid"])
+            del self.new_dataset
+            combined_dataset = datasets.Dataset.from_dict(self.new_dataset_combined)
+            combined_dataset.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + ".parquet"))
+            combined_dataset_cids = datasets.Dataset.from_dict({"cids": list(self.new_dataset_combined_cids)})
+            combined_dataset_cids.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + "_cids.parquet"))
+            combined_dataset_cids2 = datasets.Dataset.from_dict({"cids": list(self.new_dataset_combined_cids2)})
+            combined_dataset_cids2.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + "_cids2.parquet"))
+            del self.new_dataset_combined
+            del combined_dataset
+            del combined_dataset_cids
+            del combined_dataset_cids2
+        
+        await self.load_checkpoints(dataset, split, dst_path, models)
+        del self.new_dataset
+        for model in list(self.index.keys()):
+            self.embeddind_dataset_combined_cids = set()
+            if not os.path.exists(os.path.join(dst_path, "combined", model.replace("/","___"))):
+                for item in self.index[model]:
+                    this_item = item["items"]
+                    if this_item["cid"] in self.embeddind_dataset_combined_cids:
+                        pass
+                    else:
+                        for column in list(this_item.keys()):
+                            if column in embedding_dataset_columns:
+                                self.embedding_datasets[model][column].append(this_item[column])
+                        self.new_dataset_combined_cids.add(this_item["cid"])
+                combined_embedding_datasets = datasets.Dataset.from_dict(self.embedding_datasets[model])
+                combined_embedding_datasets.to_parquet(os.path.join(dst_path, "combined", model.replace("/","___") + ".parquet"))
+                combined_embedding_datasets_cids = datasets.Dataset.from_dict({"cids": list(self.embeddind_dataset_combined_cids)})
+                combined_embedding_datasets_cids.to_parquet(os.path.join(dst_path, "combined", model.replace("/","___") + "_cids.parquet"))
+                del self.embedding_datasets[model]
+                del combined_embedding_datasets
+                del combined_embedding_datasets_cids
+                
+        return None              
 
 
 async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits):
@@ -874,7 +935,7 @@ if __name__ == "__main__":
             "embed_model": "thenlper/gte-small",
             "tokenizer": None
         },
-        "dst_path": "/storage/teraflopai/tmp2",
+        "dst_path": "/storage/teraflopai/tmp",
     }
     resources = {
         "https_endpoints": [
