@@ -859,13 +859,12 @@ class ipfs_embeddings_py:
                         concat_dict = {key: [] for key in concat_dict.keys()}
                 i += 1
             del self.new_dataset
-            combined_dataset.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + ".parquet"))
+            self.new_dataset_combined.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + ".parquet"))
             combined_dataset_cids = datasets.Dataset.from_dict({"cids": list(self.new_dataset_combined_cids)})
             combined_dataset_cids.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + "_cids.parquet"))
             combined_dataset_cids2 = datasets.Dataset.from_dict({"cids": list(self.new_dataset_combined_cids2)})
             combined_dataset_cids2.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + "_cids2.parquet"))
             del self.new_dataset_combined
-            del combined_dataset
             del combined_dataset_cids
             del combined_dataset_cids2
         
