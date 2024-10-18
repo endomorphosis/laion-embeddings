@@ -820,7 +820,8 @@ class ipfs_embeddings_py:
             new_dataset_columns = list(item["items"].keys())
             for column in new_dataset_columns:
                 self.new_dataset_combined[column] = []
-                
+
+        self.new_dataset_combined = Dataset.from_dict(self.new_dataset_combined)                
         count_cids = 0
         len_cids = len(self.cid_set)
         for model in list(self.index.keys()):
@@ -838,6 +839,8 @@ class ipfs_embeddings_py:
         self.new_dataset_combined_cids = set()
         self.new_dataset_combined_cids2 = set()
         if not os.path.exists(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + ".parquet")):
+            i = 0
+            concat_dict = {}
             for item in self.new_dataset:
                 this_item = item["items"]
                 if this_item["cid"] in self.new_dataset_combined_cids and this_item["secondary_cid"] in self.new_dataset_combined_cids2:
@@ -845,11 +848,17 @@ class ipfs_embeddings_py:
                 else:
                     for column in list(this_item.keys()):
                         if column in new_dataset_columns:
-                            self.new_dataset_combined[column].append(this_item[column])                    
+                            concat_dict[column].append(this_item[column])                    
                     self.new_dataset_combined_cids.add(this_item["cid"])
                     self.new_dataset_combined_cids2.add(this_item["secondary_cid"])
+                if i % 1000 == 0:
+                    if concat_dict:
+                        for j in range(len(next(iter(concat_dict.values())))):
+                            row = {key: values[j] for key, values in concat_dict.items()}
+                            self.new_dataset_combined.add_item(row)
+                        concat_dict = {key: [] for key in concat_dict.keys()}
+                i += 1
             del self.new_dataset
-            combined_dataset = datasets.Dataset.from_dict(self.new_dataset_combined)
             combined_dataset.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + ".parquet"))
             combined_dataset_cids = datasets.Dataset.from_dict({"cids": list(self.new_dataset_combined_cids)})
             combined_dataset_cids.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + "_cids.parquet"))
