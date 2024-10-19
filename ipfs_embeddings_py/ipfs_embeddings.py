@@ -728,7 +728,7 @@ class ipfs_embeddings_py:
                 self.new_dataset = load_dataset('parquet', data_files=new_dataset_dst_path)[split]
             if os.path.exists(os.path.join(dst_path, "checkpoints")):
                 ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
-                new_dataset_shards = [os.path.join(dst_path, "checkpoints", x) for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x]
+                new_dataset_shards = [os.path.join(dst_path, "checkpoints", x) for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x ]
                 if "new_dataset" not in list(self.all_cid_list.keys()):
                     self.all_cid_list["new_dataset"] = []
                 if "new_dataset" not in list(self.all_cid_set.keys()):
@@ -806,9 +806,11 @@ class ipfs_embeddings_py:
         except:
             pass
         self.cid_set = set.intersection(*self.all_cid_set.values())
+        self.cid_list = list(self.cid_set)
         return None
     
-    def demux_checkpoints(self, this_dataset):
+        
+    def demux_checkpoints_old3(self, this_dataset):
         self.unique_cid_set = set()
         self.unique_cid_list = []
         for this_item in this_dataset:
@@ -820,6 +822,97 @@ class ipfs_embeddings_py:
                     yield item
             else:
                 continue
+    
+    def demux_checkpoints_old2(self, this_dataset):
+        self.unique_cid_set = set()
+        self.unique_cid_list = []
+        for this_item in this_dataset:
+            item = this_item["items"]
+            if "cid" in list(item.keys()):
+                if item["cid"] not in self.unique_cid_set:
+                    del item["cid"]
+                    item["cid"] = item["secondary_cid"]
+                    del item["secondary_cid"]
+                    self.unique_cid_set.add(item["cid"])
+                    self.unique_cid_list.append(item["cid"])
+                    yield item
+            else:
+                continue
+            
+    def demux_checkpoints_old(self, this_dataset):
+        self.unique_cid_set = set()
+        self.unique_cid_list = []
+        for this_item in this_dataset:
+            item = this_item["items"]
+            if "cid" in list(item.keys()):
+                if item["cid"] not in self.unique_cid_set:
+                    del item["secondary_cid"]
+                    self.unique_cid_set.add(item["cid"])
+                    self.unique_cid_list.append(item["cid"])
+                    yield item
+            else:
+                continue
+            
+    def demux_checkpoints4(self, this_dataset):
+        self.unique_cid_set = set()
+        self.unique_cid_list = []
+        for this_cid in self.cid_list:
+            alernate_index = self.new_dataset.select([this_cid])
+            for this_item in alernate_index:
+                item = this_item["items"]
+                secondary_cid = item["secondary_cid"]
+
+            dataset_index = self.all_cid_list[this_dataset].index(this_cid)
+            dataset_item = self.index[this_dataset].select([dataset_index])
+            for this_item in dataset_item:
+                item = this_item["items"]
+                item["cid"] = secondary_cid
+                self.unique_cid_list.append(item["cid"])
+                self.unique_cid_set.add(item["cid"])
+                yield item
+            
+    def demux_checkpoints3(self, this_dataset):
+        self.unique_cid_set = set()
+        self.unique_cid_list = []
+        for this_cid in self.cid_list:
+            dataset_index = self.all_cid_list[this_dataset].index(this_cid)
+            dataset_item = self.index[this_dataset].select([dataset_index])
+            for this_item in dataset_item:
+                item = this_item["items"]
+                self.unique_cid_list.append(item["cid"])
+                self.unique_cid_set.add(item["cid"])
+                yield item
+    
+    def demux_checkpoints2(self, this_dataset):
+        self.unique_cid_set = set()
+        self.unique_cid_list = []
+        for this_cid in self.cid_list:
+            dataset_index = self.all_cid_list["new_dataset"].index(this_cid)
+            dataset_item = self.new_dataset.select([dataset_index])
+            for this_item in dataset_item:
+                item = this_item["items"]
+                self.unique_cid_list.append(item["cid"])
+                self.unique_cid_set.add(item["cid"])
+                del item["cid"]
+                item["cid"] = item["secondary_cid"]
+                del item["secondary_cid"]
+                yield item
+        
+                
+    def demux_checkpoints(self, this_dataset):
+        self.unique_cid_set = set()
+        self.unique_cid_list = []
+        for this_cid in self.cid_list:
+            dataset_index = self.all_cid_list["new_dataset"].index(this_cid)
+            dataset_item = self.new_dataset.select([dataset_index])
+            for this_item in dataset_item:
+                item = this_item["items"]
+                self.unique_cid_list.append(item["cid"])
+                self.unique_cid_set.add(item["cid"])
+                if "secondary_cid" in list(item.keys()):
+                    del item["secondary_cid"]
+                yield item
+        
                 
     async def combine_checkpoints(self, dataset, split, column, dst_path, models):
         await self.load_dataset(dataset, split)
@@ -830,12 +923,19 @@ class ipfs_embeddings_py:
         self.new_dataset_combined = {}
         self.embedding_datasets = {}
         ## get first row from self.new_datasets
-        
-        if not os.path.exists(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + ".parquet")):
+        self.unique_cid_set = set()
+        self.unique_cid_list = []
+        if not os.path.exists(os.path.join(dst_path, "combined", "rm_secondary_cid_" + dataset.replace("/","___") + ".parquet")):
             self.new_dataset_combined = datasets.Dataset.from_generator(lambda: self.demux_checkpoints(self.new_dataset))            
-            self.new_dataset_combined.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + ".parquet"))
+            self.new_dataset_combined.to_parquet(os.path.join(dst_path, "combined",  "rm_secondary_cid_" + dataset.replace("/","___") + ".parquet"))
             combined_dataset_cids = datasets.Dataset.from_dict({"cids": self.unique_cid_list})
-            combined_dataset_cids.to_parquet(os.path.join(dst_path, "combined", "ipfs_" + dataset.replace("/","___") + "_cids.parquet"))
+            combined_dataset_cids.to_parquet(os.path.join(dst_path, "combined", "rm_secondary_cid_" + "ipfs_" + dataset.replace("/","___") + "_cids.parquet"))
+
+        if not os.path.exists(os.path.join(dst_path, "combined", "rm_cid_" + dataset.replace("/","___") + ".parquet")):
+            self.new_dataset_combined = datasets.Dataset.from_generator(lambda: self.demux_checkpoints2(self.new_dataset))            
+            self.new_dataset_combined.to_parquet(os.path.join(dst_path, "combined", "rm_cid_" + dataset.replace("/","___") + ".parquet"))
+            combined_dataset_cids = datasets.Dataset.from_dict({"cids": self.unique_cid_list})
+            combined_dataset_cids.to_parquet(os.path.join(dst_path, "combined", "rm_cid_" + "ipfs_" + dataset.replace("/","___") + "_cids.parquet"))
 
         for model in list(self.metadata["models"]):
             if not os.path.exists(os.path.join(dst_path, "combined", model.replace("/","___"))):
@@ -843,7 +943,15 @@ class ipfs_embeddings_py:
                 combined_embedding_datasets.to_parquet(os.path.join(dst_path, "combined", + dataset.replace("/","___") + model.replace("/","___") + ".parquet"))
                 combined_embedding_datasets_cids = datasets.Dataset.from_dict({"cids": self.unique_cid_list})
                 combined_embedding_datasets_cids.to_parquet(os.path.join(dst_path, "combined", dataset.replace("/","___") + model.replace("/","___") + "_cids.parquet"))
-                
+        
+        
+        for model in list(self.metadata["models"]):
+            if not os.path.exists(os.path.join(dst_path, "combined", model.replace("/","___"))):
+                combined_embedding_datasets = datasets.Dataset.from_generator(lambda: self.demux_checkpoints(self.index[model]))
+                combined_embedding_datasets.to_parquet(os.path.join(dst_path, "secondary_combined", + dataset.replace("/","___") + model.replace("/","___") + ".parquet"))
+                combined_embedding_datasets_cids = datasets.Dataset.from_dict({"cids": self.unique_cid_list})
+                combined_embedding_datasets_cids.to_parquet(os.path.join(dst_path, "secondary_combined", dataset.replace("/","___") + model.replace("/","___") + "_cids.parquet"))
+        
         return None              
 
 
