@@ -813,7 +813,7 @@ class ipfs_embeddings_py:
         self.unique_cid_list = []
         for this_item in this_dataset:
             item = this_item["items"]
-            if "cid" in list(item.keys()) and "secondary_cid" not in list(item.keys()):
+            if "cid" in list(item.keys()):
                 if item["cid"] not in self.unique_cid_set:
                     self.unique_cid_set.add(item["cid"])
                     self.unique_cid_list.append(item["cid"])
