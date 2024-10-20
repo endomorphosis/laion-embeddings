@@ -20,6 +20,7 @@ import ipfs_multiformats
 from ipfs_multiformats import *
 from chunker import Chunker
 import time
+import math
 
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
@@ -83,6 +84,7 @@ class ipfs_embeddings_py:
         for endpoint_info in resources.get('https_endpoints', []):
             model, endpoint, context_length = endpoint_info
             self.add_https_endpoint(model, endpoint, context_length)
+
         return None
 
     def load_index(self, index):
@@ -809,8 +811,7 @@ class ipfs_embeddings_py:
         self.cid_list = list(self.cid_set)
         return None
     
-        
-    def demux_checkpoints_old3(self, this_dataset):
+    def demux_checkpoints_old4(self, this_dataset):
         self.unique_cid_set = set()
         self.unique_cid_list = []
         for this_item in this_dataset:
@@ -822,7 +823,16 @@ class ipfs_embeddings_py:
                     yield item
             else:
                 continue
-    
+        
+    def demux_checkpoints_old3(self, this_dataset):
+        self.unique_cid_set = set()
+        self.unique_cid_list = []
+        for this_item in this_dataset:
+            item = this_item["items"]
+            if "cid" in list(item.keys()):
+                del item["cid"]
+            yield item
+                
     def demux_checkpoints_old2(self, this_dataset):
         self.unique_cid_set = set()
         self.unique_cid_list = []
@@ -955,37 +965,72 @@ class ipfs_embeddings_py:
         return None              
 
 
-async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits):
+    async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits):
         await self.load_dataset(dataset, split)
         await self.load_checkpoints(dataset, split, dst_path, models)
 
-        #deduplicate self.new_dataset
-        self.unique_dataset = self.new_dataset.map(lambda x: {"cid": x["cid"], "items": x["items"]})
-        dataset_sizes = {}
-        dataset_sizes["unique_dataset"] = len(self.unique_dataset)
-        for model in models:
-            if model in list(self.index.keys()):
-                dataset_sizes[model] = len(self.index[model])
-        
-        # Initialize variables
-        centroids = []
-        embeddings = []
-        
-        # Convert embeddings to numpy array
-        embeddings_np = np.array(embeddings)
-        
-        # Perform KMeans clustering using faiss
-        kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=300, verbose=True)
-        kmeans.train(embeddings_np)
+        if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet")):
 
-        # Get centroids
-        centroids = kmeans.centroids
+            new_dataset_download_size = self.new_dataset.dataset_size            
+            embeddings_size = {}
+            for model in self.metadata["models"]:
+                embeddings_size[model] = self.index[model].dataset_size
+            largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
+            largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
+            embeddings_size["new_dataset"] = new_dataset_download_size
+            largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
+            largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
+            max_size = 25 * 1024 * 1024 # 10 MB
+            max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
+            max_splits_size = round(largest_dataset_size / max_size)
+            max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
+            if max_splits_rows > max_splits_size:
+                max_splits = max_splits_rows
+            else:
+                max_splits = max_splits_size
+            # Initialize variables
+            centroids = []
+            embeddings_np = []
+            for item in self.index[largest_embeddings_dataset]:
+                this_item = item["items"]
+                embeddings_np.append(this_item["embedding"])
+            embeddings_np = np.array(embeddings_np)
+            
+            # Convert embeddings to numpy array
 
-        # Save centroids to disk
-        centroids_dataset = datasets.Dataset.from_dict({"centroids": centroids.tolist()})
-        centroids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))
+            # Perform KMeans clustering using faiss
+            kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=300, verbose=True)
+            kmeans.train(embeddings_np)
+                
+            # Get centroids
+            centroids = kmeans.centroids
 
-        return None
+            # Save centroids to disk
+            centroids_dataset = datasets.Dataset.from_dict({"centroids": centroids.tolist()})
+            centroids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))
+            pass
+        else:
+            centroids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))["train"]
+            centroids = centroids_dataset["centroids"]
+            centroids = np.array(centroids)
+            pass
+        
+        # Assign embeddings to clusters
+        _, cluster_assignments = kmeans.index.search(embeddings_np, 1)
+        cluster_assignments = cluster_assignments.flatten()
+
+        # Create new splits based on cluster assignments
+        for cluster_id in range(max_splits):
+            cluster_indices = np.where(cluster_assignments == cluster_id)[0]
+            cluster_embeddings = [embeddings_np[i] for i in cluster_indices]
+            cluster_dataset = datasets.Dataset.from_dict({"embedding": cluster_embeddings})
+
+            # Save the new split to disk
+            split_path = os.path.join(dst_path, f"{dataset.replace('/', '___')}_split_{cluster_id}.parquet")
+            cluster_dataset.to_parquet(split_path)
+            print(f"Saved split {cluster_id} with {len(cluster_embeddings)} embeddings to {split_path}")
+
+            return None
     
 if __name__ == "__main__":
     metadata = {
@@ -994,8 +1039,8 @@ if __name__ == "__main__":
         "split": "train",
         "models": [
             # "thenlper/gte-small",
-            # "Alibaba-NLP/gte-large-en-v1.5",
-            # "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            "Alibaba-NLP/gte-large-en-v1.5",
+            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         ],
         "chunk_settings": {
             "chunk_size": 512,
@@ -1026,4 +1071,4 @@ if __name__ == "__main__":
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
     # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
-    asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 100000, 10))
+    asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))
