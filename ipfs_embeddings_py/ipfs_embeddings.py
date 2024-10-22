@@ -970,7 +970,6 @@ class ipfs_embeddings_py:
         await self.load_checkpoints(dataset, split, dst_path, models)
 
         if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet")):
-
             new_dataset_download_size = self.new_dataset.dataset_size            
             embeddings_size = {}
             for model in self.metadata["models"]:
@@ -980,7 +979,7 @@ class ipfs_embeddings_py:
             embeddings_size["new_dataset"] = new_dataset_download_size
             largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
             largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-            max_size = 25 * 1024 * 1024 # 10 MB
+            max_size = 50 * 1024 * 1024 # 50 MB
             max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
             max_splits_size = round(largest_dataset_size / max_size)
             max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
@@ -991,15 +990,21 @@ class ipfs_embeddings_py:
             # Initialize variables
             centroids = []
             embeddings_np = []
-            for item in self.index[largest_embeddings_dataset]:
-                this_item = item["items"]
-                embeddings_np.append(this_item["embedding"])
-            embeddings_np = np.array(embeddings_np)
-            
-            # Convert embeddings to numpy array
+            # del self.new_dataset
+            # del self.dataset
+            # for model in self.metadata["models"]:
+            #     if model is not largest_embeddings_dataset:
+            #         del self.index[model]
+                    
+            num_items = len(self.index[largest_embeddings_dataset])
+            embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
+            embeddings_np = np.zeros((num_items, embedding_dim))
+            for i, item in enumerate(self.index[largest_embeddings_dataset]):
+                embeddings_np[i] = item["items"]["embedding"]
+            del self.index[largest_embeddings_dataset]
 
             # Perform KMeans clustering using faiss
-            kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=300, verbose=True)
+            kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
             kmeans.train(embeddings_np)
                 
             # Get centroids
@@ -1012,7 +1017,7 @@ class ipfs_embeddings_py:
         else:
             centroids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))["train"]
             centroids = centroids_dataset["centroids"]
-            centroids = np.array(centroids)
+            centroids = np.array(centroids)            
             pass
         
         # Assign embeddings to clusters
