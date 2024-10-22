@@ -802,7 +802,7 @@ class ipfs_embeddings_py:
                             self.cid_chunk_list.append(chunk_cid)
                     del ls_chunks
                 del this_model_shards
-            del ls_checkpoints
+                del ls_checkpoints
         try:
             del new_dataset_shards
         except:
@@ -1050,7 +1050,7 @@ if __name__ == "__main__":
             "embed_model": "thenlper/gte-small",
             "tokenizer": None
         },
-        "dst_path": "/storage/teraflopai/tmp",
+        "dst_path": "/opt/app-root/data/tmp",
     }
     resources = {
         "https_endpoints": [
@@ -1069,6 +1069,6 @@ if __name__ == "__main__":
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
-    # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
-    asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))
+    # asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))
