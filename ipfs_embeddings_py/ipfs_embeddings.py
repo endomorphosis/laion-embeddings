@@ -1015,6 +1015,29 @@ class ipfs_embeddings_py:
             centroids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))
             pass
         else:
+            new_dataset_download_size = self.new_dataset.dataset_size            
+            embeddings_size = {}
+            for model in self.metadata["models"]:
+                embeddings_size[model] = self.index[model].dataset_size
+            largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
+            largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
+            embeddings_size["new_dataset"] = new_dataset_download_size
+            largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
+            largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
+            max_size = 50 * 1024 * 1024 # 50 MB
+            max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
+            max_splits_size = round(largest_dataset_size / max_size)
+            max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
+            if max_splits_rows > max_splits_size:
+                max_splits = max_splits_rows
+            else:
+                max_splits = max_splits_size
+            # Initialize variables
+            centroids = []
+            embeddings_np = []
+            num_items = len(self.index[largest_embeddings_dataset])
+            embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
+            embeddings_np = np.zeros((num_items, embedding_dim))
             centroids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))["train"]
             centroids = centroids_dataset["centroids"]
             centroids = np.array(centroids)            
