@@ -8,6 +8,14 @@ tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 # Sample text
 text = "What is the capital of France?"
 
+
+class ModelID:
+    def __init__(self, value):
+        self.value = value
+
+model_id = ModelID("Alibaba-NLP/gte-Qwen2-1.5B-instruct")
+
+
 # Tokenize
 encoded_input = tokenizer(text, max_length=128, padding='max_length', truncation=True, return_tensors='pt')
 
@@ -46,4 +54,8 @@ data = {
     ]
 }
 response = requests.post(url, headers=headers, json=data)
-print(response.json())
+results = response.json()
+print(results)
+
+
+
