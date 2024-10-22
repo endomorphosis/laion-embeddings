@@ -45,12 +45,13 @@ async def make_post_request_openvino(endpoint, data):
 model = "Qdrant/gte-large-onnx"
 model = "Alibaba-NLP/gte-large-en-v1.5"
 model = "aapot/bge-m3-onnx"
+model = "neoALI/bge-m3-rag-ov"
 tokenizer =  AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
 # Sample text
 text = "What is the capital of France?"
 
 # Tokenize
-encoded_input = tokenizer(text, max_length=1024, padding='max_length', truncation=True, return_tensors='pt')
+encoded_input = tokenizer(text, max_length=4095, padding='max_length', truncation=True, return_tensors='pt')
 
 # Display
 # print("Input IDs:", encoded_input['input_ids'])
@@ -68,16 +69,16 @@ data = {
     "inputs": [
         {
             "name": "attention_mask",
-            "shape": [1, 1024],
+            "shape": [1, 4095],
             "datatype": "INT64",
             "data": attention_mask
         },
         {
             "name": "input_ids",
-            "shape": [1, 1024],
+            "shape": [1, 4095],
             "datatype": "INT64",
             "data": input_ids
-        },
+        }
         # {
         #     "name": "token_type_ids",
         #     "shape": [1, 128],
@@ -90,5 +91,5 @@ data = {
 # results = response.json()
 # print(results)
 
-endpoint = "https://bge-m3-onnx-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx/infer"
+endpoint = "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer"
 asyncio.run(make_post_request_openvino(endpoint, data))

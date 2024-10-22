@@ -330,12 +330,13 @@ class ipfs_embeddings_py:
                         for resource in self.resources["https_endpoints"]:
                             if model in resource and chosen_endpoint in resource:                            
                                 max_length = resource[2]
-                        input = self.tokenizer[model](sample, max_length=max_length, padding='max_length', truncation=True, return_tensors='pt')
+                        input = self.tokenizer[model](sample, max_length=max_length, truncation=True, return_tensors='pt')
                         for item in list(input.keys()):
                             data = input[item].tolist()
+                            data_len = len(data[0])
                             this_input = {
                                 "name": item,
-                                "shape": [1, max_length],
+                                "shape": [1, data_len],
                                 "datatype": "INT64",
                                 "data": data
                             }
@@ -1143,7 +1144,7 @@ if __name__ == "__main__":
         "split": "train",
         "models": [
             # "thenlper/gte-small",
-            "aapot/bge-m3-onnx",
+            "neoALI/bge-m3-rag-ov",
             # "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         ],
         "chunk_settings": {
@@ -1158,10 +1159,17 @@ if __name__ == "__main__":
     }
     resources = {
         "https_endpoints": [
-            ["aapot/bge-m3-onnx", "https://bge-m3-onnx-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx/infer", 1024],
-            ["aapot/bge-m3-onnx", "https://bge-m3-onnx3-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx3/infer", 1024],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
-            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx0-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx0/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx1-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx1/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx2-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx2/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx3-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx3/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx4-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx4/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx5-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx5/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx6-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx6/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx7-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx7/infer", 1024]
+            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
+            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
             # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
             # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
             # ["thenlper/gte-small", "http://62.146.169.111:8081/embed-tiny", 512],
