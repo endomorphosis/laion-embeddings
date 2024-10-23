@@ -31,12 +31,13 @@ class ipfs_embeddings_py:
         self.consumer_task_done = {}
         self.producer_task_done = False
         self.save_to_disk_task_done = False
-        self.https_endpoints = {}
+        self.tei_endpoints = {}
+        self.openvino_endpoints = {}
         self.libp2p_endpoints = {}
+        self.local_endpoints = {}
         self.index =  {}
         self.queues = {}
         self.caches = {}
-        self.local_endpoints = {}
         self.chunk_cache = {}
         self.chunk_embeddings = {}
         self.cid_chunk_list = []
@@ -59,13 +60,24 @@ class ipfs_embeddings_py:
         self.resources = resources
         self.metadata = metadata
         self.index_dataset = self.index_dataset
-        self.add_https_endpoint = self.add_https_endpoint
+        self.add_tei_endpoint = self.add_tei_endpoint
         self.add_libp2p_endpoint = self.add_libp2p_endpoint
-        self.rm_https_endpoint = self.rm_https_endpoint
+        self.add_openvino_endpoint = self.add_openvino_endpoint
+        self.add_local_endpoint = self.add_local_endpoint
+        self.rm_tei_endpoint = self.rm_tei_endpoint
         self.rm_libp2p_endpoint = self.rm_libp2p_endpoint
+        self.rm_openvino_endpoint = self.rm_openvino_endpoint
+        self.rm_local_endpoint = self.rm_local_endpoint
         self.get_https_endpoint = self.get_https_endpoint
         self.get_libp2p_endpoint = self.get_libp2p_endpoint
-        self.request_https_endpoint = self.request_https_endpoint
+        self.request_tei_endpoint = self.request_tei_endpoint
+        self.request_libp2p_endpoint = self.request_libp2p_endpoint
+        self.request_openvino_endpoint = self.request_openvino_endpoint
+        self.request_local_endpoint = self.request_local_endpoint
+        self.test_tei_https_endpoint = self.test_tei_https_endpoint
+        self.test_libp2p_endpoint = self.test_libp2p_endpoint
+        self.test_openvino_endpoint = self.test_openvino_endpoint
+        self.test_local_endpoint = self.test_local_endpoint
         self.index_knn = self.index_knn
         self.index_knn_openvino = self.index_knn_openvino
         self.make_post_request = self.make_post_request
@@ -83,10 +95,22 @@ class ipfs_embeddings_py:
         self.async_generator = self.async_generator
         self.send_batch_to_endpoint = self.send_batch_to_endpoint
         # Initialize endpoints
-        for endpoint_info in resources.get('https_endpoints', []):
-            model, endpoint, context_length = endpoint_info
-            self.add_https_endpoint(model, endpoint, context_length)
-
+        if "tei_endpoints" in resources.keys():
+            for endpoint_info in resources.get('tei_endpoints', []):
+                model, endpoint, context_length = endpoint_info
+                self.add_tei_endpoint(model, endpoint, context_length)
+        if "openvino_endpoints" in resources.keys():
+            for endpoint_info in resources.get('openvino_endpoints', []):
+                model, endpoint, context_length = endpoint_info
+                self.add_openvino_endpoint(model, endpoint, context_length)
+        if "libp2p_endpoints" in resources.keys():
+            for endpoint_info in resources.get('libp2p_endpoints', []):
+                model, endpoint, context_length = endpoint_info
+                self.add_libp2p_endpoint(model, endpoint, context_length)
+        if "local_endpoints" in resources.keys():
+            for endpoint_info in resources.get('local_endpoints', []):
+                model, endpoint, context_length = endpoint_info
+                self.add_local_endpoint(model, endpoint, context_length)
         return None
 
     def load_index(self, index):
@@ -102,11 +126,18 @@ class ipfs_embeddings_py:
         columns.append("cid")
         return None
 
-    def add_https_endpoint(self, model, endpoint, context_length):
-        if model not in self.https_endpoints:
-            self.https_endpoints[model] = {}
-        self.https_endpoints[model][endpoint] = context_length
+    def add_tei_endpoint(self, model, endpoint, context_length):
+        if model not in self.tei_endpoints:
+            self.tei_endpoints[model] = {}
+        self.tei_endpoints[model][endpoint] = context_length
         # Initialize endpoint status with context_length as max batch size
+        self.endpoint_status[endpoint] = context_length
+        return None
+    
+    def add_openvino_endpoint(self, model, endpoint, context_length):
+        if model not in self.openvino_endpoints:
+            self.openvino_endpoints[model] = {}
+        self.openvino_endpoints[model][endpoint] = context_length
         self.endpoint_status[endpoint] = context_length
         return None
 
@@ -116,16 +147,35 @@ class ipfs_embeddings_py:
         self.libp2p_endpoints[model][endpoint] = context_length
         self.endpoint_status[endpoint] = context_length
         return None
+    
+    def add_local_endpoint(self, model, endpoint, context_length):
+        if model not in self.local_endpoints:
+            self.local_endpoints[model] = {}
+        self.local_endpoints[model][endpoint] = context_length
+        self.endpoint_status[endpoint] = context_length
+        return None
 
-    def rm_https_endpoint(self, model, endpoint):
-        if model in self.https_endpoints and endpoint in self.https_endpoints[model]:
-            del self.https_endpoints[model][endpoint]
+    def rm_tei_endpoint(self, model, endpoint):
+        if model in self.tei_endpoints and endpoint in self.tei_endpoints[model]:
+            del self.tei_endpoints[model][endpoint]
             del self.endpoint_status[endpoint]
         return None
 
     def rm_libp2p_endpoint(self, model, endpoint):
         if model in self.libp2p_endpoints and endpoint in self.libp2p_endpoints[model]:
             del self.libp2p_endpoints[model][endpoint]
+            del self.endpoint_status[endpoint]
+        return None
+    
+    def rm_openvino_endpoint(self, model, endpoint):
+        if model in self.openvino_endpoints and endpoint in self.openvino_endpoints[model]:
+            del self.openvino_endpoints[model][endpoint]
+            del self.endpoint_status[endpoint]
+        return None
+    
+    def rm_local_endpoint(self, model, endpoint):
+        if model in self.local_endpoints and endpoint in self.local_endpoints[model]:
+            del self.local_endpoints[model][endpoint]
             del self.endpoint_status[endpoint]
         return None
 
@@ -136,6 +186,16 @@ class ipfs_embeddings_py:
 
     def test_libp2p_endpoint(self, model, endpoint):
         if model in self.libp2p_endpoints and endpoint in self.libp2p_endpoints[model]:
+            return True
+        return False
+    
+    def test_openvino_endpoint(self, model, endpoint):
+        if model in self.openvino_endpoints and endpoint in self.openvino_endpoints[model]:
+            return True
+        return False
+    
+    def test_local_endpoint(self, model, endpoint):
+        if model in self.local_endpoints and endpoint in self.local_endpoints[model]:
             return True
         return False
 
@@ -149,9 +209,30 @@ class ipfs_embeddings_py:
             return self.libp2p_endpoints[model]
         return None
 
-    def request_https_endpoint(self, model, batch_size):
-        if model in self.https_endpoints:
-            for endpoint in self.https_endpoints[model]:
+    def request_tei_endpoint(self, model, batch_size):
+        if model in self.tei_endpoints:
+            for endpoint in self.tei_endpoints[model]:
+                if self.endpoint_status[endpoint] >= batch_size:
+                    return endpoint
+        return None
+    
+    def request_openvino_endpoint(self, model, batch_size):
+        if model in self.openvino_endpoints:
+            for endpoint in self.openvino_endpoints[model]:
+                if self.endpoint_status[endpoint] >= batch_size:
+                    return endpoint
+        return None
+    
+    def request_libp2p_endpoint(self, model, batch_size):
+        if model in self.libp2p_endpoints:
+            for endpoint in self.libp2p_endpoints[model]:
+                if self.endpoint_status[endpoint] >= batch_size:
+                    return endpoint
+        return None
+    
+    def request_local_endpoint(self, model, batch_size):
+        if model in self.local_endpoints:
+            for endpoint in self.local_endpoints[model]:
                 if self.endpoint_status[endpoint] >= batch_size:
                     return endpoint
         return None
@@ -176,7 +257,7 @@ class ipfs_embeddings_py:
         exponent = 0
         batch = []
         batch_size = 2**exponent
-        token_length_size = round(self.https_endpoints[model][endpoint] * 0.99)
+        token_length_size = round(self.tei_endpoints[model][endpoint] * 0.99)
         test_tokens = []
         if model not in self.tokenizer.keys():
             self.tokenizer[model] = {}
@@ -190,7 +271,6 @@ class ipfs_embeddings_py:
             find_token_int = find_token_int[1]
         elif len(find_token_int) == 1:
             find_token_int = find_token_int[0]
-
         for i in range(token_length_size):
              test_tokens.append(find_token_int)
         test_text = self.tokenizer[model]["cpu"].decode(test_tokens)
@@ -736,6 +816,7 @@ class ipfs_embeddings_py:
                 outputs = self.local_endpoints[model_name][endpoint](**inputs)
                 query_response = outputs.last_hidden_state.mean(dim=1).tolist()  # Use mean of token embeddings
             results = [query_response[0]]
+            return results
 
     async def save_checkpoints_to_disk(self, dataset, dst_path, models):
         self.saved = False
@@ -1210,7 +1291,9 @@ if __name__ == "__main__":
         "dst_path": "/opt/app-root/data/tmp",
     }
     resources = {
-        "https_endpoints": [
+        "openvino_endpoints": [
+        ],
+        "tei_endpoints": [
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
