@@ -316,6 +316,13 @@ class ipfs_embeddings_py:
                 fail_reason = e.args[0]
                 embed_fail = True
                 if isinstance(e, ValueError) or isinstance(e, Exception):
+                    if "CUDA out of memory" in str(fail_reason):
+                        if exponent == 0:
+                            self.endpoint_status[endpoint] = 0
+                            return 1
+                        else:
+                            self.endpoint_status[endpoint] = 2**(exponent-1)
+                            return 2 ** (exponent-1)
                     if "413" in str(fail_reason):
                         error = fail_reason.args[0]
                         if error.status == 413:
@@ -404,8 +411,7 @@ class ipfs_embeddings_py:
                 if chosen_endpoint not in self.local_endpoints[model].keys():
                     self.local_endpoints[model][chosen_endpoint] = AutoModel.from_pretrained(model, device=chosen_endpoint)
                     self.tokenizer[model][chosen_endpoint] = AutoTokenizer.from_pretrained(model, device=chosen_endpoint, use_fast=True)
-                chosen_endpoint = self.local_endpoints[model][chosen_endpoint]
-                query_response = self.make_local_request(chosen_endpoint, this_query)
+                query_response = await self.make_local_request(model, chosen_endpoint, samples)
                 knn_stack = query_response
                 return knn_stack
             else:
@@ -456,14 +462,15 @@ class ipfs_embeddings_py:
     
     async def make_local_request(self, model, endpoint, data):
         device = torch.device(endpoint)
-        inputs = self.tokenizer[model][endpoint](data, return_tensors="pt").to(device)
+        inputs = self.tokenizer[model][endpoint](data, return_tensors="pt", padding=True, truncation=True).to(device)
         self.local_endpoints[model][endpoint].to(device).eval()
         with torch.no_grad():
             outputs = self.local_endpoints[model][endpoint](**inputs)
             query_response = outputs.last_hidden_state.mean(dim=1).tolist()  # Use mean of token embeddings
-        results = [query_response[0]]
-        del inputs, outputs  # Unallocate inputs and outputs
-        torch.cuda.empty_cache()  # Free up GPU memory
+            results = query_response  # Return the entire batch of results
+            del inputs, outputs  # Unallocate inputs and outputs
+            torch.cuda.synchronize()  # Ensure all operations are complete
+            torch.cuda.empty_cache()  # Free up GPU memory
         return results
 
     async def make_post_request(self, endpoint, data):
@@ -736,7 +743,14 @@ class ipfs_embeddings_py:
             for model, model_queues in queues.items():
                 if len(model_queues) > 0:
                     if this_cid not in self.all_cid_set[model]:
-                        endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
+                        model_queue_lengths = {k: v.qsize() for k, v in model_queues.items()}
+                        ## if all model queues are empty, choose 
+                        if all(value == 0 for value in model_queue_lengths.values()):
+                            chosen_queue = random.choice(list(model_queues.keys()))
+                        else:
+                            chosen_queue = min(model_queue_lengths, key=model_queue_lengths.get)
+                        queue = model_queues[chosen_queue]          
+                        # endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
                         while queue.full():
                             await asyncio.sleep(0.1)
                         queue.put_nowait(item)  # Non-blocking put
@@ -822,6 +836,7 @@ class ipfs_embeddings_py:
                 print(f"Received embeddings for {len(results)} items from model {model_name} at endpoint {endpoint}")
                 return results
         else:
+            print(f"Sending batch of size {len(batch)} to model {model_name} at endpoint {endpoint}")
             model_context_length = round(self.local_endpoints[model_name][endpoint].config.max_position_embeddings * 0.99)
             new_batch = []
             if model_name not in self.tokenizer.keys():
@@ -838,7 +853,8 @@ class ipfs_embeddings_py:
                         new_batch.append(unencode_item)
                     else:
                         new_batch.append(item[column])
-            results = self.make_local_request(model_name, endpoint, new_batch)
+            results = await self.make_local_request(model_name, endpoint, new_batch)
+            print(f"Received embeddings for {len(results)} items from model {model_name} at endpoint {endpoint}")
             return results
 
     async def save_checkpoints_to_disk(self, dataset, dst_path, models):
@@ -944,10 +960,10 @@ class ipfs_embeddings_py:
                     for gpu in range(gpus):
                         self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
                         self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
-                        self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue()
+                        self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
                         batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
-                        self.batch_sizes[model][endpoint] = batch_size
-                        consumer_tasks[(model, gpu)] = asyncio.create_task(self.consumer(self.queues[model]["cuda:" + str(gpu)], column, 1, model, "cuda:" + str(gpu)))
+                        self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
+                        consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.consumer(self.queues[model]["cuda:" + str(gpu)], column, batch_size, model, "cuda:" + str(gpu)))
                 else:
                     self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
                     self.queues[model]["cpu"] = asyncio.Queue()
@@ -969,7 +985,7 @@ class ipfs_embeddings_py:
         self.cid_set = set.intersection(*self.all_cid_set.values())
         producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
         save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
-        await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
+        await asyncio.gather(producer_task, *consumer_tasks.values(), save_task)
         self.save_checkpoints_to_disk(dataset, dst_path, models)
         return None 
     
