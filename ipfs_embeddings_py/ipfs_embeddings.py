@@ -180,7 +180,7 @@ class ipfs_embeddings_py:
         return None
 
     def test_tei_https_endpoint(self, model, endpoint):
-        if model in self.https_endpoints and endpoint in self.https_endpoints[model]:
+        if model in self.tei_endpoints and endpoint in self.tei_endpoints[model]:
             return True
         return False
 
@@ -200,8 +200,8 @@ class ipfs_embeddings_py:
         return False
 
     def get_https_endpoint(self, model):
-        if model in self.https_endpoints:
-            return self.https_endpoints[model]
+        if model in self.tei_endpoints:
+            return self.tei_endpoints[model]
         return None
 
     def get_libp2p_endpoint(self, model):
@@ -257,14 +257,17 @@ class ipfs_embeddings_py:
         exponent = 0
         batch = []
         batch_size = 2**exponent
-        token_length_size = round(self.tei_endpoints[model][endpoint] * 0.99)
+        if "cuda" in endpoint or "cpu" in endpoint:
+            token_length_size = round(self.local_endpoints[model][endpoint].config.max_position_embeddings * 0.99)
+        else:
+            token_length_size = round(self.tei_endpoints[model][endpoint] * 0.99)
         test_tokens = []
         if model not in self.tokenizer.keys():
             self.tokenizer[model] = {}
         if "cpu" not in self.tokenizer[model].keys():
             self.tokenizer[model]["cpu"] = AutoTokenizer.from_pretrained(model, device='cpu')
         find_token_str = str("z")
-        find_token_int = self.tokenizer[model].encode(find_token_str)
+        find_token_int = self.tokenizer[model]["cpu"].encode(find_token_str)
         if len(find_token_int) == 3:
             find_token_int = find_token_int[1]
         elif len(find_token_int) == 2:
@@ -296,7 +299,7 @@ class ipfs_embeddings_py:
                                             expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
                                             given = int(error_content["error"].split("Given: ")[1])
                                             difference = given - expected
-                                            self.https_endpoints[model][endpoint] = token_length_size - difference
+                                            self.tei_endpoints[model][endpoint] = token_length_size - difference
                                             return await self.max_batch_size(model, endpoint)
                         if "502" in str(fail_reason):
                             self.endpoint_status[endpoint] = 0
@@ -324,7 +327,7 @@ class ipfs_embeddings_py:
                                         expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
                                         given = int(error_content["error"].split("Given: ")[1])
                                         difference = given - expected
-                                        self.https_endpoints[model][endpoint] = self.https_endpoints[model][endpoint] - difference
+                                        self.tei_endpoints[model][endpoint] = self.tei_endpoints[model][endpoint] - difference
                                         results = await self.max_batch_size(model, endpoint)
                                         return results
                         pass
@@ -336,7 +339,10 @@ class ipfs_embeddings_py:
                         return 0
                 pass
         self.endpoint_status[endpoint] = 2**(exponent-1)
-        return 2**(exponent-1)
+        if exponent == 0:
+            return 1
+        else:
+            return 2**(exponent-1)
 
     async def index_knn(self, samples, model, chosen_endpoint=None):
         knn_stack = []
@@ -390,20 +396,18 @@ class ipfs_embeddings_py:
             samples = [samples]
         if type(samples) is list or type(samples) is iter:
             this_query = {"inputs": samples}
-            if chosen_endpoint is None:
-                if "chosen_endpoint" not in list(dir(self)) or self.chosen_local_endpoint is None or self.chosen_local_endpoint_model != model:
-                    self.chosen_local_endpoint_model = model
-                    self.chosen_local_endpoint = AutoModel.from_pretrained(model)
-                    if model not in self.tokenizer.keys():
-                        self.tokenizer[model] = {}
-                    if "cpu" not in self.tokenizer[model].keys():
-                        self.tokenizer[model]["cpu"] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
-                chosen_endpoint = self.chosen_local_endpoint
-                chosen_endpoint.eval()
-                inputs = self.tokenizer[model]["cpu"](samples, return_tensors="pt")
-                with torch.no_grad():
-                    query_response = chosen_endpoint(**inputs).last_hidden_state
-                    query_response = query_response.tolist()[0]
+            if "cuda" in chosen_endpoint or "cpu" in chosen_endpoint:
+                if model not in self.local_endpoints.keys():
+                    self.local_endpoints[model] = {}
+                if model not in self.tokenizer.keys():
+                    self.tokenizer[model] = {}
+                if chosen_endpoint not in self.local_endpoints[model].keys():
+                    self.local_endpoints[model][chosen_endpoint] = AutoModel.from_pretrained(model, device=chosen_endpoint)
+                    self.tokenizer[model][chosen_endpoint] = AutoTokenizer.from_pretrained(model, device=chosen_endpoint, use_fast=True)
+                chosen_endpoint = self.local_endpoints[model][chosen_endpoint]
+                query_response = self.make_local_request(chosen_endpoint, this_query)
+                knn_stack = query_response
+                return knn_stack
             else:
                 try:
                     if model not in self.tokenizer.keys():
@@ -416,7 +420,7 @@ class ipfs_embeddings_py:
                     inputs = []
                     for sample in samples:
                         max_length = 0
-                        for resource in self.resources["https_endpoints"]:
+                        for resource in self.resources["tei_endpoints"]:
                             if model in resource and chosen_endpoint in resource:                            
                                 max_length = resource[2]
                         input = self.tokenizer[model]["cpu"](sample, max_length=max_length, truncation=True, return_tensors='pt')
@@ -449,6 +453,18 @@ class ipfs_embeddings_py:
                 knn_stack = [vectors]
             pass
         return knn_stack
+    
+    async def make_local_request(self, model, endpoint, data):
+        device = torch.device(endpoint)
+        inputs = self.tokenizer[model][endpoint](data, return_tensors="pt").to(device)
+        self.local_endpoints[model][endpoint].to(device).eval()
+        with torch.no_grad():
+            outputs = self.local_endpoints[model][endpoint](**inputs)
+            query_response = outputs.last_hidden_state.mean(dim=1).tolist()  # Use mean of token embeddings
+        results = [query_response[0]]
+        del inputs, outputs  # Unallocate inputs and outputs
+        torch.cuda.empty_cache()  # Free up GPU memory
+        return results
 
     async def make_post_request(self, endpoint, data):
         headers = {'Content-Type': 'application/json'}
@@ -517,24 +533,37 @@ class ipfs_embeddings_py:
                 return ValueError(f"Unexpected error: {str(e)}")
 
     def choose_endpoint(self, model):
-        https_endpoints = self.get_https_endpoint(model)
+        tei_endpoints = self.get_https_endpoint(model)
         libp2p_endpoints = self.get_libp2p_endpoint(model)
         filtered_libp2p_endpoints = {k: v for k, v in self.endpoint_status.items() if v >= 1 and libp2p_endpoints is not None and k in list(libp2p_endpoints.keys())}
-        filtered_https_endpoints = {k: v for k, v in self.endpoint_status.items() if v >= 1 and https_endpoints is not None and k in list(https_endpoints.keys())}
-        if not filtered_https_endpoints and not filtered_libp2p_endpoints:
+        filtered_tei_endpoints = {k: v for k, v in self.endpoint_status.items() if v >= 1 and tei_endpoints is not None and k in list(tei_endpoints.keys())}
+        if not filtered_tei_endpoints and not filtered_libp2p_endpoints:
             return None
         else:
             this_endpoint = None
-            if len(list(filtered_https_endpoints.keys())) > 0:
-                this_endpoint = random.choice(list(filtered_https_endpoints.keys()))
+            if len(list(filtered_tei_endpoints.keys())) > 0:
+                this_endpoint = random.choice(list(filtered_tei_endpoints.keys()))
             elif len(list(filtered_libp2p_endpoints.keys())) > 0:
                 this_endpoint = random.choice(list(filtered_libp2p_endpoints.keys()))
             print("chosen endpoint for " + model + " is " + this_endpoint)
             return this_endpoint
 
-    def get_endpoints(self, model):
-        endpoints_dict = self.https_endpoints.get(model, {})
-        filtered_endpoints = [endpoint for endpoint in endpoints_dict if self.endpoint_status.get(endpoint, 0) >= 1]
+    def get_endpoints(self, model, endpoint_type=None):
+        if endpoint_type is None:
+            endpoints_dict = self.tei_endpoints.get(model, {})
+            filtered_endpoints = [endpoint for endpoint in endpoints_dict if self.endpoint_status.get(endpoint, 0) >= 1]
+        if endpoint_type == "tei":
+            endpoints_dict = self.tei_endpoints.get(model, {})
+            filtered_endpoints = [endpoint for endpoint in endpoints_dict if self.endpoint_status.get(endpoint, 0) >= 1]
+        if endpoint_type == "openvino":
+            endpoints_dict = self.openvino_endpoints.get(model, {})
+            filtered_endpoints = [endpoint for endpoint in endpoints_dict if self.endpoint_status.get(endpoint, 0) >= 1]
+        if endpoint_type == "libp2p":
+            endpoints_dict = self.libp2p_endpoints.get(model, {})
+            filtered_endpoints = [endpoint for endpoint in endpoints_dict if self.endpoint_status.get(endpoint, 0) >= 1]
+        if endpoint_type == "local":
+            endpoints_dict = self.local_endpoints.get(model, {})
+            filtered_endpoints = [endpoint for endpoint in endpoints_dict if self.endpoint_status.get(endpoint, 0) >= 1]
         return filtered_endpoints
 
     async def async_generator(self, iterable):
@@ -716,7 +745,7 @@ class ipfs_embeddings_py:
     async def send_batch_to_endpoint(self, batch, column, model_name, endpoint):
         if "cuda" not in endpoint and "cpu" not in endpoint:
             print(f"Sending batch of size {len(batch)} to model {model_name} at endpoint {endpoint}")
-            model_context_length = self.https_endpoints[model_name][endpoint]
+            model_context_length = self.tei_endpoints[model_name][endpoint]
             new_batch = []
             if model_name not in self.tokenizer.keys():
                 self.tokenizer[model_name] = {}
@@ -754,10 +783,10 @@ class ipfs_embeddings_py:
                                     expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
                                     given = int(error_content["error"].split("Given: ")[1])
                                     difference = given - expected
-                                    self.https_endpoints[model_name][endpoint] = model_context_length - difference
+                                    self.tei_endpoints[model_name][endpoint] = model_context_length - difference
                                     for item in new_batch:
                                         index = new_batch.index(item)
-                                        item = { column : item[:self.https_endpoints[model_name][endpoint]] }
+                                        item = { column : item[:self.tei_endpoints[model_name][endpoint]] }
                                         new_batch[index] = item
                                     results = await self.send_batch_to_endpoint(new_batch, column, model_name, endpoint)
                                     return results
@@ -793,7 +822,7 @@ class ipfs_embeddings_py:
                 print(f"Received embeddings for {len(results)} items from model {model_name} at endpoint {endpoint}")
                 return results
         else:
-            model_context_length = self.local_endpoints[model_name][endpoint].config.max_position_embeddings
+            model_context_length = round(self.local_endpoints[model_name][endpoint].config.max_position_embeddings * 0.99)
             new_batch = []
             if model_name not in self.tokenizer.keys():
                 self.tokenizer[model_name] = {}
@@ -809,13 +838,7 @@ class ipfs_embeddings_py:
                         new_batch.append(unencode_item)
                     else:
                         new_batch.append(item[column])
-            device = torch.device(endpoint)
-            inputs = self.tokenizer[model_name][endpoint](new_batch, return_tensors="pt").to(device)
-            self.local_endpoints[model_name][endpoint].to(device).eval()
-            with torch.no_grad():
-                outputs = self.local_endpoints[model_name][endpoint](**inputs)
-                query_response = outputs.last_hidden_state.mean(dim=1).tolist()  # Use mean of token embeddings
-            results = [query_response[0]]
+            results = self.make_local_request(model_name, endpoint, new_batch)
             return results
 
     async def save_checkpoints_to_disk(self, dataset, dst_path, models):
@@ -895,7 +918,7 @@ class ipfs_embeddings_py:
         consumer_tasks = {}
         batch_sizes = {}
         if models is None:
-            models = list(self.https_endpoints.keys())
+            models = list(self.tei_endpoints.keys())
         for model in models:
             if model not in self.queues:
                 self.queues[model] = {}
@@ -909,6 +932,8 @@ class ipfs_embeddings_py:
         consumer_tasks = {}
         for model in models:
             endpoints = self.get_endpoints(model)
+            if model not in self.batch_sizes:
+                self.batch_sizes[model] = {}
             if not endpoints:
                 ## get gpus for local models
                 if model not in self.tokenizer.keys():
@@ -920,6 +945,8 @@ class ipfs_embeddings_py:
                         self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
                         self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
                         self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue()
+                        batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
+                        self.batch_sizes[model][endpoint] = batch_size
                         consumer_tasks[(model, gpu)] = asyncio.create_task(self.consumer(self.queues[model]["cuda:" + str(gpu)], column, 1, model, "cuda:" + str(gpu)))
                 else:
                     self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
