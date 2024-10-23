@@ -471,6 +471,8 @@ class ipfs_embeddings_py:
             del inputs, outputs  # Unallocate inputs and outputs
             torch.cuda.synchronize()  # Ensure all operations are complete
             torch.cuda.empty_cache()  # Free up GPU memory
+        # self.local_endpoints[model][endpoint].to('cpu')  # Move model back to CPU
+        torch.cuda.empty_cache()  # Free up GPU memory again
         return results
 
     async def make_post_request(self, endpoint, data):
@@ -960,6 +962,7 @@ class ipfs_embeddings_py:
                     for gpu in range(gpus):
                         self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
                         self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
+                        torch.cuda.empty_cache()  # Free up unused memory
                         self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
                         batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
                         self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
