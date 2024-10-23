@@ -179,7 +179,9 @@ class ipfs_embeddings_py:
         token_length_size = round(self.https_endpoints[model][endpoint] * 0.99)
         test_tokens = []
         if model not in self.tokenizer.keys():
-            self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu')
+            self.tokenizer[model] = {}
+        if "cpu" not in self.tokenizer[model].keys():
+            self.tokenizer[model]["cpu"] = AutoTokenizer.from_pretrained(model, device='cpu')
         find_token_str = str("z")
         find_token_int = self.tokenizer[model].encode(find_token_str)
         if len(find_token_int) == 3:
@@ -191,7 +193,7 @@ class ipfs_embeddings_py:
 
         for i in range(token_length_size):
              test_tokens.append(find_token_int)
-        test_text = self.tokenizer[model].decode(test_tokens)
+        test_text = self.tokenizer[model]["cpu"].decode(test_tokens)
         if endpoint is None:
             endpoint = self.choose_endpoint(model)
         while not embed_fail:
@@ -271,13 +273,15 @@ class ipfs_embeddings_py:
                     self.chosen_local_endpoint_model = model
                     self.chosen_local_endpoint = AutoModel.from_pretrained(model)
                     if model not in self.tokenizer.keys():
-                        self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
+                        self.tokenizer[model] = {}
+                    if "cpu" not in self.tokenizer[model].keys():
+                        self.tokenizer[model]["cpu"] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
                 chosen_endpoint = self.chosen_local_endpoint
                 chosen_endpoint.eval()
-                inputs = self.tokenizer[model](samples, return_tensors="pt")
+                inputs = self.tokenizer[model]["cpu"](samples, return_tensors="pt")
                 with torch.no_grad():
-                    query_response = chosen_endpoint(**inputs).last_hidden_state
-                    query_response = query_response.tolist()[0]
+                    output = chosen_endpoint(**inputs).last_hidden_state.mean(dim=1).tolist()
+                    query_response = output[0]
             else:
                 try:
                     query_response = await self.make_post_request(chosen_endpoint, this_query)
@@ -311,17 +315,21 @@ class ipfs_embeddings_py:
                     self.chosen_local_endpoint_model = model
                     self.chosen_local_endpoint = AutoModel.from_pretrained(model)
                     if model not in self.tokenizer.keys():
-                        self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
+                        self.tokenizer[model] = {}
+                    if "cpu" not in self.tokenizer[model].keys():
+                        self.tokenizer[model]["cpu"] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
                 chosen_endpoint = self.chosen_local_endpoint
                 chosen_endpoint.eval()
-                inputs = self.tokenizer[model](samples, return_tensors="pt")
+                inputs = self.tokenizer[model]["cpu"](samples, return_tensors="pt")
                 with torch.no_grad():
                     query_response = chosen_endpoint(**inputs).last_hidden_state
                     query_response = query_response.tolist()[0]
             else:
                 try:
                     if model not in self.tokenizer.keys():
-                        self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
+                        self.tokenizer[model] = {}
+                    if "cpu" not in self.tokenizer[model].keys():
+                        self.tokenizer[model]["cpu"] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
                         pass
                     if len(samples) > 1:
                         raise ValueError("samples must be a list of one item")
@@ -331,7 +339,7 @@ class ipfs_embeddings_py:
                         for resource in self.resources["https_endpoints"]:
                             if model in resource and chosen_endpoint in resource:                            
                                 max_length = resource[2]
-                        input = self.tokenizer[model](sample, max_length=max_length, truncation=True, return_tensors='pt')
+                        input = self.tokenizer[model]["cpu"](sample, max_length=max_length, truncation=True, return_tensors='pt')
                         for item in list(input.keys()):
                             data = input[item].tolist()
                             data_len = len(data[0])
@@ -547,15 +555,17 @@ class ipfs_embeddings_py:
         if step_size is None:
             step_size = 256
         if tokenizer is None:
-            if len(list(self.tokenizer.keys())) == 0:
-                self.tokenizer = AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
+            if embed_model not in list(self.tokenizer.keys()):
+                self.tokenizer[embed_model] = {}
+            if "cpu" not in self.tokenizer[embed_model].keys():                
+                self.tokenizer[embed_model]["cpu"] = AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
             else:
-                tokenizer = self.tokenizer[list(self.tokenizer.keys())[0]]
+                tokenizer = self.tokenizer[embed_model]["cpu"]
         if method is None:
-            fixed_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "fixed", 512, 8, 256, self.metadata["models"][0]) 
-            semantic_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "semantic", 512, 8, 256, self.metadata["models"][0])
-            sentences_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "sentences", 512, 8, 256, self.metadata["models"][0] )
-            sliding_window_chunk_list = self.chunker.chunk(content, self.tokenizer[list(self.tokenizer.keys())[0]], "sliding_window", 512, 8, 256, self.metadata["models"][0])
+            fixed_chunk_list = self.chunker.chunk(content, self.tokenizer[embed_model]["cpu"], "fixed", 512, 8, 256, self.metadata["models"][0]) 
+            semantic_chunk_list = self.chunker.chunk(content, self.tokenizer[embed_model]["cpu"], "semantic", 512, 8, 256, self.metadata["models"][0])
+            sentences_chunk_list = self.chunker.chunk(content, self.tokenizer[embed_model]["cpu"], "sentences", 512, 8, 256, self.metadata["models"][0] )
+            sliding_window_chunk_list = self.chunker.chunk(content, self.tokenizer[embed_model]["cpu"], "sliding_window", 512, 8, 256, self.metadata["models"][0])
             content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
         else:
             content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
@@ -624,54 +634,69 @@ class ipfs_embeddings_py:
             return item
 
     async def send_batch_to_endpoint(self, batch, column, model_name, endpoint):
-        print(f"Sending batch of size {len(batch)} to model {model_name} at endpoint {endpoint}")
-        model_context_length = self.https_endpoints[model_name][endpoint]
-        new_batch = []
-        if model_name not in self.tokenizer.keys():
-            self.tokenizer[model_name] = AutoTokenizer.from_pretrained(model_name, device='cpu')
-        for item in batch:
-            if column in list(item.keys()):
-                this_item_tokens = len(self.tokenizer[model_name].encode(item[column]))
-                if this_item_tokens > model_context_length:
-                    encoded_item = self.tokenizer[model_name](item[column], return_tensors="pt")["input_ids"].tolist()[0]
-                    truncated_encoded_item = encoded_item[:model_context_length]
-                    unencode_item = self.tokenizer[model_name].decode(truncated_encoded_item)
-                    new_batch.append(unencode_item)
-                else:
-                    new_batch.append(item[column])
-        results = None
-        try:
-            results = await self.index_knn_openvino(new_batch, model_name, endpoint)
-        except Exception as e:
-            print(e)
-            pass
-            # raise e
-        if isinstance(results, ValueError):
-            error = results.args[0]
-            strerror = None
-            if "strerror" in dir(error):
-                strerror = error.strerror
-            if "status" in dir(error):
-                if error.status == 413:
-                    if error.reason == "Payload Too Large":
-                        error_content = error.content._buffer[0].decode("utf-8")
-                        error_content = json.loads(error_content)
-                        if "error" in error_content.keys() and "error_type" in error_content.keys():
-                            if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
-                                expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
-                                given = int(error_content["error"].split("Given: ")[1])
-                                difference = given - expected
-                                self.https_endpoints[model_name][endpoint] = model_context_length - difference
-                                for item in new_batch:
-                                    index = new_batch.index(item)
-                                    item = { column : item[:self.https_endpoints[model_name][endpoint]] }
-                                    new_batch[index] = item
-                                results = await self.send_batch_to_endpoint(new_batch, column, model_name, endpoint)
-                                return results
-                            if "Validation" in error_content["error_type"] and "cannot be empty":
-                                print("error: " + error_content["error"])
-                                return None
-                elif error.status == 504 or error.status == 502 or  "can not write request body" in str(error):
+        if "cuda" not in endpoint and "cpu" not in endpoint:
+            print(f"Sending batch of size {len(batch)} to model {model_name} at endpoint {endpoint}")
+            model_context_length = self.https_endpoints[model_name][endpoint]
+            new_batch = []
+            if model_name not in self.tokenizer.keys():
+                self.tokenizer[model_name] = {}
+            if "cpu" not in self.tokenizer[model_name].keys():
+                self.tokenizer[model_name]["cpu"] = AutoTokenizer.from_pretrained(model_name, device='cpu')
+            for item in batch:
+                if column in list(item.keys()):
+                    this_item_tokens = len(self.tokenizer[model_name]["cpu"].encode(item[column]))
+                    if this_item_tokens > model_context_length:
+                        encoded_item = self.tokenizer[model_name]["cpu"](item[column], return_tensors="pt")["input_ids"].tolist()[0]
+                        truncated_encoded_item = encoded_item[:model_context_length]
+                        unencode_item = self.tokenizer[model_name]["cpu"].decode(truncated_encoded_item)
+                        new_batch.append(unencode_item)
+                    else:
+                        new_batch.append(item[column])
+            results = None
+            try:
+                results = await self.index_knn_openvino(new_batch, model_name, endpoint)
+            except Exception as e:
+                print(e)
+                pass
+                # raise e
+            if isinstance(results, ValueError):
+                error = results.args[0]
+                strerror = None
+                if "strerror" in dir(error):
+                    strerror = error.strerror
+                if "status" in dir(error):
+                    if error.status == 413:
+                        if error.reason == "Payload Too Large":
+                            error_content = error.content._buffer[0].decode("utf-8")
+                            error_content = json.loads(error_content)
+                            if "error" in error_content.keys() and "error_type" in error_content.keys():
+                                if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
+                                    expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
+                                    given = int(error_content["error"].split("Given: ")[1])
+                                    difference = given - expected
+                                    self.https_endpoints[model_name][endpoint] = model_context_length - difference
+                                    for item in new_batch:
+                                        index = new_batch.index(item)
+                                        item = { column : item[:self.https_endpoints[model_name][endpoint]] }
+                                        new_batch[index] = item
+                                    results = await self.send_batch_to_endpoint(new_batch, column, model_name, endpoint)
+                                    return results
+                                if "Validation" in error_content["error_type"] and "cannot be empty":
+                                    print("error: " + error_content["error"])
+                                    return None
+                    elif error.status == 504 or error.status == 502 or  "can not write request body" in str(error):
+                        # self.endpoint_status[endpoint] = 0
+                        new_endpoint = self.choose_endpoint(model_name)
+                        if new_endpoint:
+                            # new_queue = self.queues[model_name][new_endpoint]
+                            # for item in batch:
+                            #     await new_queue.put(item)
+                            return await self.send_batch_to_endpoint(batch, column, model_name, new_endpoint)
+                        else:
+                            return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
+                    elif error.status == 400 or error.status == 404:
+                        return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
+                elif "Can not write request body" in error.strerror or "Timeout" in error.strerror:
                     # self.endpoint_status[endpoint] = 0
                     new_endpoint = self.choose_endpoint(model_name)
                     if new_endpoint:
@@ -681,24 +706,36 @@ class ipfs_embeddings_py:
                         return await self.send_batch_to_endpoint(batch, column, model_name, new_endpoint)
                     else:
                         return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-                elif error.status == 400 or error.status == 404:
+                raise Exception(error) 
+            else:
+                if results is None:
                     return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-            elif "Can not write request body" in error.strerror or "Timeout" in error.strerror:
-                # self.endpoint_status[endpoint] = 0
-                new_endpoint = self.choose_endpoint(model_name)
-                if new_endpoint:
-                    # new_queue = self.queues[model_name][new_endpoint]
-                    # for item in batch:
-                    #     await new_queue.put(item)
-                    return await self.send_batch_to_endpoint(batch, column, model_name, new_endpoint)
-                else:
-                    return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-            raise Exception(error) 
+                print(f"Received embeddings for {len(results)} items from model {model_name} at endpoint {endpoint}")
+                return results
         else:
-            if results is None:
-                return await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-            print(f"Received embeddings for {len(results)} items from model {model_name} at endpoint {endpoint}")
-            return results
+            model_context_length = self.local_endpoints[model_name][endpoint].config.max_position_embeddings
+            new_batch = []
+            if model_name not in self.tokenizer.keys():
+                self.tokenizer[model_name] = {}
+            if endpoint not in self.tokenizer[model_name].keys():
+                self.tokenizer[model_name][endpoint] = AutoTokenizer.from_pretrained(model_name, device=endpoint)
+            for item in batch:
+                if column in list(item.keys()):
+                    this_item_tokens = len(self.tokenizer[model_name][endpoint].encode(item[column]))
+                    if this_item_tokens > model_context_length:
+                        encoded_item = self.tokenizer[model_name][endpoint](item[column], return_tensors="pt")["input_ids"].tolist()[0]
+                        truncated_encoded_item = encoded_item[:model_context_length]
+                        unencode_item = self.tokenizer[model_name][endpoint].decode(truncated_encoded_item)
+                        new_batch.append(unencode_item)
+                    else:
+                        new_batch.append(item[column])
+            device = torch.device(endpoint)
+            inputs = self.tokenizer[model_name][endpoint](new_batch, return_tensors="pt").to(device)
+            self.local_endpoints[model_name][endpoint].to(device).eval()
+            with torch.no_grad():
+                outputs = self.local_endpoints[model_name][endpoint](**inputs)
+                query_response = outputs.last_hidden_state.mean(dim=1).tolist()  # Use mean of token embeddings
+            results = [query_response[0]]
 
     async def save_checkpoints_to_disk(self, dataset, dst_path, models):
         self.saved = False
@@ -794,18 +831,19 @@ class ipfs_embeddings_py:
             if not endpoints:
                 ## get gpus for local models
                 if model not in self.tokenizer.keys():
-                    self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
+                    self.tokenizer[model] = {}
                 gpus = torch.cuda.device_count()
-                self.local_endpoints[model] = []
+                self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
                 if gpus > 0:
                     for gpu in range(gpus):
-                        self.local_endpoints[model][gpu] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
-                        self.queues[model][gpu] = asyncio.Queue()
-                        consumer_tasks[(model, gpu)] = asyncio.create_task(self.consumer(self.queues[model]["local"], column, 1, model, "local"))
+                        self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
+                        self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
+                        self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue()
+                        consumer_tasks[(model, gpu)] = asyncio.create_task(self.consumer(self.queues[model]["cuda:" + str(gpu)], column, 1, model, "cuda:" + str(gpu)))
                 else:
                     self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
                     self.queues[model]["cpu"] = asyncio.Queue()
-                    consumer_tasks[(model, "cpu")] = asyncio.create_task(self.consumer(self.queues[model]["local"], column, 1, model, "local"))
+                    consumer_tasks[(model, "cpu")] = asyncio.create_task(self.consumer(self.queues[model]["cpu"], column, 1, model, "cpu"))
             else:
                 for endpoint in endpoints:
                     batch_size = 0
