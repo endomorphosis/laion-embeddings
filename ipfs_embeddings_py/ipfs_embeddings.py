@@ -36,6 +36,7 @@ class ipfs_embeddings_py:
         self.index =  {}
         self.queues = {}
         self.caches = {}
+        self.local_endpoints = {}
         self.chunk_cache = {}
         self.chunk_embeddings = {}
         self.cid_chunk_list = []
@@ -702,7 +703,7 @@ class ipfs_embeddings_py:
     async def save_checkpoints_to_disk(self, dataset, dst_path, models):
         self.saved = False
         while True:
-            await asyncio.sleep(3600)
+            await asyncio.sleep(60)
             if self.saved == False:
                 if not os.path.exists(os.path.join(dst_path, "checkpoints")):
                     os.makedirs(os.path.join(dst_path, "checkpoints"))
@@ -791,27 +792,40 @@ class ipfs_embeddings_py:
         for model in models:
             endpoints = self.get_endpoints(model)
             if not endpoints:
-                continue
-            for endpoint in endpoints:
-                batch_size = 0
-                if model not in self.batch_sizes:
-                    self.batch_sizes[model] = {}
-                if model not in self.queues:
-                    self.queues[model] = {}
-                if endpoint not in list(self.batch_sizes[model].keys()):
-                    batch_size = await self.max_batch_size(model, endpoint)
-                    self.batch_sizes[model][endpoint] = batch_size
-                if self.batch_sizes[model][endpoint] > 0:
-                    self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
-                    consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                ## get gpus for local models
+                if model not in self.tokenizer.keys():
+                    self.tokenizer[model] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
+                gpus = torch.cuda.device_count()
+                self.local_endpoints[model] = []
+                if gpus > 0:
+                    for gpu in range(gpus):
+                        self.local_endpoints[model][gpu] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
+                        self.queues[model][gpu] = asyncio.Queue()
+                        consumer_tasks[(model, gpu)] = asyncio.create_task(self.consumer(self.queues[model]["local"], column, 1, model, "local"))
+                else:
+                    self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
+                    self.queues[model]["cpu"] = asyncio.Queue()
+                    consumer_tasks[(model, "cpu")] = asyncio.create_task(self.consumer(self.queues[model]["local"], column, 1, model, "local"))
+            else:
+                for endpoint in endpoints:
+                    batch_size = 0
+                    if model not in self.batch_sizes:
+                        self.batch_sizes[model] = {}
+                    if model not in self.queues:
+                        self.queues[model] = {}
+                    if endpoint not in list(self.batch_sizes[model].keys()):
+                        batch_size = await self.max_batch_size(model, endpoint)
+                        self.batch_sizes[model][endpoint] = batch_size
+                    if self.batch_sizes[model][endpoint] > 0:
+                        self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
+                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
         # Compute commonn
         self.cid_set = set.intersection(*self.all_cid_set.values())
         producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
         save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, save_task, *consumer_tasks.values())
-        self.save_to_disk(dataset, dst_path, models)
+        self.save_checkpoints_to_disk(dataset, dst_path, models)
         return None 
-
     
     async def load_checkpoints(self, dataset, split, dst_path, models):
         if "new_dataset" not in list(dir(self)):
@@ -1144,7 +1158,7 @@ if __name__ == "__main__":
         "split": "train",
         "models": [
             # "thenlper/gte-small",
-            "neoALI/bge-m3-rag-ov",
+            "BAAI/bge-m3",
             # "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         ],
         "chunk_settings": {
@@ -1159,10 +1173,10 @@ if __name__ == "__main__":
     }
     resources = {
         "https_endpoints": [
-            ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
-            ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
-            ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
-            ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
             # ["aapot/bge-m3-onnx", "https://bge-m3-onnx0-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx0/infer", 1024],
             # ["aapot/bge-m3-onnx", "https://bge-m3-onnx1-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx1/infer", 1024],
             # ["aapot/bge-m3-onnx", "https://bge-m3-onnx2-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx2/infer", 1024],
