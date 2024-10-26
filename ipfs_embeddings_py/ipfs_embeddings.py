@@ -1041,6 +1041,8 @@ class ipfs_embeddings_py:
                 for i, item in enumerate(self.index[largest_embeddings_dataset]):
                     embeddings_np[i] = item["items"]["embedding"]
                     ipfs_cids.append(item["items"]["cid"])
+                    if i > 10000:
+                        break
                 kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
                 kmeans.centroids = centroids
                 pass
@@ -1057,19 +1059,19 @@ class ipfs_embeddings_py:
                 for i, item in enumerate(self.index[largest_embeddings_dataset]):
                     embeddings_np[i] = item["items"]["embedding"]
                     ipfs_cids.append(item["items"]["cid"])
-            else:
-                max_splits = centroids.shape[0]
-                _, cluster_assignments = kmeans.index.search(embeddings_np, 1)
-                cluster_assignments = cluster_assignments.flatten()
-                ipfs_cid_clusters = [[] for _ in range(max_splits)]
-                for cid, cluster_id in zip(ipfs_cids, cluster_assignments):
-                    ipfs_cid_clusters[cluster_id].append(cid)
-                cluster_assignments = cluster_assignments.flatten()
-                cluster_cids = ipfs_cid_clusters[cluster_id]
-                
-                cluster_cids_dataset = datasets.Dataset.from_dict({"cluster_cids": cluster_cids})
-                cluster_cids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))
         
+            max_splits = centroids.shape[0]
+            kmeans.index = faiss.IndexFlatL2(centroids.shape[1])
+            kmeans.index.add(centroids)
+            _, cluster_assignments = kmeans.index.search(embeddings_np, 1)
+            cluster_assignments = cluster_assignments.flatten()  # Flatten the cluster_assignments array
+            ipfs_cid_clusters = [[] for _ in range(max_splits)]
+            for cid, cluster_id in zip(ipfs_cids, cluster_assignments):
+                ipfs_cid_clusters[cluster_id].append(cid)
+                
+            cluster_cids_dataset = datasets.Dataset.from_dict({"cluster_cids": ipfs_cid_clusters})
+            cluster_cids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))
+    
         for model in list(self.index.keys()):
             kmeans_embeddings_splits = {}    
             if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters")):
@@ -1088,7 +1090,6 @@ class ipfs_embeddings_py:
                             if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
                                 kmeans_embeddings_splits[cluster_id][key] = []
                             kmeans_embeddings_splits[cluster_id][key].append(item["items"][key])
-                        kmeans_embeddings_splits[cluster_id].append(item)
                 for cluster_id in range(max_splits):
                     if cluster_id not in list(kmeans_embeddings_splits.keys()):
                         continue
