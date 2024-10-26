@@ -997,6 +997,9 @@ class ipfs_embeddings_py:
             embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
             embeddings_np = np.zeros((num_items, embedding_dim))
             
+            for i, item in enumerate(self.index[largest_embeddings_dataset]):
+                    embeddings_np[i] = item["items"]["embedding"]
+                    ipfs_cids.append(item["items"]["cid"])
 
             # Perform KMeans clustering using faiss
             kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
@@ -1007,40 +1010,41 @@ class ipfs_embeddings_py:
             # Save centroids to disk
             centroids_dataset = datasets.Dataset.from_dict({"centroids": centroids.tolist()})
             centroids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))
-            
-        if kmeans is None:
-            new_dataset_download_size = self.new_dataset.dataset_size            
-            embeddings_size = {}
-            for model in self.metadata["models"]:
-                embeddings_size[model] = self.index[model].dataset_size
-            largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
-            largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-            embeddings_size["new_dataset"] = new_dataset_download_size
-            largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
-            largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-            max_size = 50 * 1024 * 1024 # 50 MB
-            max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
-            max_splits_size = round(largest_dataset_size / max_size)
-            max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
-            if max_splits_rows > max_splits_size:
-                max_splits = max_splits_rows
-            else:
-                max_splits = max_splits_size
-            # Initialize variables
-            num_items = len(self.index[largest_embeddings_dataset])
-            embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
-            embeddings_np = np.zeros((num_items, embedding_dim))
-            for i, item in enumerate(self.index[largest_embeddings_dataset]):
-                embeddings_np[i] = item["items"]["embedding"]
-                ipfs_cids.append(item["items"]["cid"])
-            kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
-            kmeans.centroids = centroids
-            pass
+
 
         if os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet")):
             cluster_cids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))["train"]
             cluster_cids = cluster_cids_dataset["cluster_cids"]
         else:
+            if kmeans is None:
+                new_dataset_download_size = self.new_dataset.dataset_size            
+                embeddings_size = {}
+                for model in self.metadata["models"]:
+                    embeddings_size[model] = self.index[model].dataset_size
+                largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
+                largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
+                embeddings_size["new_dataset"] = new_dataset_download_size
+                largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
+                largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
+                max_size = 50 * 1024 * 1024 # 50 MB
+                max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
+                max_splits_size = round(largest_dataset_size / max_size)
+                max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
+                if max_splits_rows > max_splits_size:
+                    max_splits = max_splits_rows
+                else:
+                    max_splits = max_splits_size
+                # Initialize variables
+                num_items = len(self.index[largest_embeddings_dataset])
+                embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
+                embeddings_np = np.zeros((num_items, embedding_dim))
+                for i, item in enumerate(self.index[largest_embeddings_dataset]):
+                    embeddings_np[i] = item["items"]["embedding"]
+                    ipfs_cids.append(item["items"]["cid"])
+                kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
+                kmeans.centroids = centroids
+                pass
+            
             if len(ipfs_cids) == 0:
                 new_dataset_download_size = self.new_dataset.dataset_size            
                 embeddings_size = {}
@@ -1065,18 +1069,49 @@ class ipfs_embeddings_py:
                 
                 cluster_cids_dataset = datasets.Dataset.from_dict({"cluster_cids": cluster_cids})
                 cluster_cids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))
+        
+        for model in list(self.index.keys()):
+            kmeans_embeddings_splits = {}    
+            if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters")):
+                os.makedirs(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
+            model_splits = os.listdir(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
+            if len(model_splits) == max_splits:
+                pass 
+            else:
+                for item in self.index[model]:
+                    cid = item["items"]["cid"]
+                    if cid in cluster_cids:
+                        cluster_id = cluster_cids.index(cid)
+                        if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                            kmeans_embeddings_splits[cluster_id] = {}
+                        for key in item["items"].keys():
+                            if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
+                                kmeans_embeddings_splits[cluster_id][key] = []
+                            kmeans_embeddings_splits[cluster_id][key].append(item["items"][key])
+                        kmeans_embeddings_splits[cluster_id].append(item)
+                for cluster_id in range(max_splits):
+                    if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                        continue
+                    cluster_dataset = datasets.Dataset.from_dict({kmeans_embeddings_splits[cluster_id]})
+                    cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
+        
+        kmeans_embeddings_splits = {}    
+        for item in self.new_dataset:
+            cid = item["items"]["cid"]
+            if cid in cluster_cids:
+                cluster_id = cluster_cids.index(cid)
+                if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                    kmeans_embeddings_splits[cluster_id] = {}
+                for key in item["items"].keys():
+                    if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
+                        kmeans_embeddings_splits[cluster_id][key] = []
+                    kmeans_embeddings_splits[cluster_id][key].append(item["items"][key])
+        for cluster_id in range(max_splits):
+            if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                continue
+            cluster_dataset = datasets.Dataset.from_dict({"items": kmeans_embeddings_splits[cluster_id]})
+            cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
             
-            
-            # for cluster_id in range(max_splits):
-            #     cluster_indices = np.where(cluster_assignments == cluster_id)[0]
-            #     cluster_embeddings = [embeddings_np[i] for i in cluster_indices]
-            #     cluster_dataset = datasets.Dataset.from_dict({"embedding": cluster_embeddings})
-
-            #     # Save the new split to disk
-            #     split_path = os.path.join(dst_path, f"{dataset.replace('/', '___')}_split_{cluster_id}.parquet")
-            #     cluster_dataset.to_parquet(split_path)
-            #     print(f"Saved split {cluster_id} with {len(cluster_embeddings)} embeddings to {split_path}")
-
             return None
     
 if __name__ == "__main__":
