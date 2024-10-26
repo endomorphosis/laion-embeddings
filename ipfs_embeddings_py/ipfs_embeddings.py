@@ -964,7 +964,6 @@ class ipfs_embeddings_py:
         
         return None              
 
-
     async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits):
         await self.load_dataset(dataset, split)
         await self.load_checkpoints(dataset, split, dst_path, models)
@@ -998,11 +997,6 @@ class ipfs_embeddings_py:
             embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
             embeddings_np = np.zeros((num_items, embedding_dim))
             
-            ipfs_cids = []
-            for i, item in enumerate(self.index[largest_embeddings_dataset]):
-                embeddings_np[i] = item["items"]["embedding"]
-                ipfs_cids.append(item["items"]["cid"])
-            del self.index[largest_embeddings_dataset]
 
             # Perform KMeans clustering using faiss
             kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
@@ -1036,12 +1030,26 @@ class ipfs_embeddings_py:
             num_items = len(self.index[largest_embeddings_dataset])
             embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
             embeddings_np = np.zeros((num_items, embedding_dim))
+            kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
             pass
 
         if os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet")):
             cluster_cids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))["train"]
             cluster_cids = cluster_cids_dataset["cluster_cids"]
         else:
+            ipfs_cids = []
+            new_dataset_download_size = self.new_dataset.dataset_size            
+            embeddings_size = {}
+            for model in self.metadata["models"]:
+                embeddings_size[model] = self.index[model].dataset_size
+            largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
+            num_items = len(self.index[largest_embeddings_dataset])
+            embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
+            embeddings_np = np.zeros((num_items, embedding_dim))
+            for i, item in enumerate(self.index[largest_embeddings_dataset]):
+                embeddings_np[i] = item["items"]["embedding"]
+                ipfs_cids.append(item["items"]["cid"])
+            
             _, cluster_assignments = kmeans.index.search(embeddings_np, 1)
             cluster_assignments = cluster_assignments.flatten()
             ipfs_cid_clusters = [[] for _ in range(max_splits)]
