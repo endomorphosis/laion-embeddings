@@ -1036,17 +1036,12 @@ class ipfs_embeddings_py:
                     max_splits = max_splits_rows
                 else:
                     max_splits = max_splits_size
-                # Initialize variables
                 num_items = len(self.index[largest_embeddings_dataset])
                 embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
                 embeddings_np = np.zeros((num_items, embedding_dim))
-                # embeddings_np = np.zeros((10000, embedding_dim))
                 for i, item in enumerate(self.index[largest_embeddings_dataset]):
                     embeddings_np[i] = item["items"]["embedding"]
                     ipfs_cids.append(item["items"]["cid"])
-                    # if i > 9998:
-                    #     print("Breaking")
-                    #     break
                 kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
                 kmeans.centroids = centroids
                 pass
@@ -1060,13 +1055,9 @@ class ipfs_embeddings_py:
                 num_items = len(self.index[largest_embeddings_dataset])
                 embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
                 embeddings_np = np.zeros((num_items, embedding_dim))
-                # embeddings_np = np.zeros((10000, embedding_dim))
                 for i, item in enumerate(self.index[largest_embeddings_dataset]):
                     embeddings_np[i] = item["items"]["embedding"]
                     ipfs_cids.append(item["items"]["cid"])
-                    # if len(ipfs_cids) > 9998:
-                    #     print("Breaking")
-                    #     break
         
             max_splits = len(centroids)
             index = faiss.IndexFlatL2(centroids.shape[1])
@@ -1092,13 +1083,10 @@ class ipfs_embeddings_py:
                     if cluster_id not in list(kmeans_embeddings_splits.keys()):
                         kmeans_embeddings_splits[cluster_id] = {}
                 for item in self.index[model]:
-                    # cid = item["items"]["cid"]
-                    # embedding = item["items"]["embedding"]
                     if item["items"]["cid"] in ipfs_cid_set:
                         for cluster_id in range(max_splits):
                             this_cluster = ipfs_cid_clusters[cluster_id]
-                            if cid in this_cluster:
-                            # if cid in ipfs_cid_clusters[cluster_id]:
+                            if item["items"]["cid"] in this_cluster:
                                 for key in item["items"].keys():
                                     if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
                                         kmeans_embeddings_splits[cluster_id][key] = []
