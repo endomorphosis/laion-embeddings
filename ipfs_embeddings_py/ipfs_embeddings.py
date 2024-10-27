@@ -1117,6 +1117,7 @@ class ipfs_embeddings_py:
                     for key in item["items"].keys():
                         kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
                     break
+                
         for cluster_id in range(max_splits):
             if cluster_id not in list(kmeans_embeddings_splits.keys()):
                 continue
