@@ -964,7 +964,7 @@ class ipfs_embeddings_py:
         
         return None              
 
-    async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits):
+    async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits=None):
         await self.load_dataset(dataset, split)
         await self.load_checkpoints(dataset, split, dst_path, models)
         centroids = []
@@ -975,6 +975,7 @@ class ipfs_embeddings_py:
             centroids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))["train"]
             centroids = centroids_dataset["centroids"]
             centroids = np.array(centroids)
+            max_splits = len(centroids)
         else:
             new_dataset_download_size = self.new_dataset.dataset_size            
             embeddings_size = {}
@@ -989,10 +990,11 @@ class ipfs_embeddings_py:
             max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
             max_splits_size = round(largest_dataset_size / max_size)
             max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
-            if max_splits_rows > max_splits_size:
-                max_splits = max_splits_rows
-            else:
-                max_splits = max_splits_size
+            if max_splits == None:                
+                if max_splits_rows > max_splits_size:
+                    max_splits = max_splits_rows
+                else:
+                    max_splits = max_splits_size
             num_items = len(self.index[largest_embeddings_dataset])
             embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
             embeddings_np = np.zeros((num_items, embedding_dim))
@@ -1011,10 +1013,10 @@ class ipfs_embeddings_py:
             centroids_dataset = datasets.Dataset.from_dict({"centroids": centroids.tolist()})
             centroids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))
 
-
         if os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet")):
             cluster_cids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))["train"]
-            cluster_cids = cluster_cids_dataset["cluster_cids"]
+            ipfs_cid_clusters = cluster_cids_dataset["cluster_cids"]
+            ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters for cid in sublist])
         else:
             if kmeans is None:
                 new_dataset_download_size = self.new_dataset.dataset_size            
@@ -1038,11 +1040,13 @@ class ipfs_embeddings_py:
                 num_items = len(self.index[largest_embeddings_dataset])
                 embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
                 embeddings_np = np.zeros((num_items, embedding_dim))
+                # embeddings_np = np.zeros((10000, embedding_dim))
                 for i, item in enumerate(self.index[largest_embeddings_dataset]):
                     embeddings_np[i] = item["items"]["embedding"]
                     ipfs_cids.append(item["items"]["cid"])
-                    if i > 10000:
-                        break
+                    # if i > 9998:
+                    #     print("Breaking")
+                    #     break
                 kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
                 kmeans.centroids = centroids
                 pass
@@ -1056,19 +1060,23 @@ class ipfs_embeddings_py:
                 num_items = len(self.index[largest_embeddings_dataset])
                 embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
                 embeddings_np = np.zeros((num_items, embedding_dim))
+                # embeddings_np = np.zeros((10000, embedding_dim))
                 for i, item in enumerate(self.index[largest_embeddings_dataset]):
                     embeddings_np[i] = item["items"]["embedding"]
                     ipfs_cids.append(item["items"]["cid"])
+                    # if len(ipfs_cids) > 9998:
+                    #     print("Breaking")
+                    #     break
         
-            max_splits = centroids.shape[0]
-            kmeans.index = faiss.IndexFlatL2(centroids.shape[1])
-            kmeans.index.add(centroids)
-            _, cluster_assignments = kmeans.index.search(embeddings_np, 1)
+            max_splits = len(centroids)
+            index = faiss.IndexFlatL2(centroids.shape[1])
+            index.add(centroids)
+            _, cluster_assignments = index.search(embeddings_np, 1)
             cluster_assignments = cluster_assignments.flatten()  # Flatten the cluster_assignments array
             ipfs_cid_clusters = [[] for _ in range(max_splits)]
             for cid, cluster_id in zip(ipfs_cids, cluster_assignments):
                 ipfs_cid_clusters[cluster_id].append(cid)
-                
+            ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters for cid in sublist])
             cluster_cids_dataset = datasets.Dataset.from_dict({"cluster_cids": ipfs_cid_clusters})
             cluster_cids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))
     
@@ -1080,16 +1088,21 @@ class ipfs_embeddings_py:
             if len(model_splits) == max_splits:
                 pass 
             else:
+                for cluster_id in range(max_splits):
+                    if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                        kmeans_embeddings_splits[cluster_id] = {}
                 for item in self.index[model]:
-                    cid = item["items"]["cid"]
-                    if cid in cluster_cids:
-                        cluster_id = cluster_cids.index(cid)
-                        if cluster_id not in list(kmeans_embeddings_splits.keys()):
-                            kmeans_embeddings_splits[cluster_id] = {}
-                        for key in item["items"].keys():
-                            if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
-                                kmeans_embeddings_splits[cluster_id][key] = []
-                            kmeans_embeddings_splits[cluster_id][key].append(item["items"][key])
+                    # cid = item["items"]["cid"]
+                    # embedding = item["items"]["embedding"]
+                    if item["items"]["cid"] in ipfs_cid_set:
+                        for cluster_id in range(max_splits):
+                            this_cluster = ipfs_cid_clusters[cluster_id]
+                            if cid in this_cluster:
+                            # if cid in ipfs_cid_clusters[cluster_id]:
+                                for key in item["items"].keys():
+                                    if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
+                                        kmeans_embeddings_splits[cluster_id][key] = []
+                                    kmeans_embeddings_splits[cluster_id][key].append(item["items"][key])
                 for cluster_id in range(max_splits):
                     if cluster_id not in list(kmeans_embeddings_splits.keys()):
                         continue
@@ -1154,4 +1167,4 @@ if __name__ == "__main__":
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
     # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
-    asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))
+    asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
