@@ -1015,8 +1015,9 @@ class ipfs_embeddings_py:
 
         if os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet")):
             cluster_cids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))["train"]
-            ipfs_cid_clusters = cluster_cids_dataset["cluster_cids"]
-            ipfs_cid_clusters = [set(x) for x in ipfs_cid_clusters]
+            ipfs_cid_clusters_list = cluster_cids_dataset["cluster_cids"]
+            ipfs_cid_clusters_set = [set(x) for x in ipfs_cid_clusters_list]
+            ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
         else:
             if kmeans is None:
                 new_dataset_download_size = self.new_dataset.dataset_size            
@@ -1069,8 +1070,8 @@ class ipfs_embeddings_py:
             for cid, cluster_id in zip(ipfs_cids, cluster_assignments):
                 ipfs_cid_clusters_list[cluster_id].append(cid)
                 ipfs_cid_clusters_set[cluster_id].add(cid) 
-            ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters for cid in sublist])
-            cluster_cids_dataset = datasets.Dataset.from_dict({"cluster_cids": ipfs_cid_clusters})
+            ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
+            cluster_cids_dataset = datasets.Dataset.from_dict({"cluster_cids": ipfs_cid_clusters_list})
             cluster_cids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))
     
         for model in list(self.index.keys()):
