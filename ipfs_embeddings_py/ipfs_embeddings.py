@@ -1131,7 +1131,7 @@ if __name__ == "__main__":
         "column": "text",
         "split": "train",
         "models": [
-            # "thenlper/gte-small",
+            "thenlper/gte-small",
             "Alibaba-NLP/gte-large-en-v1.5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         ],
