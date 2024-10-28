@@ -1359,7 +1359,8 @@ class ipfs_embeddings_py:
             cluster_cids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))
     
         for model in list(self.index.keys()):
-            kmeans_embeddings_splits = {}    
+            kmeans_embeddings_splits = {}
+            embedding_dim = len(self.index[model][0]["items"]["embedding"])    
             if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters")):
                 os.makedirs(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
             model_splits = os.listdir(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
@@ -1374,7 +1375,7 @@ class ipfs_embeddings_py:
                     for cluster_id in range(max_splits):
                         if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
                             if key == "embedding":
-                                kmeans_embeddings_splits[cluster_id][key] = [ np.zeros((0, len(first_item["items"][key]))) for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
+                                kmeans_embeddings_splits[cluster_id][key] = np.zeros((len(ipfs_cid_clusters_list[cluster_id]), embedding_dim))
                             else:
                                 kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
                 for item in self.index[model]:
