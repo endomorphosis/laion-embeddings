@@ -1360,7 +1360,6 @@ class ipfs_embeddings_py:
     
         for model in list(self.index.keys()):
             kmeans_embeddings_splits = {}
-            embedding_dim = len(self.index[model][0]["items"]["embedding"])    
             if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters")):
                 os.makedirs(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
             model_splits = os.listdir(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
@@ -1372,6 +1371,7 @@ class ipfs_embeddings_py:
                         kmeans_embeddings_splits[cluster_id] = {}
                 first_item = self.index[model][0]
                 for key in first_item["items"].keys():
+                    embedding_dim = len(first_item["items"]["embedding"])    
                     for cluster_id in range(max_splits):
                         if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
                             if key == "embedding":
