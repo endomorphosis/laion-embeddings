@@ -1394,13 +1394,14 @@ class ipfs_embeddings_py:
         kmeans_embeddings_splits = {}
         for cluster_id in range(max_splits):
             if cluster_id not in list(kmeans_embeddings_splits.keys()):
-                kmeans_embeddings_splits[cluster_id] = {}    
+                kmeans_embeddings_splits[cluster_id] = {}
+        first_item = self.new_dataset[0]
+        for key in first_item["items"].keys():
+            for cluster_id in range(max_splits):
+                if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
+                    kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]    
         for item in self.new_dataset:
             if item["items"]["cid"] in ipfs_cid_set:
-                for cluster_id in range(max_splits):
-                    for key in item["items"].keys():
-                        if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
-                            kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
                 if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
                     cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
                     for key in item["items"].keys():
@@ -1410,7 +1411,7 @@ class ipfs_embeddings_py:
         for cluster_id in range(max_splits):
             if cluster_id not in list(kmeans_embeddings_splits.keys()):
                 continue
-            cluster_dataset = datasets.Dataset.from_dict({"items": kmeans_embeddings_splits[cluster_id]})
+            cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
             cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
             return None
     
