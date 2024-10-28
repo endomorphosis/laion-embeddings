@@ -1374,7 +1374,7 @@ class ipfs_embeddings_py:
                     for cluster_id in range(max_splits):
                         if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
                             if key == "embedding":
-                                kmeans_embeddings_splits[cluster_id][key] = [ np.zeros((0, first_item["items"][key].shape[0])) for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
+                                kmeans_embeddings_splits[cluster_id][key] = [ np.zeros((0, len(first_item["items"][key]))) for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
                             else:
                                 kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
                 for item in self.index[model]:
