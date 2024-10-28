@@ -1386,7 +1386,7 @@ class ipfs_embeddings_py:
                 for cluster_id in range(max_splits):
                     if cluster_id not in list(kmeans_embeddings_splits.keys()):
                         continue
-                    cluster_dataset = datasets.Dataset.from_dict({kmeans_embeddings_splits[cluster_id]})
+                    cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
                     cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
         
         kmeans_embeddings_splits = {}
