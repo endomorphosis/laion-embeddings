@@ -1396,28 +1396,35 @@ class ipfs_embeddings_py:
                     cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
         
         kmeans_embeddings_splits = {}
-        for cluster_id in range(max_splits):
-            if cluster_id not in list(kmeans_embeddings_splits.keys()):
-                kmeans_embeddings_splits[cluster_id] = {}
-        first_item = self.new_dataset[0]
-        for key in first_item["items"].keys():
+
+        if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_clusters")):
+            os.makedirs(os.path.join(dst_path, dataset.replace("/", "___")  + "_clusters"))
+        model_splits = os.listdir(os.path.join(dst_path, dataset.replace("/", "___") + "_clusters"))
+        if len(model_splits) == max_splits:
+            pass 
+        else:
             for cluster_id in range(max_splits):
-                if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
-                    kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]    
-        for item in self.new_dataset:
-            if item["items"]["cid"] in ipfs_cid_set:
-                if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
-                    cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
-                    for key in item["items"].keys():
-                        kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
-                    break
-                
-        for cluster_id in range(max_splits):
-            if cluster_id not in list(kmeans_embeddings_splits.keys()):
-                continue
-            cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
-            cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
-            return None
+                if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                    kmeans_embeddings_splits[cluster_id] = {}
+            first_item = self.new_dataset[0]
+            for key in first_item["items"].keys():
+                for cluster_id in range(max_splits):
+                    if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
+                        kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]    
+            for item in self.new_dataset:
+                if item["items"]["cid"] in ipfs_cid_set:
+                    if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
+                        cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
+                        for key in item["items"].keys():
+                            kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
+                        break
+                    
+            for cluster_id in range(max_splits):
+                if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                    continue
+                cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
+                cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___"), f"cluster_{cluster_id}.parquet"))
+                return None
     
     
 if __name__ == "__main__":
@@ -1426,7 +1433,7 @@ if __name__ == "__main__":
         "column": "text",
         "split": "train",
         "models": [
-"thenlper/gte-small",
+            "thenlper/gte-small",
             "Alibaba-NLP/gte-large-en-v1.5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         ],
