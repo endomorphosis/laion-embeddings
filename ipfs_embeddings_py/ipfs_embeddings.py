@@ -213,8 +213,8 @@ class ipfs_embeddings_py:
         self.ipfs_parquet_to_car = ipfs_parquet_to_car_py(resources, metadata)
         self.ipfs_parquet_to_car_test = self.ipfs_parquet_to_car.test
         self.ipfs_parquet_to_car_install = self.ipfs_parquet_to_car.install
-        if "ipfs_embeddings_py" not in dir(self):
-            self.ipfs_embeddings_py = self.__call__
+        if "ipfs_embeddings" not in dir(self) and "ipfs_embeddings" in self.__dict__.keys():
+            self.ipfs_embeddings = self
         self.parquet_to_car = self.ipfs_parquet_to_car
         # self.elasticsearch = elasticsearch_kit(resources, metadata)
         self.consumer_task_done = {}

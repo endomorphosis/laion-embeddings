@@ -7,10 +7,10 @@ class storacha_clusters:
     def _init(self, resources=None, metadata=None):
         self.resources = resources
         self.metadata = metadata
-        self.ipfs_kit_py = ipfs_kit_py.ipfs_kit_py(resources, metadata)
-        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
+        self.ipfs_kit_py = ipfs_kit_py.ipfs_kit(resources, metadata)
+        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings(resources, metadata)
         self.ipfs_parquet_to_car = ipfs_parquet_to_car.ipfs_parquet_to_car(resources, metadata)
-        self.kmeans_cluster_split = self.ipfs_embeddings_py.kmeans_cluster_split()
+        self.kmeans_cluster_split = ipfs_embeddings_py.kmeans_cluster_split()
         return None
     
     def test(self):

@@ -21,13 +21,13 @@ class search_embeddings:
         if len(list(metadata.keys())) > 0:
             for key in metadata.keys():
                 setattr(self, key, metadata[key])
-        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
         self.qdrant_kit_py = ipfs_embeddings_py.qdrant_kit_py(resources, metadata)
+        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
         if "https_endpoints" in resources.keys():
             for endpoint in resources["https_endpoints"]:
-                self.ipfs_embeddings_py.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])
+                self.ipfs_embeddings_py.add_tei_endpoint(endpoint[0], endpoint[1], endpoint[2])
         else:
-            self.ipfs_embeddings_py.add_https_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
+            self.ipfs_embeddings_py.add_tei_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
         self.join_column = None
         self.qdrant_found = False
         qdrant_port_cmd = "nc -zv localhost 6333"
@@ -41,11 +41,22 @@ class search_embeddings:
                 print("Qdrant failed to start, fallback to faiss")
         else:
             self.qdrant_found = True
-        self.add_https_endpoint = self.add_https_endpoint
+        self.add_tei_endpoint = self.add_tei_endpoint
+        self.add_openvino_endpoint = self.add_openvino_endpoint
+        self.add_local_endpoint = self.add_local_endpoint
+        self.add_libp2p_endpoint = self.add_libp2p_endpoint
 
-    def add_https_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_https_endpoint(model, endpoint, ctx_length)
+    def add_tei_endpoint(self, model, endpoint, ctx_length):
+        return self.ipfs_embeddings_py.add_tei_endpoint(model, endpoint, ctx_length)
     
+    def add_openvino_endpoint(self, model, endpoint, ctx_length):
+        return self.ipfs_embeddings_py.add_openvino_endpoint(model, endpoint, ctx_length)
+    
+    def add_local_endpoint(self, model, endpoint, ctx_length):
+        return self.ipfs_embeddings_py.add_local_endpoint(model, endpoint, ctx_length)
+
+    def add_libp2p_endpoint(self, model, endpoint, ctx_length):
+        return self.ipfs_embeddings_py.add_libp2p_endpoint(model, endpoint, ctx_length)
     
     def rm_cache(self):
         homedir = os.path.expanduser("~")
