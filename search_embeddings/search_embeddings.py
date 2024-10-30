@@ -145,6 +145,14 @@ class search_embeddings:
         results = await search_embeddings.search("Wikipedia-X-Concat", "Machine Learning")
         return results
 
+    async def test(self,memory="low"):
+        if memory == "low":
+            return await self.test_low_memory()
+        elif memory == "high":
+            return await self.test_high_memory()
+        else:
+            return None
+
     async def test_query(self):
         query = "Machine Learning"
         collection = "English-ConcatX-Abstract"
@@ -234,6 +242,5 @@ if __name__ == "__main__":
     search_embeddings = search_embeddings(resources, metadata)
     # asyncio.run(search_embeddings.test_high_memory())
     # asyncio.run(search_embeddings.test_low_memory())
-    asyncio.run(search_embeddings.test_query())
-
+    asyncio.run(search_embeddings.test())
     print()
