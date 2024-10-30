@@ -1071,6 +1071,34 @@ class ipfs_embeddings_py:
         self.endpoint_status[endpoint] = status
         return None
     
+    def test_llama_cpp(self):
+        test_llama_cpp_cmd = "llama_cpp --version"
+        try:
+            test_llama_cpp = subprocess.check_output(test_llama_cpp_cmd, shell=True)
+            return test_llama_cpp
+        except Exception as e:
+            print(e)
+            return ValueError(e)
+    
+    def test_local_openvino(self):
+        test_openvino_cmd = "python3 -c 'import openvino; print(openvino.__version__)'"
+        try:
+            test_openvino = subprocess.check_output(test_openvino_cmd, shell=True)
+            return test_openvino
+        except Exception as e:
+            print(e)
+            return ValueError(e)
+        return None
+    
+    def test_ipex(self):        
+        test_ipex_cmd = "python3 -c 'import ipex; print(ipex.__version__)'"
+        try:
+            test_ipex = subprocess.check_output(test_ipex_cmd, shell=True)
+            return test_ipex
+        except Exception as e:
+            print(e)
+            return ValueError(e)
+        return None
 
     async def index_dataset(self, dataset, split, column, dst_path, models = None):
         if not os.path.exists(dst_path):
@@ -1101,7 +1129,6 @@ class ipfs_embeddings_py:
             cpus = torch.get_num_threads()
         except:
             cpus = 0
-        
         for model in models:
             endpoints = self.get_endpoints(model)
             local = self.get_endpoints(model, "local")
@@ -1126,13 +1153,86 @@ class ipfs_embeddings_py:
             elif len(local) > 0 and len(cpus) > 0:
                 #detect openvino locally
                 openvino_test = None
-                llama_cpp = None
-                ipex = None
-                if not openvino_test and not llama_cpp and not ipex and not libp2p and not tei:                
+                llama_cpp_test = None
+                ipex_test = None
+                try:
+                    openvino_test = self.test_local_openvino()
+                except Exception as e:
+                    print(e)
+                    pass
+                try:
+                    llama_cpp_test = self.test_llama_cpp()
+                except Exception as e:
+                    print(e)
+                    pass
+                try:
+                    ipex_test = self.test_ipex()
+                except Exception as e:
+                    print(e)
+                    pass
+                
+                print("local_endpoint_test")
+                results = {
+                    "openvino": openvino_test,
+                    "llama_cpp": llama_cpp_test,
+                    "ipex": ipex_test
+                }
+                print(results)
+                if not openvino_test and not llama_cpp_test and not ipex_test:                
                     self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
                     self.queues[model]["cpu"] = asyncio.Queue()
                     consumer_tasks[(model, "cpu")] = asyncio.create_task(self.consumer(self.queues[model]["cpu"], column, 1, model, "cpu"))
-          
+                elif openvino_test:
+                    ov_count = 0
+                    for endpoint in local:
+                        if "openvino" in endpoint:
+                            endpoint_name = "openvino:"+str(ov_count)
+                            batch_size = 0
+                            if model not in self.batch_sizes:
+                                self.batch_sizes[model] = {}
+                            if model not in self.queues:
+                                self.queues[model] = {}
+                            if endpoint not in list(self.batch_sizes[model].keys()):
+                                batch_size = await self.max_batch_size(model, endpoint)
+                                self.batch_sizes[model][endpoint_name] = batch_size
+                            if self.batch_sizes[model][endpoint_name] > 0:
+                                self.queues[model][endpoint_name] = asyncio.Queue()
+                                consumer_tasks[(model, endpoint_name )] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                            openvino_count = openvino_count + 1
+                elif llama_cpp_test:
+                    llama_count = 0
+                    for endpoint in local:
+                        if "llama_cpp" in endpoint:
+                            endpoint_name = "llama:"+str(ov_count)
+                            batch_size = 0                            
+                            if model not in self.batch_sizes:
+                                self.batch_sizes[model] = {}
+                            if model not in self.queues:
+                                self.queues[model] = {}
+                            if endpoint not in list(self.batch_sizes[model].keys()):
+                                batch_size = await self.max_batch_size(model, endpoint)
+                                self.batch_sizes[model][endpoint] = batch_size
+                            if self.batch_sizes[model][endpoint] > 0:
+                                self.queues[model][endpoint] = asyncio.Queue()
+                                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                            llama_count = llama_count + 1
+                elif ipex_test:
+                    ipex_count = 0
+                    for endpoint in local:
+                        if "ipex" in endpoint:
+                            endpoint_name = "ipex:"+str(ov_count)
+                            batch_size = 0
+                            if model not in self.batch_sizes:
+                                self.batch_sizes[model] = {}
+                            if model not in self.queues:
+                                self.queues[model] = {}
+                            if endpoint not in list(self.batch_sizes[model].keys()):
+                                batch_size = await self.max_batch_size(model, endpoint)
+                                self.batch_sizes[model][endpoint] = batch_size
+                            if self.batch_sizes[model][endpoint] > 0:
+                                self.queues[model][endpoint] = asyncio.Queue()
+                                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                            ipex_count = ipex_count + 1
             if len(openvino) > 0:
                 for endpoint in openvino:
                     batch_size = 0
