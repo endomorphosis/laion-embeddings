@@ -1,12 +1,3 @@
-import os
-import sys
-import json
-import random
-import datasets
-import asyncio
-import subprocess
-import aiohttp
-import requests
 from aiohttp import ClientSession, ClientTimeout
 from multiprocessing import Pool
 from transformers import AutoTokenizer
@@ -15,10 +6,6 @@ from datasets import Dataset, concatenate_datasets, load_dataset
 from ..ipfs_embeddings_py import ipfs_embeddings_py
 from ..ipfs_embeddings_py import *
 from ..ipfs_embeddings_py import ipfs_multiformats_py
-from ipfs_multiformats import *
-from ..ipfs_embeddings_py import chunker
-from chunker import Chunker
-import time
 
 class sparse_embeddings:
     def __init__(self, resources, metadata):
@@ -36,38 +23,28 @@ class sparse_embeddings:
     def index_sparse_embeddings(self, embeddings):
         return self.ipfs_embeddings_py.index_sparse_embeddings(embeddings)
     
-    def test():
+    def test(self):
         results = {}
         test_ipfs_kit_init = None
         test_ipfs_kit = None
-        test_ipfs_parquet_to_car = None
-        test_storacha_clusters = None
+        test_sparse_embeddings = None
         try:
-            test_ipfs_kit_init = self.ipfs_kit.init()
+            test_ipfs_embeddings_py = self.ipfs_embeddings_py.__init__(self.resources, self.metadata)
         except Exception as e:
-            test_ipfs_kit_init = e
+            test_ipfs_embeddings_py = e
             print(e)
-            raise e
-
+        
         try:
-            test_ipfs_kit = self.ipfs_kit.test()
+            test_sparse_embeddings = self.ipfs_embeddings_py.index_sparse_embeddings()  
         except Exception as e:
-            test_ipfs_kit = e
+            test_sparse_embeddings = e
             print(e)
-            raise e
-        try:
-            test_ipfs_parquet_to_car = self.ipfs_parquet_to_car.test()
-        except Exception as e:
-            test_ipfs_parquet_to_car = e
-            print(e)
-            raise e
-        try:
-
-            test_storacha_clusters = self.ipfs_kit_py.storacha_kit_py.test()
-        except Exception as e:
-            test_storacha_clusters = e
-            print(e)
-            raise e
+        
+        results = {"test_ipfs_kit_init": test_ipfs_kit_init, "test_ipfs_kit": test_ipfs_kit, "test_sparse_embeddings": test_sparse_embeddings}
+        return results
+    
+        
+        
 
 if __name__ == "main":
     metadata = {

@@ -1720,6 +1720,10 @@ class ipfs_embeddings_py:
 
         return results
             
+    async def index_sparse_embeddings(self, dataset, split, column, dst_path, models):
+        
+        return None
+            
     async def search_centroids(self, dataset, split, src_path, model, cids, query, endpoint=None, n=64):
 
 
