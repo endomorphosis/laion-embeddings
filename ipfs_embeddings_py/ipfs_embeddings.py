@@ -2037,9 +2037,10 @@ class ipfs_embeddings_py:
                     cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
         
         kmeans_embeddings_splits = {}
-        if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_clusters")):
-            os.makedirs(os.path.join(dst_path, dataset.replace("/", "___")  + "_clusters"))
-        model_splits = os.listdir(os.path.join(dst_path, dataset.replace("/", "___") + "_clusters"))
+        cluster_folder = os.path.join(dst_path, dataset.replace("/", "___") + "_clusters")
+        if not os.path.exists(cluster_folder):
+            os.makedirs(cluster_folder)
+        model_splits = os.listdir(cluster_folder)
         if len(model_splits) == max_splits:
             pass 
         else:
@@ -2061,7 +2062,7 @@ class ipfs_embeddings_py:
                             break
                     
             for cluster_id in range(max_splits):
-                cluster_filename = os.path.join(dst_path, dataset.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet")
+                cluster_filename = os.path.join(cluster_folder, dataset.replace("/", "___") + "cluster_{cluster_id}.parquet")
                 if cluster_id not in list(kmeans_embeddings_splits.keys()):
                     continue
                 cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
