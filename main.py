@@ -3,6 +3,9 @@ import uvicorn
 from fastapi import FastAPI, BackgroundTasks
 from search_embeddings import search_embeddings
 from create_embeddings import create_embeddings
+from shard_embeddings import shard_embeddings
+from sparse_embeddings import sparse_embeddings
+from ipfs_cluster_index import ipfs_cluster_index
 from ipfs_embeddings_py import ipfs_embeddings_py
 from pydantic import BaseModel
 
@@ -35,6 +38,9 @@ resources = {
 
 vector_search = search_embeddings.search_embeddings(resources, metadata)
 index_dataset = create_embeddings.create_embeddings(resources, metadata)
+shard_embeddings = shard_embeddings.shard_embeddings(resources, metadata)
+sparse_embeddings = sparse_embeddings.sparse_embeddings(resources, metadata)
+ipfs_cluster_index = ipfs_cluster_index.ipfs_cluster_index(resources, metadata)
 
 app = FastAPI(port=9999)
 
@@ -81,5 +87,10 @@ async def search_item_task(collection: str, text: str, n: int):
 async def search_item_post(request: SearchRequest, background_tasks: BackgroundTasks):
     search_results = await vector_search.search(request.collection, request.text, request.n)
     return search_results
+
+@app.post("/shard_embeddings")
+async def shard_embeddings_post(request: dict):
+    shard_embeddings_results = await 
+    return await vector_search(request)
 
 uvicorn.run(app, host="0.0.0.0", port=9999)
