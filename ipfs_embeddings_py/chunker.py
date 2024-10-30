@@ -12,7 +12,7 @@ logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
 
 CHUNKING_STRATEGIES = ['semantic', 'fixed', 'sentences', 'sliding_window']
 
-class Chunker:
+class chunker:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
