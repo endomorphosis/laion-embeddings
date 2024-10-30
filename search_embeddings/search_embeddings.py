@@ -23,11 +23,27 @@ class search_embeddings:
                 setattr(self, key, metadata[key])
         self.qdrant_kit_py = ipfs_embeddings_py.qdrant_kit_py(resources, metadata)
         self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
-        if "https_endpoints" in resources.keys():
-            for endpoint in resources["https_endpoints"]:
+        if "tei_endpoints" in resources.keys():
+            for endpoint in resources["tei_endpoints"]:
                 self.ipfs_embeddings_py.add_tei_endpoint(endpoint[0], endpoint[1], endpoint[2])
         else:
             self.ipfs_embeddings_py.add_tei_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
+        if "openvino_endpoints" in resources.keys():
+            for endpoint in resources["openvino_endpoints"]:
+                self.ipfs_embeddings_py.add_openvino_endpoint(endpoint[0], endpoint[1], endpoint[2])
+        else:
+            pass
+        if "local_endpoints" in resources.keys():
+            for endpoint in resources["local_endpoints"]:
+                self.ipfs_embeddings_py.add_local_endpoint(endpoint[0], endpoint[1], endpoint[2])
+        else:
+            pass
+        if "libp2p_endpoints" in resources.keys():
+            for endpoint in resources["libp2p_endpoints"]:
+                self.ipfs_embeddings_py.add_libp2p_endpoint(endpoint[0], endpoint[1], endpoint[2])
+        else:
+            pass
+        
         self.join_column = None
         self.qdrant_found = False
         qdrant_port_cmd = "nc -zv localhost 6333"
