@@ -152,6 +152,15 @@ class search_embeddings:
         print(search_results)
         return None
         
+    async def start_faiss(self, collection, query):
+        return self.ipfs_embeddings_py.start_faiss(collection, query)
+    
+    async def load_faiss(self, dataset, knn_index):
+        return self.ipfs_embeddings_py.load_faiss(dataset, knn_index)
+    
+    async def ingest_faiss(self, column):
+        return self.ipfs_embeddings_py.ingest_faiss(column)
+    
 if __name__ == '__main__':
     metadata = {
         "dataset": "laion/Wikipedia-X-Concat",
