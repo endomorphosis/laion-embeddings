@@ -1165,7 +1165,6 @@ class ipfs_embeddings_py:
             if not endpoints:
                 raise ValueError("No endpoints available for model " + model)
         
-        
         # Compute commonn
         self.cid_set = set.intersection(*self.all_cid_set.values())
         producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
@@ -1174,9 +1173,6 @@ class ipfs_embeddings_py:
         self.save_checkpoints_to_disk(dataset, dst_path, models)
         return None 
     
-    
-    
-
     async def index_dataset_bak(self, dataset, split, column, dst_path, models = None):
         if not os.path.exists(dst_path):
             os.makedirs(dst_path)
