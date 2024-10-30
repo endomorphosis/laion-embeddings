@@ -5,11 +5,18 @@ import asyncio
 import multiprocessing
 import time
 from multiprocessing import Pool
+
 class ipfs_parquet_to_car_py:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
         self.ipfs_parquet_to_car_py_version = "0.0.1"
+        
+    async def  __call__(self, src, dst):
+        if os.path.isdir(src):
+            return await self.run_batch(src, dst)
+        else:
+            return await self.run(src, dst)
         
     async def install(self):
         cmd = ["npm", "install", "ipfs_parquet_to_car_js"]

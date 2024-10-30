@@ -23,7 +23,9 @@ from ipfs_multiformats import *
 from chunker import Chunker
 import time
 import math
-
+from elasticsearch_kit import elasticsearch_kit
+from elasticsearch import Elasticsearch
+from ipfs_parquet_to_car import ipfs_parquet_to_car_py
 
 def process_new_dataset_shard(shard, datatype=None, split="train"):
     items = None
@@ -153,6 +155,8 @@ class ipfs_embeddings_py:
         self.chunker = Chunker(resources, metadata)
         self.process_new_dataset_shard = process_new_dataset_shard
         self.process_index_shard = process_index_shard
+        self.ipfs_parquet_to_car = ipfs_parquet_to_car_py(resources, metadata)
+        self.parquet_to_car = self.ipfs_parquet_to_car
         # self.elasticsearch = elasticsearch_kit(resources, metadata)
         self.consumer_task_done = {}
         self.producer_task_done = False
