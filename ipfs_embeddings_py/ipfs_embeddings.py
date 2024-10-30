@@ -587,6 +587,21 @@ class ipfs_embeddings_py:
             pass
         return knn_stack
     
+    async def make_local_request(self, model, endpoint, endpoint_type, data):
+        device = torch.device(endpoint)
+        inputs = self.tokenizer[model][endpoint](data, return_tensors="pt", padding=True, truncation=True).to(device)
+        self.local_endpoints[model][endpoint].to(device).eval()
+        with torch.no_grad():
+            outputs = self.local_endpoints[model][endpoint](**inputs)
+            query_response = outputs.last_hidden_state.mean(dim=1).tolist()  # Use mean of token embeddings
+            results = query_response  # Return the entire batch of results
+            del inputs, outputs  # Unallocate inputs and outputs
+            torch.cuda.synchronize()  # Ensure all operations are complete
+            torch.cuda.empty_cache()  # Free up GPU memory
+        # self.local_endpoints[model][endpoint].to('cpu')  # Move model back to CPU
+        torch.cuda.empty_cache()  # Free up GPU memory again
+        return results
+
     async def make_local_request(self, model, endpoint, data):
         device = torch.device(endpoint)
         inputs = self.tokenizer[model][endpoint](data, return_tensors="pt", padding=True, truncation=True).to(device)
@@ -1590,6 +1605,23 @@ if __name__ == "__main__":
         "dst_path": "/storage/teraflopai/tmp",
     }
     resources = {
+        "local_endpoints": {
+            ["thenlper/gte-small", "cpu", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cpu", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cpu", 32768]
+            ["thenlper/gte-small", "cuda:0", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cuda:0", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:0", 32768]
+            ["thenlper/gte-small", "cuda:1", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cuda:1", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:1", 32768]
+            ["thenlper/gte-small", "openvino", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "openvino", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "openvino", 32768]
+            ["thenlper/gte-small", "llama_cpp", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "llama_cpp", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "llama_cpp", 32768]
+        },
         "openvino_endpoints": [
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
