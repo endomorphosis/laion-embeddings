@@ -2082,14 +2082,6 @@ class ipfs_embeddings_py:
                 for item in self.new_dataset
                 if item["items"]["cid"] in ipfs_cid_set
             ]
-            # for item in self.new_dataset:
-            #     if item["items"]["cid"] in ipfs_cid_set:
-            #         for cluster_id in range(max_splits):
-            #             if item["items"]["cid"] in cluster_id_set:
-            #                 cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
-            #                 for key in keys_list:
-            #                     kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
-            #                 break
             for cluster_id in range(max_splits):
                 cluster_filename = os.path.join(cluster_folder, dataset.replace("/", "___") + "cluster_{cluster_id}.parquet")
                 if cluster_id not in list(kmeans_embeddings_splits.keys()):
