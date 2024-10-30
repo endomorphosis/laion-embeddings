@@ -1717,13 +1717,21 @@ class ipfs_embeddings_py:
 
         return results
             
-        
+    async def search_centroids(self, dataset, split, src_path, model, cids, query, endpoint=None, n=64):
+
+
+        return None
+    
     async def search_shards(self, dataset, split, src_path, models):
         
         
         return None
     
-    async def autofaiss(self, dataset, split, src_path, models):
+    async def autofaiss_chunks(self, dataset, split, src_path, models):
+        
+        return None
+    
+    async def autofaiss_shards(self, dataset, split, src_path, models):
         
         return None
     
@@ -1824,7 +1832,6 @@ class ipfs_embeddings_py:
                 del item["secondary_cid"]
                 yield item
         
-                
     def demux_checkpoints(self, this_dataset):
         self.unique_cid_set = set()
         self.unique_cid_list = []

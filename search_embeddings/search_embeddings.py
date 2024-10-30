@@ -66,33 +66,70 @@ class search_embeddings:
         embeddings = await self.ipfs_embeddings_py.index_knn(selected_endpoint, self.model)
         return embeddings
     
-    def search_embeddings(self, embeddings):
-        scores, samples = self.qdrant_kit_py.knn_index.get_nearest_examples(
-           "embeddings", embeddings, k=5
-        )
-        return scores, samples 
+    # def search_embeddings(self, embeddings):
+    #     scores, samples = self.qdrant_kit_py.knn_index.get_nearest_examples(
+    #        "embeddings", embeddings, k=5
+    #     )
+    #     return scores, samples 
         
     async def search(self, collection, query, n=5):
+        query_embeddings = await self.generate_embeddings(query)
         if self.qdrant_found == True:
-            query_embeddings = await self.ipfs_embeddings_py.index_knn(query, self.metadata["model"])
             vector_search = await self.qdrant_kit_py.search_qdrant(collection, query_embeddings, n)
         else:
-            print("Qdrant failed to start")
-            ## Fallback to faiss
-            return None
+            vector_search = self.search_faiss(collection, query_embeddings, n)
         return vector_search
 
-    async def test_low_memory(self):
-        start = self.qdrant_kit_py.start_qdrant()
-        # load_qdrant = await self.load_qdrant_iter("laion/Wikipedia-X-Concat", "laion/Wikipedia-M3", "enwiki_concat", "enwiki_embed")
-        # ingest_qdrant = await self.ingest_qdrant_iter("Concat Abstract")
-        load_qdrant = await self.qdrant_kit_py.load_qdrant_iter("laion/English-ConcatX-Abstract", "laion/English-ConcatX-M3")
-        ingest_qdrant = await self.qdrant_kit_py.ingest_qdrant_iter(["Concat Abstract","Title"])
-        load_qdrant = await self.qdrant_kit_py.load_qdrant_iter("laion/German-ConcatX-Abstract", "laion/German-ConcatX-M3")
-        ingest_qdrant = await self.qdrant_kit_py.ingest_qdrant_iter("Concat Abstract")
-        results = await search_embeddings.search("laion/German-ConcatX-Abstract", "Machine Learning")
-        results = await search_embeddings.search("German-ConcatX-Abstract", "Machine Learning")
-        return None
+    async def test_low_memory(self, collections=[], datasets=[], column=None, query=None):
+        if query is None:
+            query = "the quick brown fox jumps over the lazy dog"
+        if column is None:
+            column = "Concat Abstract"
+        if len(datasets) == 0:
+            datasets = ["laion/German-ConcatX-Abstract", "laion/German-ConcatX-M3"]
+        if len(collections) == 0:
+            collections = [ x for x in datasets if "/" in x]
+            collections = [ x.split("/")[1] for x in collections]
+        start_qdrant = self.qdrant_kit_py.start_qdrant()
+        if start_qdrant == True:
+            print("Qdrant started")
+            datasets_pairs = ["",""]
+            search_results = {
+                collections: [],
+                results: []
+            }
+            for i in range(len(datasets)):
+                if i % 2 == 0:
+                    datasets_pairs.append(datasets[i-1], datasets[i])
+                await self.qdrant_kit_py.load_qdrant(datasets_pairs[0], datasets_pairs[1])
+                await self.qdrant_kit_py.ingest_qdrant(column)
+            for collection in collections:
+                results = await self.search(collection, query)
+                search_results[collection] = results
+
+            return search_results
+        else:
+            start_faiss = self.ipfs_embeddings_py.start_faiss(collection, query)
+            if start_faiss == True:
+                print("Faiss started")
+                datasets_pairs = ["",""]
+                search_results = {
+                    collections: [],
+                    results: []
+                }
+                for i in range(len(datasets)):
+                    if i % 2 == 0:
+                        datasets_pairs.append(datasets[i-1], datasets[i])
+                    await self.ipfs_embeddings_py.load_faiss(datasets_pairs[0], datasets_pairs[1])
+                    await self.ipfs_embeddings_py.ingest_faiss(column)
+                for collection in collections:
+                    results = await self.search(collection, query)
+                    search_results[collection] = results
+
+                return search_results
+            else:
+                print("Faiss failed to start")
+                return None
     
     async def load_qdrant_iter(self, dataset, knn_index, dataset_split=None, knn_index_split=None):
         await self.qdrant_kit_py.load_qdrant_iter(dataset, knn_index, dataset_split, knn_index_split)
