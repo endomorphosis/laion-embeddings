@@ -148,6 +148,61 @@ def process_index_shard(shard, datatype=None, split="train"):
             
     return [ cids , items, schema ]            
 
+def process_chunk_files(path, datatype="cids"):
+    cids = None
+    items = None
+    schema = None
+    
+    if type(path) is not str:
+        if type(path) is list:
+            if len(path) == 1:
+                path = path[0]
+            elif len(path) == 2:
+                path, datatype = path
+        if type(path) is dict:
+            if "file" in list(path.keys()):
+                path = path["file"]
+            if "type" in list(path.keys()):
+                datatype = path["type"]
+    
+    if datatype == "cids":
+        if os.path.exists(path):
+            cid_path = path.replace(".parquet","")+"_cids.parquet"
+            if os.path.exists(cid_path):
+                cids = load_dataset('parquet', data_files=cid_path)["cids"]
+        else:
+            return ValueError("No dataset found") 
+        
+    elif datatype == "items":
+        cid_path = path.replace(".parquet","")+"_cids.parquet"
+        chunk_dataset = None
+        cids = None
+        if os.path.exists(cid_path):
+            cids = load_dataset('parquet', data_files=cid_path)["cids"]
+        else:
+            if os.path.exists(path):
+                chunk_dataset = load_dataset('parquet', data_files=path)
+                cids = [ item["items"]["cid"] for item in chunk_dataset ]
+                tmp_dataset = datasets.Dataset.from_dict({"cids": cids})
+                tmp_dataset.to_parquet(cid_path)
+            else:
+                return ValueError("No dataset found")
+        if chunk_dataset is None:
+            chunk_dataset = load_dataset('parquet', data_files = path)   
+            if cids is None and os.path.exists(cid_path):
+                cids = load_dataset('parquet', data_files = cid_path)["cids"]
+            else:
+                cids = [ item["items"]["cid"] for item in chunk_dataset ]
+                tmp_dataset = datasets.Dataset.from_dict({"cids": cids})
+                tmp_dataset.to_parquet(cid_path)
+            pass
+        items = {key: [item["items"][key] for item in chunk_dataset] for key in chunk_dataset[0]["items"].keys()}
+        schema = None        
+    elif datatype == "schema":
+        schema = None
+
+    return [ cids , items, schema ]
+
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
@@ -1449,6 +1504,30 @@ class ipfs_embeddings_py:
                         self.cid_chunk_list.append(this_cid)
         return None
         
+    async def load_chunk_checkpoints(self, dataset, split, src_path, models):
+        files = []
+        if "doc_cid" not in list(dir(self)):
+            self.chunks = {}
+        if "doc_cid" not in list(dir(self)):
+            self.chunk_cache_set = {}
+        if os.path.isdir(src_path):
+            files = os.listdir(src_path)
+            files_by_models = [ [x for x in files if model.replace("/","___") in x and dataset in x and models in x ] for model in models]
+        if len(files_by_models) > 0:
+            with multiprocessing.Pool() as pool:
+                results = pool.map(self.process_chunk_file, files_by_models)
+                for result in results:
+                    model, doc_cid, items = result
+                    if model not in list(self.chunk_cache.keys()):
+                        self.chunk_cache_set[model] = set()
+                    if doc_cid not in list(self.chunk_cache[model].keys()):
+                        self.chunk_cache[model][doc_cid] = {"items": []}
+                    if doc_cid not in self.chunk_cache_set[model]:
+                        self.chunk_cache_set[model].add(doc_cid)
+                    self.doc_cid[model][doc_cid]["items"] += items
+                    
+        return None
+    
     
     async def load_checkpoints(self, dataset, split, dst_path, models):
         if "new_dataset" not in list(dir(self)):
