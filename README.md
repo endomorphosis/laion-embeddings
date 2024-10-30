@@ -96,7 +96,6 @@ curl 127.0.0.1:/shard_cluster \
     -H 'Content-Type: application/json'
 ```
 
-
 To upload the indices that you have sharded to storacha use the following command
 
 ```
