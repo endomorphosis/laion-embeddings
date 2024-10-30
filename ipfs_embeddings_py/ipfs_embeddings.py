@@ -11,10 +11,12 @@ import torch
 import faiss
 import numpy as np
 from aiohttp import ClientSession, ClientTimeout
+import multiprocessing
 from multiprocessing import Pool
+import transformers
 from transformers import AutoTokenizer
-import datasets
 from transformers import AutoModel
+import datasets
 from datasets import Dataset, concatenate_datasets, load_dataset
 import ipfs_multiformats
 from ipfs_multiformats import *
@@ -22,11 +24,135 @@ from chunker import Chunker
 import time
 import math
 
+
+def process_new_dataset_shard(shard, datatype=None, split="train"):
+    items = None
+    cids = None
+    schema = None
+    if type(shard) is not str:
+        if type(shard) is list:
+            if len(shard) == 1:
+                shard = shard[0]
+            elif len(shard) == 2:
+                shard, datatype = shard
+            elif len(shard) == 3:
+                shard, datatype, split = shard
+        if type(shard) is dict:
+            if "shard" in list(shard.keys()):
+                shard = shard["shard"]
+            if "datatype" in list(shard.keys()):
+                datatype = shard["datatype"]
+            if "split" in list(shard.keys()):
+                split = shard["split"]
+                
+    if datatype is None:
+        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+            datatype = "cids"
+        else:
+            if os.path.exists(shard.replace(".parquet","")+".parquet"):
+                datatype = "items"
+            else:
+                return ValueError("No dataset found")      
+    elif "cids" in datatype:
+        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+            tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")[split]
+            items = None
+            schema = None
+        else:
+            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet")[split]
+            tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+            tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
+            tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
+        cids = list(tmp_new_dataset_cid_dataset["cids"])
+    elif "items" in datatype:
+        if os.path.exists(shard.replace(".parquet", "")+".parquet"):
+            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet")[split]
+            if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+                tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")[split]
+            else:
+                tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+                tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
+                tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
+            items = {key: [item["items"][key] for item in tmp_new_dataset_items_dataset] for key in tmp_new_dataset_items_dataset[0]["items"].keys()}
+            cids = list(tmp_new_dataset_cid_dataset["cids"])
+            schema = None
+            del tmp_new_dataset_cid_dataset
+            del tmp_new_dataset_items_dataset
+        else:
+            return ValueError("No dataset found")
+    else:
+        return ValueError("datatype must be 'cids' or 'items' , received: '" + str(datatype) + "'")
+            
+    return [ cids , items, schema ]            
+
+def process_index_shard(shard, datatype=None, split="train"):
+    items = None
+    cids = None
+    schema = None
+    if type(shard) is not str:
+        if type(shard) is list:
+            if len(shard) == 1:
+                shard = shard[0]
+            elif len(shard) == 2:
+                shard, datatype = shard
+            elif len(shard) == 3:
+                shard, datatype, split = shard
+        if type(shard) is dict:
+            if "shard" in list(shard.keys()):
+                shard = shard["shard"]
+            if "datatype" in list(shard.keys()):
+                datatype = shard["datatype"]
+            if "split" in list(shard.keys()):
+                split = shard["split"]
+                
+    if datatype is None:
+        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+            datatype = "cids"
+        else:
+            if os.path.exists(shard.replace(".parquet","")+".parquet"):
+                datatype = "items"
+            else:
+                return ValueError("No dataset found")      
+    elif "cids" in datatype:
+        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+            tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")[split]
+            items = None
+            schema = None
+        else:
+            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet")[split]
+            tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+            tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
+            tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
+        cids = list(tmp_new_dataset_cid_dataset["cids"])
+    elif "items" in datatype:
+        if os.path.exists(shard.replace(".parquet", "")+".parquet"):
+            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet")[split]
+            if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+                tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")[split]
+            else:
+                tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+                tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
+                tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
+            cids = list(tmp_new_dataset_cid_dataset["cids"])
+            items = {key: [item["items"][key] for item in tmp_new_dataset_items_dataset] for key in tmp_new_dataset_items_dataset[0]["items"].keys()}
+            cids = list(tmp_new_dataset_cid_dataset["cids"])
+            schema = None
+            del tmp_new_dataset_cid_dataset
+            del tmp_new_dataset_items_dataset
+        else:
+            return ValueError("No dataset found")
+    else:
+        return ValueError("datatype must be 'cids' or 'items' , received: '" + str(datatype) + "'")
+            
+    return [ cids , items, schema ]            
+
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
         self.datasets = datasets.Dataset
         self.chunker = Chunker(resources, metadata)
+        self.process_new_dataset_shard = process_new_dataset_shard
+        self.process_index_shard = process_index_shard
         # self.elasticsearch = elasticsearch_kit(resources, metadata)
         self.consumer_task_done = {}
         self.producer_task_done = False
@@ -36,6 +162,7 @@ class ipfs_embeddings_py:
         self.libp2p_endpoints = {}
         self.local_endpoints = {}
         self.index =  {}
+        self.schemas = {}
         self.queues = {}
         self.caches = {}
         self.chunk_cache = {}
@@ -284,7 +411,7 @@ class ipfs_embeddings_py:
             for i in range(batch_size):
                 test_batch.append(test_text)
             try:
-                embeddings = await self.index_knn_openvino(test_batch, model, endpoint)
+                embeddings = await self.index_knn(test_batch, model, endpoint)
                 if not isinstance(embeddings, list):
                     if isinstance(embeddings, ValueError):
                         fail_reason = embeddings.args[0]
@@ -779,7 +906,7 @@ class ipfs_embeddings_py:
                         new_batch.append(item[column])
             results = None
             try:
-                results = await self.index_knn_openvino(new_batch, model_name, endpoint)
+                results = await self.index_knn(new_batch, model_name, endpoint)
             except Exception as e:
                 print(e)
                 pass
@@ -1015,33 +1142,32 @@ class ipfs_embeddings_py:
                     self.all_cid_list["new_dataset"] = []
                 if "new_dataset" not in list(self.all_cid_set.keys()):
                     self.all_cid_set["new_dataset"] = set()
-                for shard in new_dataset_shards:
-                    if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
-                        tmp_new_dataset_cids = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")["train"]
-                        self.all_cid_list["new_dataset"] += list(tmp_new_dataset_cids["cids"])
-                        self.all_cid_set["new_dataset"] = self.all_cid_set["new_dataset"].union(set(tmp_new_dataset_cids["cids"]))
-                        del tmp_new_dataset_cids
-                    else:
-                        new_dataset_shard = load_dataset('parquet', data_files=shard)["train"]
-                        tmp_new_dataset_cids = new_dataset_shard.map(lambda x: {"cid": x["items"]["cid"]})["cids"]
-                        self.all_cid_list["new_dataset"] += list(tmp_new_dataset_cids)
-                        self.all_cid_set["new_dataset"] = self.all_cid_set["new_dataset"].union(set(tmp_new_dataset_cids))
-                        tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cids})
-                        tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
-                        del new_dataset_shard
-                        del tmp_new_dataset_cids
-                        del tmp_new_dataset_cid_dataset
+                if "new_dataset" not in list(self.caches.keys()):
+                    self.caches["new_dataset"] = {"items" : []}
+                with multiprocessing.Pool() as pool:
+                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards))]
+                    results = pool.map(self.process_new_dataset_shard, args)
+                    if len(results) > 0:
+                        # Initialize accumulators
+                        total_cids = []
+                        total_items = []
+                        for res in results:
+                            cid, items, schemas = (res + [None, None, None])[:3]
+                            if cid is not None:
+                                total_cids += cid
+                            if items is not None:
+                                total_items += items
+                            if schemas is not None:
+                                self.schemas["new_dataset"] = schemas  # Assuming schemas won't conflict
+                        # Update the shared variables in bulk
+                        self.all_cid_list["new_dataset"] += total_cids
+                        self.all_cid_set["new_dataset"].update(set(total_cids))
+                        self.caches["new_dataset"]["items"] += total_items
+                                            
                 if self.new_dataset is None or isinstance(self.new_dataset, dict):
                     if len(new_dataset_shards) > 0:
                         self.new_dataset = load_dataset('parquet', data_files=new_dataset_shards)[split]
-                    else:
-                        columns = self.dataset.column_names
-                        columns.append("cid")
-                        self.new_dataset = datasets.Dataset.from_dict({key: [] for key in columns })
-            else:
-                self.new_dataset = datasets.Dataset.from_dict({key: [] for key in self.dataset.column_names })
-                self.all_cid_list["new_dataset"] = []
-                self.all_cid_set["new_dataset"] = set()
+        
         for model in models:
             if model not in list(self.index.keys()):
                 self.index[model] = None
@@ -1049,6 +1175,8 @@ class ipfs_embeddings_py:
                 self.all_cid_list[model] = []
             if model not in list(self.all_cid_set.keys()):
                 self.all_cid_set[model] = set()
+            if model not in list(self.caches.keys()):
+                self.caches[model] = {"items" : []}
             model_dst_path = dst_path + "/" + model.replace("/","___") + ".parquet"
             if os.path.isfile(model_dst_path):
                 self.caches[model] = {"items" : []}
@@ -1056,35 +1184,45 @@ class ipfs_embeddings_py:
             if os.path.exists(os.path.join(dst_path, "checkpoints")):
                 ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
                 this_model_shards = [os.path.join(dst_path, "checkpoints", x)  for x in ls_checkpoints if model.replace("/", "___") + "_shard" in x and "_cids" not in x]
-                for shard in this_model_shards:
-                    if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
-                        tmp_model_cids = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")["train"]
-                        self.all_cid_list[model] += list(tmp_model_cids["cids"])
-                        self.all_cid_set[model] = self.all_cid_set[model].union(set(tmp_model_cids["cids"]))
-                        del tmp_model_cids
-                    else:
-                        this_model_shard = load_dataset('parquet', data_files=shard)[split]
-                        tmp_model_cids = this_model_shard.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
-                        self.all_cid_list[model] += list(tmp_model_cids)
-                        self.all_cid_set[model] = self.all_cid_set[model].union(set(tmp_model_cids))
-                        tmp_model_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_model_cids})
-                        tmp_model_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
-                        del this_model_shard
-                        del tmp_model_cids
-                        del tmp_model_cid_dataset
+                with multiprocessing.Pool() as pool:
+                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards))]
+                    results = pool.map(self.process_new_dataset_shard, args)
+                    if len(results) > 0:
+                        # Initialize accumulators
+                        total_cids = []
+                        total_items = []
+                        for res in results:
+                            cid, items, schemas = (res + [None, None, None])[:3]
+                            if cid is not None:
+                                total_cids += cid
+                            if items is not None:
+                                total_items += items
+                            if schemas is not None:
+                                self.schemas[model] = schemas  # Assuming schemas won't conflict
+                        # Update the shared variables in bulk
+                        self.all_cid_list[model] += total_cids
+                        self.all_cid_set[model].update(set(total_cids))
+                        self.caches[model]["items"] += total_items
+        
                 if model not in list(self.index.keys()) or self.index[model] is None or isinstance(self.index[model], dict):
                     if len(this_model_shards) > 0:
                         self.index[model] = load_dataset('parquet', data_files=this_model_shards)[split]
                     else:
                         self.index[model] = datasets.Dataset.from_dict({"cid": [], "embedding": [] })
-                if os.path.exists(os.path.join(dst_path, "checkpoints", "sparse_chunks")):
-                    ls_chunks = os.listdir(os.path.join(dst_path, "checkpoints", "sparse_chunks"))
+                ls_chunks = []
+                if os.path.exists(os.path.join(dst_path,"sparse_chunks", )):
+                    ls_chunks = os.listdir(os.path.join(dst_path, "sparse_chunks"))
                     for chunk in ls_chunks:
                         chunk_cid = chunk.replace(".parquet","")
                         if chunk.replace(".parquet","") not in self.cid_chunk_set:
                             self.cid_chunk_set.add(chunk_cid)
                             self.cid_chunk_list.append(chunk_cid)
-                    del ls_chunks
+                for chunk in ls_chunks:
+                    chunk_cid = chunk.replace(".parquet","")
+                    if chunk.replace(".parquet","") not in self.cid_chunk_set:
+                        self.cid_chunk_set.add(chunk_cid)
+                        self.cid_chunk_list.append(chunk_cid)
+                del ls_chunks
                 del this_model_shards
                 del ls_checkpoints
         try:
@@ -1093,6 +1231,10 @@ class ipfs_embeddings_py:
             pass
         self.cid_set = set.intersection(*self.all_cid_set.values())
         self.cid_list = list(self.cid_set)
+        return None
+    
+    async def load_combined(self, dataset, split, dst_path, models):
+        
         return None
     
     def demux_checkpoints_old4(self, this_dataset):
@@ -1238,7 +1380,6 @@ class ipfs_embeddings_py:
                 combined_embedding_datasets_cids = datasets.Dataset.from_dict({"cids": self.unique_cid_list})
                 combined_embedding_datasets_cids.to_parquet(os.path.join(dst_path, "combined", dataset.replace("/","___") + model.replace("/","___") + "_cids.parquet"))
         
-        
         for model in list(self.metadata["models"]):
             if not os.path.exists(os.path.join(dst_path, "combined", model.replace("/","___"))):
                 combined_embedding_datasets = datasets.Dataset.from_generator(lambda: self.demux_checkpoints(self.index[model]))
@@ -1248,13 +1389,19 @@ class ipfs_embeddings_py:
         
         return None              
 
-
-    async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits):
+    async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits=None):
         await self.load_dataset(dataset, split)
         await self.load_checkpoints(dataset, split, dst_path, models)
-
-        if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet")):
-
+        centroids = []
+        embeddings_np = []                    
+        ipfs_cids = []
+        kmeans = None
+        if os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet")):
+            centroids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))["train"]
+            centroids = centroids_dataset["centroids"]
+            centroids = np.array(centroids)
+            max_splits = len(centroids)
+        else:
             new_dataset_download_size = self.new_dataset.dataset_size            
             embeddings_size = {}
             for model in self.metadata["models"]:
@@ -1264,57 +1411,163 @@ class ipfs_embeddings_py:
             embeddings_size["new_dataset"] = new_dataset_download_size
             largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
             largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-            max_size = 25 * 1024 * 1024 # 10 MB
+            max_size = 50 * 1024 * 1024 # 50 MB
             max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
             max_splits_size = round(largest_dataset_size / max_size)
             max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
-            if max_splits_rows > max_splits_size:
-                max_splits = max_splits_rows
-            else:
-                max_splits = max_splits_size
-            # Initialize variables
-            centroids = []
-            embeddings_np = []
-            for item in self.index[largest_embeddings_dataset]:
-                this_item = item["items"]
-                embeddings_np.append(this_item["embedding"])
-            embeddings_np = np.array(embeddings_np)
+            if max_splits == None:                
+                if max_splits_rows > max_splits_size:
+                    max_splits = max_splits_rows
+                else:
+                    max_splits = max_splits_size
+            num_items = len(self.index[largest_embeddings_dataset])
+            embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
+            embeddings_np = np.zeros((num_items, embedding_dim))
             
-            # Convert embeddings to numpy array
+            for i, item in enumerate(self.index[largest_embeddings_dataset]):
+                    embeddings_np[i] = item["items"]["embedding"]
+                    ipfs_cids.append(item["items"]["cid"])
 
             # Perform KMeans clustering using faiss
-            kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=300, verbose=True)
-            kmeans.train(embeddings_np)
-                
+            kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
+            kmeans.train(embeddings_np)               
             # Get centroids
             centroids = kmeans.centroids
 
             # Save centroids to disk
             centroids_dataset = datasets.Dataset.from_dict({"centroids": centroids.tolist()})
             centroids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))
-            pass
+
+        if os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet")):
+            cluster_cids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))["train"]
+            ipfs_cid_clusters_list = cluster_cids_dataset["cluster_cids"]
+            ipfs_cid_clusters_set = [set(x) for x in ipfs_cid_clusters_list]
+            ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
         else:
-            centroids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))["train"]
-            centroids = centroids_dataset["centroids"]
-            centroids = np.array(centroids)
-            pass
+            if kmeans is None:
+                new_dataset_download_size = self.new_dataset.dataset_size            
+                embeddings_size = {}
+                for model in self.metadata["models"]:
+                    embeddings_size[model] = self.index[model].dataset_size
+                largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
+                largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
+                embeddings_size["new_dataset"] = new_dataset_download_size
+                largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
+                largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
+                max_size = 50 * 1024 * 1024 # 50 MB
+                max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
+                max_splits_size = round(largest_dataset_size / max_size)
+                max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
+                if max_splits_rows > max_splits_size:
+                    max_splits = max_splits_rows
+                else:
+                    max_splits = max_splits_size
+                num_items = len(self.index[largest_embeddings_dataset])
+                embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
+                embeddings_np = np.zeros((num_items, embedding_dim))
+                for i, item in enumerate(self.index[largest_embeddings_dataset]):
+                    embeddings_np[i] = item["items"]["embedding"]
+                    ipfs_cids.append(item["items"]["cid"])
+                kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
+                kmeans.centroids = centroids
+                pass
+            
+            if len(ipfs_cids) == 0:
+                new_dataset_download_size = self.new_dataset.dataset_size            
+                embeddings_size = {}
+                for model in self.metadata["models"]:
+                    embeddings_size[model] = self.index[model].dataset_size
+                largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
+                num_items = len(self.index[largest_embeddings_dataset])
+                embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
+                embeddings_np = np.zeros((num_items, embedding_dim))
+                for i, item in enumerate(self.index[largest_embeddings_dataset]):
+                    embeddings_np[i] = item["items"]["embedding"]
+                    ipfs_cids.append(item["items"]["cid"])
         
-        # Assign embeddings to clusters
-        _, cluster_assignments = kmeans.index.search(embeddings_np, 1)
-        cluster_assignments = cluster_assignments.flatten()
+            max_splits = len(centroids)
+            index = faiss.IndexFlatL2(centroids.shape[1])
+            index.add(centroids)
+            _, cluster_assignments = index.search(embeddings_np, 1)
+            cluster_assignments = cluster_assignments.flatten()  # Flatten the cluster_assignments array
+            ipfs_cid_clusters_list = [[] for _ in range(max_splits)]
+            ipfs_cid_clusters_set = [set() for _ in range(max_splits)]
+            for cid, cluster_id in zip(ipfs_cids, cluster_assignments):
+                ipfs_cid_clusters_list[cluster_id].append(cid)
+                ipfs_cid_clusters_set[cluster_id].add(cid) 
+            ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
+            cluster_cids_dataset = datasets.Dataset.from_dict({"cluster_cids": ipfs_cid_clusters_list})
+            cluster_cids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))
 
-        # Create new splits based on cluster assignments
-        for cluster_id in range(max_splits):
-            cluster_indices = np.where(cluster_assignments == cluster_id)[0]
-            cluster_embeddings = [embeddings_np[i] for i in cluster_indices]
-            cluster_dataset = datasets.Dataset.from_dict({"embedding": cluster_embeddings})
-
-            # Save the new split to disk
-            split_path = os.path.join(dst_path, f"{dataset.replace('/', '___')}_split_{cluster_id}.parquet")
-            cluster_dataset.to_parquet(split_path)
-            print(f"Saved split {cluster_id} with {len(cluster_embeddings)} embeddings to {split_path}")
-
-            return None
+        max_splits = len(centroids)
+        for model in list(self.index.keys()):
+            kmeans_embeddings_splits = {}
+            if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters")):
+                os.makedirs(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
+            model_splits = os.listdir(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
+            if len(model_splits) == max_splits:
+                pass 
+            else:
+                for cluster_id in range(max_splits):
+                    if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                        kmeans_embeddings_splits[cluster_id] = {}
+                first_item = self.index[model][0]
+                for key in first_item["items"].keys():
+                    embedding_dim = len(first_item["items"]["embedding"])    
+                    for cluster_id in range(max_splits):
+                        if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
+                            if key == "embedding":
+                                kmeans_embeddings_splits[cluster_id][key] = np.zeros((len(ipfs_cid_clusters_list[cluster_id]), embedding_dim))
+                            else:
+                                kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
+                for item in self.index[model]:
+                    if item["items"]["cid"] in ipfs_cid_set:
+                        for cluster_id in range(max_splits):
+                            if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
+                                cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
+                                for key in item["items"].keys():
+                                    if key == "embedding":
+                                        kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = np.array(item["items"][key])                                    
+                                    else:
+                                        kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
+                                break
+                for cluster_id in range(max_splits):
+                    if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                        continue
+                    cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
+                    cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
+        
+        kmeans_embeddings_splits = {}
+        if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_clusters")):
+            os.makedirs(os.path.join(dst_path, dataset.replace("/", "___")  + "_clusters"))
+        model_splits = os.listdir(os.path.join(dst_path, dataset.replace("/", "___") + "_clusters"))
+        if len(model_splits) == max_splits:
+            pass 
+        else:
+            for cluster_id in range(max_splits):
+                if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                    kmeans_embeddings_splits[cluster_id] = {}
+            first_item = self.new_dataset[0]
+            for key in first_item["items"].keys():
+                for cluster_id in range(max_splits):
+                    if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
+                        kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]    
+            for item in self.new_dataset:
+                if item["items"]["cid"] in ipfs_cid_set:
+                    for cluster_id in range(max_splits):
+                        if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
+                            cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
+                            for key in item["items"].keys():
+                                kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
+                            break
+                    
+            for cluster_id in range(max_splits):
+                if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                    continue
+                cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
+                cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___"), f"cluster_{cluster_id}.parquet"))
+                return None
+    
     
 if __name__ == "__main__":
     metadata = {
@@ -1322,9 +1575,9 @@ if __name__ == "__main__":
         "column": "text",
         "split": "train",
         "models": [
-            # "thenlper/gte-small",
-            "BAAI/bge-m3",
-            # "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            "thenlper/gte-small",
+            "Alibaba-NLP/gte-large-en-v1.5",
+            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         ],
         "chunk_settings": {
             "chunk_size": 512,
@@ -1334,12 +1587,10 @@ if __name__ == "__main__":
             "embed_model": "thenlper/gte-small",
             "tokenizer": None
         },
-        "dst_path": "/opt/app-root/data/tmp",
+        "dst_path": "/storage/teraflopai/tmp",
     }
     resources = {
         "openvino_endpoints": [
-        ],
-        "tei_endpoints": [
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
@@ -1352,20 +1603,22 @@ if __name__ == "__main__":
             # ["aapot/bge-m3-onnx", "https://bge-m3-onnx5-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx5/infer", 1024],
             # ["aapot/bge-m3-onnx", "https://bge-m3-onnx6-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx6/infer", 1024],
             # ["aapot/bge-m3-onnx", "https://bge-m3-onnx7-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx7/infer", 1024]
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
-            # ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
-            # ["thenlper/gte-small", "http://62.146.169.111:8081/embed-tiny", 512],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
-            # ["thenlper/gte-small", "http://62.146.169.111:8082/embed-tiny", 512],
-            # ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
-            # ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
-            # ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
+        ],
+        "tei_endpoints": [
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8081/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8082/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
         ]
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
-    asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
-    # asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))
+    asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
