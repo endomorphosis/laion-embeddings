@@ -40,8 +40,8 @@ class test_shard_dataset:
         return None
     
     def __call__(self, request):
-        return self.shard_embeddings.kmeans_shard(request)
-    
+        return self.shard_embeddings.kmeans_cluster_split(request)
+
     def __test__(self):
         test_dataset = "laion/Wikipedia-X-Concat"
         test_faiss_index = "laion/Wikipedia-M3"

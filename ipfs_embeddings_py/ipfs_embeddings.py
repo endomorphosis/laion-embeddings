@@ -1845,7 +1845,6 @@ class ipfs_embeddings_py:
                 if "secondary_cid" in list(item.keys()):
                     del item["secondary_cid"]
                 yield item
-        
                 
     async def combine_checkpoints(self, dataset, split, column, dst_path, models):
         await self.load_dataset(dataset, split)

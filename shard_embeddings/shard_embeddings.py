@@ -5,6 +5,7 @@ class shard_embeddings:
         self.resources = resources
         self.metadata = metadata
         self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
+        self.kmeans_cluster_split = self.ipfs_embeddings_py.kmeans_cluster_split
         return None
     
     async def __call__(self, metadata=None):

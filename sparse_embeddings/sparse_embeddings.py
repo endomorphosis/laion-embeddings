@@ -842,3 +842,5 @@ if __name__ == "__main__":
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
     asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
+ 
+sparse_embeddings = ipfs_embeddings_py
