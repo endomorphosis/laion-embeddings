@@ -2067,13 +2067,18 @@ class ipfs_embeddings_py:
             cluster_id_set = set(cluster_id_list)
             kmeans_embeddings_splits_list = []
             kmeans_embeddings_splits_set = set()       
-            for cluster_id in range(max_splits):
-                if cluster_id not in kmeans_embeddings_splits_list:
-                    for key in keys_list:
-                        kmeans_embeddings_splits[cluster_id][key] = ["" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
-                    kmeans_embeddings_splits_list.append(cluster_id)
-                kmeans_embeddings_splits_set = set(kmeans_embeddings_splits_list)    
-            kmeans_embeddings_splits = [ { key: [ "" for _ in range(len(cluster_id_list[cluster_id]))] for key in keys_set} for x in range(len(cluster_id_list[cluster_id]))]
+            kmeans_embeddings_splits_list = [
+                cluster_id
+                for cluster_id in range(max_splits)
+                if cluster_id not in kmeans_embeddings_splits_list
+                for key in keys_list
+                if not kmeans_embeddings_splits[cluster_id].__setitem__(key, [""] * len(ipfs_cid_clusters_list[cluster_id]))
+            ]
+            kmeans_embeddings_splits_set = set(kmeans_embeddings_splits_list)
+            kmeans_embeddings_splits = [
+                {key: [""] * len(cluster_id_list[cluster_id]) for key in keys_set}
+                for cluster_id in range(max_splits)
+            ]
             [
                 [
                     [
