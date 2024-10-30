@@ -213,6 +213,8 @@ class ipfs_embeddings_py:
         self.ipfs_parquet_to_car = ipfs_parquet_to_car_py(resources, metadata)
         self.ipfs_parquet_to_car_test = self.ipfs_parquet_to_car.test
         self.ipfs_parquet_to_car_install = self.ipfs_parquet_to_car.install
+        if "ipfs_embeddings_py" not in dir(self):
+            self.ipfs_embeddings_py = self.__call__
         self.parquet_to_car = self.ipfs_parquet_to_car
         # self.elasticsearch = elasticsearch_kit(resources, metadata)
         self.consumer_task_done = {}
@@ -282,6 +284,7 @@ class ipfs_embeddings_py:
         self.load_index = self.load_index
         self.async_generator = self.async_generator
         self.send_batch_to_endpoint = self.send_batch_to_endpoint
+        self.kmeans_cluster_split = self.kmeans_cluster_split
         # Initialize endpoints
         if "tei_endpoints" in resources.keys():
             for endpoint_info in resources.get('tei_endpoints', []):

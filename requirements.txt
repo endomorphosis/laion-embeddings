@@ -5,6 +5,8 @@ pandas
 numpy
 qdrant-client
 multiformats
+ipfs_kit_py==0.0.6
+ipfs_datasets_py==0.0.6
 ipfs_embeddings_py==0.0.18
 datasets
 transformers
@@ -16,6 +18,4 @@ rank_bm25
 llama-index-embeddings-huggingface
 llama-index
 torch
-faiss
-faiss-cpu
-faiss-gpu
+faiss_cpu
