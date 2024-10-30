@@ -1405,7 +1405,7 @@ class ipfs_embeddings_py:
                 ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
                 this_model_shards = [os.path.join(dst_path, "checkpoints", x)  for x in ls_checkpoints if model.replace("/", "___") + "_shard" in x and "_cids" not in x]
                 with multiprocessing.Pool() as pool:
-                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards)]
+                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards))]
                     results = pool.map(self.process_new_dataset_shard, args)
                     if len(results) > 0:
                         # Initialize accumulators
@@ -1562,6 +1562,22 @@ class ipfs_embeddings_py:
         
         return None
     
+    async def search_chunks(self, dataset, split, src_path, models, cids):
+        
+        return None
+    
+    async def search_shards(self, dataset, split, src_path, models):
+        
+        return None
+    
+    async def autofaiss(self, dataset, split, src_path, models):
+        
+        return None
+    
+    async def ipfs_parquet_to_car(self, dataset, split, src_path, dst_path, models):
+        
+        return None
+
     def demux_checkpoints_old4(self, this_dataset):
         self.unique_cid_set = set()
         self.unique_cid_list = []
