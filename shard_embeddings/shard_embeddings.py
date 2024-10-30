@@ -26,7 +26,7 @@ class shard_embeddings:
         except Exception as e:
             print(e)
             raise e
-    
+
 if __name__ == '__main__':
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
