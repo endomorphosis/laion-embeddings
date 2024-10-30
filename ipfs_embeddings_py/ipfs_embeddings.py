@@ -2075,21 +2075,17 @@ class ipfs_embeddings_py:
                 if not kmeans_embeddings_splits[cluster_id].__setitem__(key, [""] * len(ipfs_cid_clusters_list[cluster_id]))
             ]
             kmeans_embeddings_splits_set = set(kmeans_embeddings_splits_list)
-            kmeans_embeddings_splits = [
-                {key: [""] * len(cluster_id_list[cluster_id]) for key in keys_set}
-                for cluster_id in range(max_splits)
-            ]
             [
                 [
                     [
                         kmeans_embeddings_splits[cluster_id][key].__setitem__(
                             ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"]),
-                            item["items"][key]
+                            item["items"][key] 
                         )
                         for key in keys_list
                     ]
                     for cluster_id in range(max_splits)
-                    if item["items"]["cid"] in cluster_id_set
+                    if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]
                 ]
                 for item in self.new_dataset
                 if item["items"]["cid"] in ipfs_cid_set
@@ -2100,7 +2096,7 @@ class ipfs_embeddings_py:
                     continue
                 cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
                 cluster_dataset.to_parquet(cluster_filename)
-                return None
+        return True
     
 if __name__ == "__main__":
     metadata = {
