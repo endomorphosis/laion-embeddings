@@ -25,70 +25,6 @@ import time
 import math
 
 
-
-def process_new_dataset_shard_2(shard, datatype=None, split="train"):
-    items = None
-    cids = None
-    schema = None
-    if type(shard) is not str:
-        if type(shard) is list:
-            if len(shard) == 1:
-                shard = shard[0]
-            elif len(shard) == 2:
-                shard, datatype = shard
-            elif len(shard) == 3:
-                shard, datatype, split = shard
-        if type(shard) is dict:
-            if "shard" in list(shard.keys()):
-                shard = shard["shard"]
-            if "datatype" in list(shard.keys()):
-                datatype = shard["datatype"]
-            if "split" in list(shard.keys()):
-                split = shard["split"]
-                
-    if datatype is None:
-        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
-            datatype = "cids"
-        else:
-            if os.path.exists(shard.replace(".parquet","")+".parquet"):
-                datatype = "items"
-            else:
-                raise ValueError("No dataset found")      
-    elif "cids" in datatype:
-        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
-            tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet", streaming=True)[split]
-            items = None
-            schema = None
-        else:
-            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet", streaming=True)[split]
-            tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})
-            tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet", batch_size=1024)
-            tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
-        cids = list(tmp_new_dataset_cid_dataset["cids"])
-    elif "items" in datatype:
-        if os.path.exists(shard.replace(".parquet", "")+".parquet"):
-            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet")[split]
-            if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
-                tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")[split]
-            else:
-                tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
-                tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
-                tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
-            cids = list(tmp_new_dataset_cid_dataset["cids"])
-            items = {key: [item["items"][key] for item in tmp_new_dataset_items_dataset] for key in tmp_new_dataset_items_dataset[0]["items"].keys()}
-            cids = list(tmp_new_dataset_cid_dataset["cids"])
-            schema = None
-            del tmp_new_dataset_cid_dataset
-            del tmp_new_dataset_items_dataset
-        else:
-            return ValueError("No dataset found")
-    else:
-        return ValueError("datatype must be 'cids' or 'items' , received: '" + str(datatype) + "'")
-            
-    return [ cids , items, schema ]            
-
-
-
 def process_new_dataset_shard(shard, datatype=None, split="train"):
     items = None
     cids = None
@@ -137,7 +73,6 @@ def process_new_dataset_shard(shard, datatype=None, split="train"):
                 tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
                 tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
                 tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
-            cids = list(tmp_new_dataset_cid_dataset["cids"])
             items = {key: [item["items"][key] for item in tmp_new_dataset_items_dataset] for key in tmp_new_dataset_items_dataset[0]["items"].keys()}
             cids = list(tmp_new_dataset_cid_dataset["cids"])
             schema = None
@@ -149,9 +84,6 @@ def process_new_dataset_shard(shard, datatype=None, split="train"):
         return ValueError("datatype must be 'cids' or 'items' , received: '" + str(datatype) + "'")
             
     return [ cids , items, schema ]            
-
-
-
 
 def process_index_shard(shard, datatype=None, split="train"):
     items = None
@@ -214,35 +146,11 @@ def process_index_shard(shard, datatype=None, split="train"):
             
     return [ cids , items, schema ]            
 
-
-
-def process_model_shard(shard, split="train"):
-    items = None
-    cids = None
-    if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
-        tmp_model_cids = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")["train"]
-        cids = list(tmp_model_cids["cids"])
-        items = None
-        del tmp_model_cids
-    else:
-        this_model_shard = load_dataset('parquet', data_files=shard)[split]
-        tmp_model_cids = this_model_shard.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
-        tmp_model_items = this_model_shard.map(lambda x: {"items": x["items"]})["items"]
-        cids = list(tmp_model_cids)
-        items = dict(tmp_model_items)
-        tmp_model_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_model_cids})
-        tmp_model_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
-        del this_model_shard
-        del tmp_model_cids
-        del tmp_model_cid_dataset
-    return [cids, items]
-
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
         self.datasets = datasets.Dataset
         self.chunker = Chunker(resources, metadata)
-        self.process_model_shard = process_model_shard
         self.process_new_dataset_shard = process_new_dataset_shard
         self.process_index_shard = process_index_shard
         # self.elasticsearch = elasticsearch_kit(resources, metadata)
