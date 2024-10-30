@@ -7,13 +7,24 @@ class shard_embeddings:
         self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
         return None
     
-    def __call__(self, request):
-        self.ipfs_embeddings_py.kmeans_shard(request)
+    async def __call__(self, metadata=None):
+        results = None
+        try: 
+            if metadata is None and metadata in list(dir(self)):
+                metadata = self.metadata
+            return await self.ipfs_embeddings_py.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"])
+        except Exception as e:
+            print(e)
+            raise e
         
-    
     def test (self):
-        
-        return None
+        results = None
+        try:
+            results = self()
+            return results
+        except Exception as e:
+            print(e)
+            raise e
     
 if __name__ == '__main__':
     metadata = {
