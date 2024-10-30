@@ -26,6 +26,10 @@ import math
 from elasticsearch_kit import elasticsearch_kit
 from elasticsearch import Elasticsearch
 from ipfs_parquet_to_car import ipfs_parquet_to_car_py
+from multiprocessing import Process
+import concurrent.futures
+import concurrent
+import json
 
 def process_new_dataset_shard(shard, datatype=None, split="train"):
     items = None
@@ -1720,7 +1724,7 @@ class ipfs_embeddings_py:
 
         return results
             
-    async def index_sparse_embeddings(self, dataset, split, column, dst_path, models):
+    async def index_sparse_chunks(self, dataset, split, column, dst_path, models):
         
         return None
             
@@ -1936,7 +1940,6 @@ class ipfs_embeddings_py:
             kmeans.train(embeddings_np)               
             # Get centroids
             centroids = kmeans.centroids
-
             # Save centroids to disk
             centroids_dataset = datasets.Dataset.from_dict({"centroids": centroids.tolist()})
             centroids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))
@@ -2011,29 +2014,33 @@ class ipfs_embeddings_py:
             if len(model_splits) == max_splits:
                 pass 
             else:
+                kmeans_embeddings_splits_set = set()
+                cluster_id_list = []
+                cluster_id_set = set()
                 for cluster_id in range(max_splits):
-                    if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                    if cluster_id not in kmeans_embeddings_splits_set:
                         kmeans_embeddings_splits[cluster_id] = {}
                 first_item = self.index[model][0]
-                for key in first_item["items"].keys():
-                    embedding_dim = len(first_item["items"]["embedding"])    
+                embedding_dim = len(first_item["items"]["embedding"])
+                kmeans_embeddings_splits = [
+                    {
+                        key: (np.zeros((len(ipfs_cid_clusters_list[cluster_id]), embedding_dim)) if key == "embedding" else ["" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))])
+                        for key in first_item["items"].keys()
+                    }
+                    for cluster_id in range(max_splits)
+                ]
+
+                def process_item(item):
                     for cluster_id in range(max_splits):
-                        if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
-                            if key == "embedding":
-                                kmeans_embeddings_splits[cluster_id][key] = np.zeros((len(ipfs_cid_clusters_list[cluster_id]), embedding_dim))
-                            else:
-                                kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
-                for item in self.index[model]:
-                    if item["items"]["cid"] in ipfs_cid_set:
-                        for cluster_id in range(max_splits):
-                            if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
-                                clusters_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
-                                for key in item["items"].keys():
-                                    if key == "embedding":
-                                        kmeans_embeddings_splits[cluster_id][key][clusters_id_index] = np.array(item["items"][key])                                    
-                                    else:
-                                        kmeans_embeddings_splits[cluster_id][key][clusters_id_index] = item["items"][key]
-                                break
+                        if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
+                            for key in item["items"].keys():
+                                kmeans_embeddings_splits[cluster_id][key][
+                                    ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
+                                ] = np.array(item["items"][key]) if key == "embedding" else item["items"][key]
+                            break
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    executor.map(process_item, [item for item in self.index[model] if item["items"]["cid"] in ipfs_cid_set])
                 for cluster_id in range(max_splits):
                     if cluster_id not in list(kmeans_embeddings_splits.keys()):
                         continue
@@ -2041,6 +2048,7 @@ class ipfs_embeddings_py:
                     cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
         
         kmeans_embeddings_splits = {}
+       
         cluster_folder = os.path.join(dst_path, dataset.replace("/", "___") + "_clusters")
         if not os.path.exists(cluster_folder):
             os.makedirs(cluster_folder)
@@ -2048,23 +2056,40 @@ class ipfs_embeddings_py:
         if len(model_splits) == max_splits:
             pass 
         else:
+            clister_id_set = set()
+            cluster_id_list = []  
             for cluster_id in range(max_splits):
                 if cluster_id not in list(kmeans_embeddings_splits.keys()):
                     kmeans_embeddings_splits[cluster_id] = {}
+                    cluster_id_list.append(cluster_id)
+            cluster_id_set = set(cluster_id_list)
             first_item = self.new_dataset[0]
-            for key in first_item["items"].keys():
-                for cluster_id in range(max_splits):
-                    if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
-                        kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]    
-            for item in self.new_dataset:
-                if item["items"]["cid"] in ipfs_cid_set:
-                    for cluster_id in range(max_splits):
-                        if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
-                            cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
-                            for key in item["items"].keys():
-                                kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
-                            break
-                    
+            keys_list = list(first_item["items"].keys())
+            keys_set = set(keys_list)
+            kmeans_embeddings_splits = [ { key: [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))] for key in keys_set} for x in range(len(ipfs_cid_clusters_list[cluster_id]))] 
+            [
+                [
+                    [
+                        kmeans_embeddings_splits[cluster_id][key].__setitem__(
+                            ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"]),
+                            item["items"][key]
+                        )
+                        for key in keys_list
+                    ]
+                    for cluster_id in range(max_splits)
+                    if item["items"]["cid"] in cluster_id_set
+                ]
+                for item in self.new_dataset
+                if item["items"]["cid"] in ipfs_cid_set
+            ]
+            # for item in self.new_dataset:
+            #     if item["items"]["cid"] in ipfs_cid_set:
+            #         for cluster_id in range(max_splits):
+            #             if item["items"]["cid"] in cluster_id_set:
+            #                 cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
+            #                 for key in keys_list:
+            #                     kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
+            #                 break
             for cluster_id in range(max_splits):
                 cluster_filename = os.path.join(cluster_folder, dataset.replace("/", "___") + "cluster_{cluster_id}.parquet")
                 if cluster_id not in list(kmeans_embeddings_splits.keys()):
