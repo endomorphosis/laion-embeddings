@@ -10,7 +10,7 @@ class ipfs_parquet_to_car_py:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
-        self.ipfs_parquet_to_car_py_version = "0.0.1"
+        self.ipfs_parquet_to_car_py_version = "1.0.0"
         
     async def  __call__(self, src, dst):
         if os.path.isdir(src):
