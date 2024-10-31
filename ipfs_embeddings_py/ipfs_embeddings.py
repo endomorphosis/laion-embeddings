@@ -1318,12 +1318,22 @@ class ipfs_embeddings_py:
     
     def test_llama_cpp(self):
         test_llama_cpp_cmd = "llama_cpp --version"
+        test_results = {}
         try:
             test_llama_cpp = subprocess.check_output(test_llama_cpp_cmd, shell=True)
-            return test_llama_cpp
+            test_results["llama_cpp"] = test_llama_cpp
         except Exception as e:
             print(e)
             return ValueError(e)
+        try:
+            test_ollama = subprocess.check_output("ollama --version", shell=True)
+            test_results["ollama"] = test_ollama
+        except Exception as e:
+            print(e)
+            return ValueError(e)
+        
+        return test_results
+        
     
     def test_local_openvino(self):
         test_openvino_cmd = "python3 -c 'import openvino; print(openvino.__version__)'"
@@ -1354,6 +1364,10 @@ class ipfs_embeddings_py:
             return ValueError(e)
     
     def install_openvino(self):
+        
+        return None
+    
+    def install_ipex(self):
         
         return None
     
