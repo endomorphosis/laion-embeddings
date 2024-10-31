@@ -509,6 +509,11 @@ class ipfs_embeddings_py:
         batch_size = 2**exponent
         if "cuda" in endpoint or "cpu" in endpoint:
             token_length_size = round(self.local_endpoints[model][endpoint].config.max_position_embeddings * 0.99)
+        elif "openvino" in endpoint:
+            try:
+                token_length_size = round(self.openvino_endpoints[model][endpoint] * 0.99)
+            except Exception as e:
+                token_length_size = round(self.local_endpoints[model][endpoint].config.max_position_embeddings * 0.99)
         else:
             token_length_size = round(self.tei_endpoints[model][endpoint] * 0.99)
         test_tokens = []
@@ -611,23 +616,45 @@ class ipfs_embeddings_py:
             samples = [samples]
         if type(samples) is list or type(samples) is iter:
             this_query = {"inputs": samples}
-            if chosen_endpoint is None:
-                if "chosen_endpoint" not in list(dir(self)) or self.chosen_local_endpoint is None or self.chosen_local_endpoint_model != model:
-                    self.chosen_local_endpoint_model = model
-                    self.chosen_local_endpoint = AutoModel.from_pretrained(model)
-                    if model not in self.tokenizer.keys():
-                        self.tokenizer[model] = {}
-                    if "cpu" not in self.tokenizer[model].keys():
-                        self.tokenizer[model]["cpu"] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
-                chosen_endpoint = self.chosen_local_endpoint
-                chosen_endpoint.eval()
-                inputs = self.tokenizer[model]["cpu"](samples, return_tensors="pt")
-                with torch.no_grad():
-                    output = chosen_endpoint(**inputs).last_hidden_state.mean(dim=1).tolist()
-                    query_response = output[0]
-            else:
+            all_endpoints = { "tei_endpoints":  [ x[2] for x in self.tei_endpoints ], "openvino_endpoints":  [ x[2] for x in self.openvino_endpoints ], "libp2p_endpoints":  [ x[2] for x in self.libp2p_endpoints ], "local_endpoints": [ x[2] for x in self.local_endpoints ] }
+            if len(all_endpoints["local_endpoints"]) > 0 and "cuda" in chosen_endpoint or "cpu" in chosen_endpoint:
+                if chosen_endpoint is None:
+                    if "chosen_endpoint" not in list(dir(self)) or self.chosen_local_endpoint is None or self.chosen_local_endpoint_model != model:
+                        self.chosen_local_endpoint_model = model
+                        self.chosen_local_endpoint = AutoModel.from_pretrained(model)
+                        if model not in self.tokenizer.keys():
+                            self.tokenizer[model] = {}
+                        if "cpu" not in self.tokenizer[model].keys():
+                            self.tokenizer[model]["cpu"] = AutoTokenizer.from_pretrained(model, device='cpu', use_fast=True)
+                    chosen_endpoint = self.chosen_local_endpoint
+                    chosen_endpoint.eval()
+                    inputs = self.tokenizer[model]["cpu"](samples, return_tensors="pt")
+                    with torch.no_grad():
+                        output = chosen_endpoint(**inputs).last_hidden_state.mean(dim=1).tolist()
+                        query_response = output[0]
+            if len(all_endpoints["tei_endpoints"]) > 0 and "/embed" in chosen_endpoint and "cuda" not in chosen_endpoint and "cpu" not in chosen_endpoint:
                 try:
                     query_response = await self.make_post_request(chosen_endpoint, this_query)
+                except Exception as e:
+                    print(str(e))
+                    if "413" in str(e):
+                        return ValueError(e)
+                    if "can not write request body" in str(e):
+                        return ValueError(e)
+                    return ValueError(e)
+            if len(all_endpoints["openvino_endpoints"]) > 0 and "/infer" in chosen_endpoint and "cuda" not in chosen_endpoint and "cpu" not in chosen_endpoint:
+                try:
+                    query_response = await self.make_post_request_openvino(chosen_endpoint, this_query)
+                except Exception as e:
+                    print(str(e))
+                    if "413" in str(e):
+                        return ValueError(e)
+                    if "can not write request body" in str(e):
+                        return ValueError(e)
+                    return ValueError(e)
+            if len(all_endpoints["libp2p_endpoints"]) > 0 and "/infer" not in chosen_endpoint and "/embed" not in chosen_endpoint and "cuda" not in chosen_endpoint and "cpu" not in chosen_endpoint:
+                try:
+                    query_response = await self.make_post_request_libp2p(chosen_endpoint, this_query)
                 except Exception as e:
                     print(str(e))
                     if "413" in str(e):
@@ -772,7 +799,41 @@ class ipfs_embeddings_py:
             except Exception as e:
                 print(f"Unexpected error: {str(e)}")
                 return ValueError(f"Unexpected error: {str(e)}")
-        
+
+    async def make_post_request_libp2p(self, endpoint, data):
+        headers = {'Content-Type': 'application/json'}
+        timeout = ClientTimeout(total=300) 
+        async with ClientSession(timeout=timeout) as session:
+            try:
+                async with session.post(endpoint, headers=headers, json=data) as response:
+                    if response.status != 200:
+                        return ValueError(response)
+                    return await response.json()
+            except Exception as e:
+                print(str(e))
+                if "Can not write request body" in str(e):
+                    print( "endpoint " + endpoint + " is not accepting requests")
+                    return ValueError(e)
+                if "Timeout" in str(e):
+                    print("Timeout error")
+                    return ValueError(e)
+                if "Payload is not completed" in str(e):
+                    print("Payload is not completed")
+                    return ValueError(e)
+                if "Can not write request body" in str(e):
+                    return ValueError(e)
+                pass
+            except aiohttp.ClientPayloadError as e:
+                print(f"ClientPayloadError: {str(e)}")
+                return ValueError(f"ClientPayloadError: {str(e)}")
+            except asyncio.TimeoutError as e:
+                print(f"Timeout error: {str(e)}")
+                return ValueError(f"Timeout error: {str(e)}")
+            except Exception as e:
+                print(f"Unexpected error: {str(e)}")
+                return ValueError(f"Unexpected error: {str(e)}")
+            
+            
     async def make_post_request_openvino(self, endpoint, data):
         headers = {'Content-Type': 'application/json'}
         timeout = ClientTimeout(total=300) 
@@ -1293,7 +1354,7 @@ class ipfs_embeddings_py:
                     batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
                     self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
                     consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.consumer(self.queues[model]["cuda:" + str(gpu)], column, batch_size, model, "cuda:" + str(gpu)))
-            elif len(local) > 0 and len(cpus) > 0:
+            elif len(local) > 0 and cpus > 0:
                 #detect openvino locally
                 openvino_test = None
                 llama_cpp_test = None
