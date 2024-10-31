@@ -513,7 +513,13 @@ class ipfs_embeddings_py:
             try:
                 token_length_size = round(self.openvino_endpoints[model][endpoint] * 0.99)
             except Exception as e:
-                token_length_size = round(self.local_endpoints[model][endpoint].config.max_position_embeddings * 0.99)
+                try:
+                    token_length_size = round(self.local_endpoints[model][endpoint].config.max_position_embeddings * 0.99)
+                except Exception as e:
+                    try:
+                        token_length_size = round(self.tei_endpoints[model][endpoint] * 0.99)
+                    except Exception as e:
+                        token_length_size = 512
         else:
             token_length_size = round(self.tei_endpoints[model][endpoint] * 0.99)
         test_tokens = []
@@ -605,6 +611,22 @@ class ipfs_embeddings_py:
             return 1
         else:
             return 2**(exponent-1)
+        
+    async def infer_local_cuda(self, model, samples):
+        
+        return None
+
+    async def infer_local_cpu(self, model, samples):
+        
+        return None
+
+    async def infer_local_llama(self, model, samples):
+        
+        return None
+        
+    async def infer_local_openvino(self, model, samples):
+        
+        return None
 
     async def index_knn(self, samples, model, chosen_endpoint=None):
         knn_stack = []
@@ -1401,7 +1423,7 @@ class ipfs_embeddings_py:
                                 self.batch_sizes[model][endpoint_name] = batch_size
                             if self.batch_sizes[model][endpoint_name] > 0:
                                 self.queues[model][endpoint_name] = asyncio.Queue()
-                                consumer_tasks[(model, endpoint_name )] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                                consumer_tasks[(model, endpoint_name )] = asyncio.create_task(self.consumer(self.queues[model][endpoint_name], column, batch_size, model, endpoint))
                             openvino_count = openvino_count + 1
                 elif llama_cpp_test:
                     llama_count = 0
