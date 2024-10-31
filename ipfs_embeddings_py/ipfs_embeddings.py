@@ -9,6 +9,9 @@ import aiohttp
 import requests
 import torch
 import faiss
+import math
+import timeit
+import time
 import numpy as np
 from aiohttp import ClientSession, ClientTimeout
 import multiprocessing
@@ -18,12 +21,69 @@ from transformers import AutoTokenizer
 from transformers import AutoModel
 import datasets
 from datasets import Dataset, concatenate_datasets, load_dataset
-import ipfs_multiformats
-from ipfs_multiformats import *
-from chunker import Chunker
-import time
-import math
+try:
+    from .ipfs_multiformats import ipfs_multiformats_py
+    from .ipfs_multiformats import *
+except Exception as e:
+    try:
+        from ipfs_multiformats import ipfs_multiformats_py
+        from ipfs_multiformats import *
+    except Exception as e:
+        try:
+            import ipfs_multiformats
+        except Exception as e:
+            pass
+    pass
+except Exception as e:
+    try:
+        from ipfs_multiformats import ipfs_multiformats_py
+        from ipfs_multiformats import *
+    except Exception as e:
+        try:
+            import ipfs_multiformats
+        except Exception as e:
+            pass
+    pass
 
+try:
+    from .chunker import chunker
+    from .chunker import *
+except Exception as e:
+    try:
+        from chunker import chunker
+        from chunker import *
+    except Exception as e:
+        try:
+            import chunker
+        except Exception as e:
+            pass
+try:
+    from .elasticsearch_kit import elasticsearch_kit
+    from .elasticsearch_kit import *
+except Exception as e:
+    try:
+        from elasticsearch_kit import elasticsearch_kit
+        from elasticsearch_kit import *
+    except Exception as e:
+        pass
+
+try:
+    from .ipfs_parquet_to_car import ipfs_parquet_to_car_py
+except Exception as e:
+    try: 
+        from ipfs_parquet_to_car import ipfs_parquet_to_car_py
+    except Exception as e:
+        try:
+            import ipfs_parquet_to_car_py
+        except Exception as e:
+            pass
+    pass
+
+from elasticsearch import Elasticsearch
+from multiprocessing import Process
+import concurrent.futures
+import concurrent
+import json
 
 def process_new_dataset_shard(shard, datatype=None, split="train"):
     items = None
@@ -146,13 +206,75 @@ def process_index_shard(shard, datatype=None, split="train"):
             
     return [ cids , items, schema ]            
 
+def process_chunk_files(path, datatype="cids"):
+    cids = None
+    items = None
+    schema = None
+    
+    if type(path) is not str:
+        if type(path) is list:
+            if len(path) == 1:
+                path = path[0]
+            elif len(path) == 2:
+                path, datatype = path
+        if type(path) is dict:
+            if "file" in list(path.keys()):
+                path = path["file"]
+            if "type" in list(path.keys()):
+                datatype = path["type"]
+    
+    if datatype == "cids":
+        if os.path.exists(path):
+            cid_path = path.replace(".parquet","")+"_cids.parquet"
+            if os.path.exists(cid_path):
+                cids = load_dataset('parquet', data_files=cid_path)["cids"]
+        else:
+            return ValueError("No dataset found") 
+        
+    elif datatype == "items":
+        cid_path = path.replace(".parquet","")+"_cids.parquet"
+        chunk_dataset = None
+        cids = None
+        if os.path.exists(cid_path):
+            cids = load_dataset('parquet', data_files=cid_path)["cids"]
+        else:
+            if os.path.exists(path):
+                chunk_dataset = load_dataset('parquet', data_files=path)
+                cids = [ item["items"]["cid"] for item in chunk_dataset ]
+                tmp_dataset = datasets.Dataset.from_dict({"cids": cids})
+                tmp_dataset.to_parquet(cid_path)
+            else:
+                return ValueError("No dataset found")
+        if chunk_dataset is None:
+            chunk_dataset = load_dataset('parquet', data_files = path)   
+            if cids is None and os.path.exists(cid_path):
+                cids = load_dataset('parquet', data_files = cid_path)["cids"]
+            else:
+                cids = [ item["items"]["cid"] for item in chunk_dataset ]
+                tmp_dataset = datasets.Dataset.from_dict({"cids": cids})
+                tmp_dataset.to_parquet(cid_path)
+            pass
+        items = {key: [item["items"][key] for item in chunk_dataset] for key in chunk_dataset[0]["items"].keys()}
+        schema = None        
+    elif datatype == "schema":
+        schema = None
+
+    return [ cids , items, schema ]
+
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
+        self.multiformats_py = ipfs_multiformats_py(resources, metadata)
         self.datasets = datasets.Dataset
-        self.chunker = Chunker(resources, metadata)
         self.process_new_dataset_shard = process_new_dataset_shard
         self.process_index_shard = process_index_shard
+        self.chunker = chunker.chunker(resources, metadata)
+        self.ipfs_parquet_to_car = ipfs_parquet_to_car_py(resources, metadata)
+        self.ipfs_parquet_to_car_test = self.ipfs_parquet_to_car.test
+        self.ipfs_parquet_to_car_install = self.ipfs_parquet_to_car.install
+        if "ipfs_embeddings" not in dir(self) and "ipfs_embeddings" in self.__dict__.keys():
+            self.ipfs_embeddings = self
+        self.parquet_to_car = self.ipfs_parquet_to_car
         # self.elasticsearch = elasticsearch_kit(resources, metadata)
         self.consumer_task_done = {}
         self.producer_task_done = False
@@ -221,6 +343,7 @@ class ipfs_embeddings_py:
         self.load_index = self.load_index
         self.async_generator = self.async_generator
         self.send_batch_to_endpoint = self.send_batch_to_endpoint
+        self.kmeans_cluster_split = self.kmeans_cluster_split
         # Initialize endpoints
         if "tei_endpoints" in resources.keys():
             for endpoint_info in resources.get('tei_endpoints', []):
@@ -798,6 +921,26 @@ class ipfs_embeddings_py:
         self.producer_task_done = True
         return None
     
+    
+    async def sparse_producer(self, dataset_stream, column, queues):
+        tasks = []
+        self.producer_task_done = False
+        async for item in self.async_generator(dataset_stream):
+            task = self.process_item(item, column, queues)
+            tasks.append(task)
+            if len(tasks) >= 1:
+                await asyncio.gather(*tasks)
+                tasks = []
+        if tasks:
+            await asyncio.gather(*tasks)
+        self.producer_task_done = True
+        return None
+    
+    async def process_chunk(self, chunk, column, model_name, endpoint):
+        chunk_results = await self.send_batch_to_endpoint(chunk, column, model_name, endpoint)
+        return chunk_results
+    
+    
     async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
         # Assuming `item` is a dictionary with required data
         if column is None:
@@ -1099,6 +1242,187 @@ class ipfs_embeddings_py:
             print(e)
             return ValueError(e)
         return None
+    
+    async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
+        if not os.path.exists(dst_path):
+            os.makedirs(dst_path)
+        self.queues = {}
+        self.cid_set = set()
+        self.all_cid_list = {}
+        consumer_tasks = {}
+        batch_sizes = {}
+        if models is None:
+            models = list(self.tei_endpoints.keys())
+        for model in models:
+            if model not in self.queues:
+                self.queues[model] = {}
+        if split is None:
+            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+        else:
+            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+        columns = self.dataset.column_names
+        columns.append("cid")
+        await self.load_checkpoints( dataset, split, dst_path, models)
+        consumer_tasks = {}
+        try:
+            gpus = torch.cuda.device_count()            
+        except:
+            gpus = 0
+        try:
+            cpus = torch.get_num_threads()
+        except:
+            cpus = 0
+        for model in models:
+            endpoints = self.get_endpoints(model)
+            local = self.get_endpoints(model, "local")
+            openvino = self.get_endpoints(model, "openvino")
+            libp2p = self.get_endpoints(model, "libp2p")
+            tei = self.get_endpoints(model, "tei")
+            cuda = self.get_endpoints(model, "cuda")
+            if model not in self.batch_sizes:
+                self.batch_sizes[model] = {}
+            if model not in self.tokenizer.keys():
+                self.tokenizer[model] = {}                    
+            if len(cuda) > 0 and gpus > 0:
+                self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
+                for gpu in range(gpus):
+                    self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
+                    self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
+                    torch.cuda.empty_cache()
+                    self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
+                    batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
+                    self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
+                    consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.consumer(self.queues[model]["cuda:" + str(gpu)], column, batch_size, model, "cuda:" + str(gpu)))
+            elif len(local) > 0 and len(cpus) > 0:
+                #detect openvino locally
+                openvino_test = None
+                llama_cpp_test = None
+                ipex_test = None
+                try:
+                    openvino_test = self.test_local_openvino()
+                except Exception as e:
+                    print(e)
+                    pass
+                try:
+                    llama_cpp_test = self.test_llama_cpp()
+                except Exception as e:
+                    print(e)
+                    pass
+                try:
+                    ipex_test = self.test_ipex()
+                except Exception as e:
+                    print(e)
+                    pass
+                
+                print("local_endpoint_test")
+                results = {
+                    "openvino": openvino_test,
+                    "llama_cpp": llama_cpp_test,
+                    "ipex": ipex_test
+                }
+                print(results)
+                if not openvino_test and not llama_cpp_test and not ipex_test:                
+                    self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
+                    self.queues[model]["cpu"] = asyncio.Queue()
+                    consumer_tasks[(model, "cpu")] = asyncio.create_task(self.consumer(self.queues[model]["cpu"], column, 1, model, "cpu"))
+                elif openvino_test:
+                    ov_count = 0
+                    for endpoint in local:
+                        if "openvino" in endpoint:
+                            endpoint_name = "openvino:"+str(ov_count)
+                            batch_size = 0
+                            if model not in self.batch_sizes:
+                                self.batch_sizes[model] = {}
+                            if model not in self.queues:
+                                self.queues[model] = {}
+                            if endpoint not in list(self.batch_sizes[model].keys()):
+                                batch_size = await self.max_batch_size(model, endpoint)
+                                self.batch_sizes[model][endpoint_name] = batch_size
+                            if self.batch_sizes[model][endpoint_name] > 0:
+                                self.queues[model][endpoint_name] = asyncio.Queue()
+                                consumer_tasks[(model, endpoint_name )] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                            openvino_count = openvino_count + 1
+                elif llama_cpp_test:
+                    llama_count = 0
+                    for endpoint in local:
+                        if "llama_cpp" in endpoint:
+                            endpoint_name = "llama:"+str(ov_count)
+                            batch_size = 0                            
+                            if model not in self.batch_sizes:
+                                self.batch_sizes[model] = {}
+                            if model not in self.queues:
+                                self.queues[model] = {}
+                            if endpoint not in list(self.batch_sizes[model].keys()):
+                                batch_size = await self.max_batch_size(model, endpoint)
+                                self.batch_sizes[model][endpoint] = batch_size
+                            if self.batch_sizes[model][endpoint] > 0:
+                                self.queues[model][endpoint] = asyncio.Queue()
+                                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                            llama_count = llama_count + 1
+                elif ipex_test:
+                    ipex_count = 0
+                    for endpoint in local:
+                        if "ipex" in endpoint:
+                            endpoint_name = "ipex:"+str(ov_count)
+                            batch_size = 0
+                            if model not in self.batch_sizes:
+                                self.batch_sizes[model] = {}
+                            if model not in self.queues:
+                                self.queues[model] = {}
+                            if endpoint not in list(self.batch_sizes[model].keys()):
+                                batch_size = await self.max_batch_size(model, endpoint)
+                                self.batch_sizes[model][endpoint] = batch_size
+                            if self.batch_sizes[model][endpoint] > 0:
+                                self.queues[model][endpoint] = asyncio.Queue()
+                                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                            ipex_count = ipex_count + 1
+            if len(openvino) > 0:
+                for endpoint in openvino:
+                    batch_size = 0
+                    if model not in self.batch_sizes:
+                        self.batch_sizes[model] = {}
+                    if model not in self.queues:
+                        self.queues[model] = {}
+                    if endpoint not in list(self.batch_sizes[model].keys()):
+                        batch_size = await self.max_batch_size(model, endpoint)
+                        self.batch_sizes[model][endpoint] = batch_size
+                    if self.batch_sizes[model][endpoint] > 0:
+                        self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
+                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+            if not endpoints:
+                raise ValueError("No endpoints available for model " + model)
+            if len(tei) > 0:
+                for endpoint in tei:
+                    batch_size = 0
+                    if model not in self.batch_sizes:
+                        self.batch_sizes[model] = {}
+                    if model not in self.queues:
+                        self.queues[model] = {}
+                    if endpoint not in list(self.batch_sizes[model].keys()):
+                        batch_size = await self.max_batch_size(model, endpoint)
+                        self.batch_sizes[model][endpoint] = batch_size
+                    if self.batch_sizes[model][endpoint] > 0:
+                        self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
+                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+            if len(cuda) > 0 and gpus > 0:
+                self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
+                for gpu in range(gpus):
+                    self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
+                    self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
+                    torch.cuda.empty_cache()  # Free up unused memory
+                    self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
+                    batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
+                    self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
+                    consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.consumer(self.queues[model]["cuda:" + str(gpu)], column, batch_size, model, "cuda:" + str(gpu)))
+            # if not endpoints:
+            #     raise ValueError("No endpoints available for model " + model)
+           # Compute commonn
+        self.cid_set = set.intersection(*self.all_cid_set.values())
+        producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
+        save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
+        await asyncio.gather(producer_task, *consumer_tasks.values(), save_task)
+        self.save_checkpoints_to_disk(dataset, dst_path, models)
+        return None             
 
     async def index_dataset(self, dataset, split, column, dst_path, models = None):
         if not os.path.exists(dst_path):
@@ -1338,6 +1662,135 @@ class ipfs_embeddings_py:
         self.save_checkpoints_to_disk(dataset, dst_path, models)
         return None 
     
+    async def load_combined_checkpoints(self, dataset, split, dst_path, models):
+        if "new_dataset" not in list(dir(self)):
+            self.new_dataset = None
+        if "all_cid_list" not in list(dir(self)):
+            self.all_cid_list = {}
+        if "all_cid_set" not in list(dir(self)):
+            self.all_cid_set = {}
+        for model in models:
+            if model not in list(self.index.keys()):
+                self.index[model] = None
+        if self.new_dataset is None or isinstance(self.new_dataset, dict):
+            new_dataset_dst_path = os.path.join(dst_path, "ipfs_" + dataset.replace("/","___") + ".parquet")
+            if os.path.isfile(new_dataset_dst_path):
+                self.new_dataset = load_dataset('parquet', data_files=new_dataset_dst_path)[split]
+                self.all_cid_list["new_dataset"] = []
+                self.all_cid_set["new_dataset"] = set()
+            if os.path.exists(os.path.join(dst_path, "checkpoints")):
+                ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+                new_dataset_shards = [os.path.join(dst_path, "checkpoints", x) for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x ]
+                if "new_dataset" not in list(self.all_cid_list.keys()):
+                    self.all_cid_list["new_dataset"] = []
+                if "new_dataset" not in list(self.all_cid_set.keys()):
+                    self.all_cid_set["new_dataset"] = set()
+                if "new_dataset" not in list(self.caches.keys()):
+                    self.caches["new_dataset"] = {"items" : []}
+                with multiprocessing.Pool() as pool:
+                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards))]
+                    results = pool.map(self.process_new_dataset_shard, args)
+                    if len(results) > 0:
+                        # Initialize accumulators
+                        total_cids = []
+                        total_items = []
+                        for res in results:
+                            cid, items, schemas = (res + [None, None, None])[:3]
+                            if cid is not None:
+                                total_cids += cid
+                            if items is not None:
+                                total_items += items
+                            if schemas is not None:
+                                self.schemas["new_dataset"] = schemas
+                        # Update the shared variables in bulk
+                        
+                        self.all_cid_list["new_dataset"] += total_cids
+                        self.all_cid_set["new_dataset"].update(set(total_cids))
+                        self.caches["new_dataset"]["items"] += total_items
+                        
+                if self.new_dataset is None or isinstance(self.new_dataset, dict):
+                    if len(new_dataset_shards) > 0:
+                        self.new_dataset = load_dataset('parquet', data_files=new_dataset_shards)[split]
+                        
+        for model in models:
+            if model not in list(self.index.keys()):
+                self.index[model] = None
+            if model not in list(self.all_cid_list.keys()):
+                self.all_cid_list[model] = []
+            if model not in list(self.all_cid_set.keys()):
+                self.all_cid_set[model] = set()
+            if model not in list(self.caches.keys()):
+                self.caches[model] = {"items" : []}
+            model_dst_path = dst_path + "/" + model.replace("/","___") + ".parquet"
+            if os.path.isfile(model_dst_path):
+                self.caches[model] = {"items" : []}
+                self.index[model] = load_dataset('parquet', data_files=model_dst_path, streaming=True)[split]
+            if os.path.exists(os.path.join(dst_path, "checkpoints")):
+                ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+                this_model_shards = [os.path.join(dst_path, "checkpoints", x)  for x in ls_checkpoints if model.replace("/", "___") + "_shard" in x and "_cids" not in x]
+                with multiprocessing.Pool() as pool:
+                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards))]
+                    results = pool.map(self.process_new_dataset_shard, args)
+                    if len(results) > 0:
+                        # Initialize accumulators
+                        total_cids = []
+                        total_items = []
+                        for res in results:
+                            cid, items, schemas = (res + [None, None, None])[:3]
+                            if cid is not None:
+                                total_cids += cid
+                            if items is not None:
+                                total_items += items
+                            if schemas is not None:
+                                self.schemas[model] = schemas
+                        # Update the shared variables in bulk
+                        self.all_cid_list[model] += total_cids
+                        self.all_cid_set[model].update(set(total_cids))
+                        self.caches[model]["items"] += total_items
+                        
+                if model not in list(self.index.keys()) or self.index[model] is None or isinstance(self.index[model], dict):
+                    if len(this_model_shards) > 0:
+                        self.index[model] = load_dataset('parquet', data_files=this_model_shards)[split]
+                    else:
+                        self.index[model] = datasets.Dataset.from_dict({"cid": [], "embedding": [] })
+                ls_chunks = []
+                if os.path.exists(os.path.join(dst_path,"sparse_chunks", )):
+                    ls_chunks = os.listdir(os.path.join(dst_path,"sparse_chunks", ))
+                if len(ls_chunks) > 0:
+                    for this_cid in ls_chunks:
+                        this_cid_path = os.path.join(dst_path,"sparse_chunks", this_cid)
+                        this_cid_dataset = load_dataset('parquet', data_files=this_cid_path)
+                        if this_cid not in self.chunk_cache.keys():
+                            self.chunk_cache[this_cid] = {"items": []}
+                        self.chunk_cache[this_cid]["items"] += this_cid_dataset
+                        self.cid_chunk_set.add(this_cid)
+                        self.cid_chunk_list.append(this_cid)
+        return None
+        
+    async def load_chunk_checkpoints(self, dataset, split, src_path, models):
+        files = []
+        if "doc_cid" not in list(dir(self)):
+            self.chunks = {}
+        if "doc_cid" not in list(dir(self)):
+            self.chunk_cache_set = {}
+        if os.path.isdir(src_path):
+            files = os.listdir(src_path)
+            files_by_models = [ [x for x in files if model.replace("/","___") in x and dataset in x and models in x ] for model in models]
+        if len(files_by_models) > 0:
+            with multiprocessing.Pool() as pool:
+                results = pool.map(self.process_chunk_file, files_by_models)
+                for result in results:
+                    model, doc_cid, items = result
+                    if model not in list(self.chunk_cache.keys()):
+                        self.chunk_cache_set[model] = set()
+                    if doc_cid not in list(self.chunk_cache[model].keys()):
+                        self.chunk_cache[model][doc_cid] = {"items": []}
+                    if doc_cid not in self.chunk_cache_set[model]:
+                        self.chunk_cache_set[model].add(doc_cid)
+                    self.doc_cid[model][doc_cid]["items"] += items
+                    
+        return None
+    
     
     async def load_checkpoints(self, dataset, split, dst_path, models):
         if "new_dataset" not in list(dir(self)):
@@ -1457,6 +1910,95 @@ class ipfs_embeddings_py:
         
         return None
     
+    async def search_chunks(self, dataset, split, src_path, model, cids, query, endpoint=None, n=64):
+        chunks = []
+        results = []
+        chunk_cid_list = []
+        chunk_cid_set = set()
+        if endpoint is None:
+            endpoint = self.get_endpoints(model)
+        if endpoint is None:
+            raise ValueError("No endpoint available for model " + model)
+        files = [ x for x in os.listdir(src_path) if model.replace("/","___") in x and dataset in x and cids in x ] 
+        for chunk in files:
+            chunk_cid = chunk.replace(".parquet","")
+            if chunk_cid not in chunk_cid_set:
+                chunk_cid_set.add(chunk_cid)
+                if chunk_cid not in chunk_cid_list:
+                    chunk_cid_list.append(chunk_cid)                
+        for chunk_cid in chunk_cid_list:
+            if chunk_cid not in self.chunk_cache.keys():
+                self.chunk_cache[chunk_cid] = {"items": []}
+        for chunk in chunk_cid_list:
+            chunk_path = os.path.join(src_path, chunk)
+            with multiprocessing.Pool() as pool:
+                args = [[chunk_path]]
+                results = pool.map(self.process_chunk_file, args)
+                for result in results:
+                    chunk_dataset = result
+                    if "cid" in list(chunk_dataset.keys()):
+                        if chunk_cid not in self.chunk_cache.keys():
+                            self.chunk_cache[chunk_cid] = {"items": []}
+                        self.chunk_cache[chunk_cid]["items"] += chunk_dataset["items"]
+                    if "embeddings" in list(chunk_dataset.keys()):
+                        if chunk_cid not in self.chunk_cache.keys():
+                            self.chunk_cache[chunk_cid] = {"items": []}
+                        self.chunk_cache[chunk_cid]["items"] += chunk_dataset["items"]
+                    chunks.append(chunk_dataset)
+            self.chunk_cache[chunk_cid]["items"] += chunk_dataset
+        if "items" in list(chunks.keys()):
+            vectors = [ x["items"]["embeddings"] for x in chunks if "embeddings" in list(x["items"].keys())]
+            cids = [ x["items"]["cid"] for x in chunks if "cid" in list(x["items"].keys())]
+            text = [ x["items"]["text"] for x in chunks if "text" in list(x["items"].keys())]
+        else:
+            vectors = [x["embeddings"] for x in chunks if "embeddings" in list(x.keys())]
+            cids = [ x["cid"] for x in chunks if "cid" in list(x.keys())]
+            text = [ x["text"] for x in chunks if "text" in list(x.keys())]
+        if query is not None:
+            query_vector = self.tokenizer[model][endpoint].encode(query)
+        else:
+            query_test = "the lazy dog jumped over the quick brown fox"
+            query_vector = self.tokenizer[model][endpoint].encode(query_test)
+            
+        faiss.SearchParameters = faiss.SearchParameters()
+        faiss.SearchParameters.init()
+        index = faiss.IndexFlatL2(len(vectors[0]))
+        index.add(np.array(vectors))
+        D, I = index.search(np.array(query_vector), n)
+        for i in I:
+            results_keys = ["cid", "text", "embeddings"]
+            result = {}
+            for key in results_keys:
+                if key == "cid":
+                    result[key] = cids[i]
+                elif key == "text":
+                    result[key] = text[i]
+                elif key == "embeddings":
+                    result[key] = vectors[i]
+            
+            results.append(result)
+
+        return results
+
+            
+    async def search_centroids(self, dataset, split, src_path, model, cids, query, endpoint=None, n=64):
+
+
+        return None
+    
+    async def search_shards(self, dataset, split, src_path, models):
+        
+        
+        return None
+    
+    async def autofaiss_chunks(self, dataset, split, src_path, models):
+        
+        return None
+    
+    async def autofaiss_shards(self, dataset, split, src_path, models):
+        
+        return None
+    
     def demux_checkpoints_old4(self, this_dataset):
         self.unique_cid_set = set()
         self.unique_cid_list = []
@@ -1554,7 +2096,6 @@ class ipfs_embeddings_py:
                 del item["secondary_cid"]
                 yield item
         
-                
     def demux_checkpoints(self, this_dataset):
         self.unique_cid_set = set()
         self.unique_cid_list = []
@@ -1568,7 +2109,6 @@ class ipfs_embeddings_py:
                 if "secondary_cid" in list(item.keys()):
                     del item["secondary_cid"]
                 yield item
-        
                 
     async def combine_checkpoints(self, dataset, split, column, dst_path, models):
         await self.load_dataset(dataset, split)
@@ -1653,7 +2193,6 @@ class ipfs_embeddings_py:
             kmeans.train(embeddings_np)               
             # Get centroids
             centroids = kmeans.centroids
-
             # Save centroids to disk
             centroids_dataset = datasets.Dataset.from_dict({"centroids": centroids.tolist()})
             centroids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))
@@ -1728,29 +2267,34 @@ class ipfs_embeddings_py:
             if len(model_splits) == max_splits:
                 pass 
             else:
+                kmeans_embeddings_splits_set = set()
+                cluster_id_list = []
+                cluster_id_set = set()
                 for cluster_id in range(max_splits):
-                    if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                    if cluster_id not in kmeans_embeddings_splits_set:
                         kmeans_embeddings_splits[cluster_id] = {}
                 first_item = self.index[model][0]
-                for key in first_item["items"].keys():
-                    embedding_dim = len(first_item["items"]["embedding"])    
+                embedding_dim = len(first_item["items"]["embedding"])
+                kmeans_embeddings_splits = [
+                    {
+                        key: (np.zeros((len(ipfs_cid_clusters_list[cluster_id]), embedding_dim)) if key == "embedding" else ["" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))])
+                        for key in first_item["items"].keys()
+                    }
+                    for cluster_id in range(max_splits)
+                ]
+
+                def process_item(item):
                     for cluster_id in range(max_splits):
-                        if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
-                            if key == "embedding":
-                                kmeans_embeddings_splits[cluster_id][key] = np.zeros((len(ipfs_cid_clusters_list[cluster_id]), embedding_dim))
-                            else:
-                                kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]
-                for item in self.index[model]:
-                    if item["items"]["cid"] in ipfs_cid_set:
-                        for cluster_id in range(max_splits):
-                            if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
-                                cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
-                                for key in item["items"].keys():
-                                    if key == "embedding":
-                                        kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = np.array(item["items"][key])                                    
-                                    else:
-                                        kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
-                                break
+                        if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
+                            for key in item["items"].keys():
+                                kmeans_embeddings_splits[cluster_id][key][
+                                    ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
+                                ] = np.array(item["items"][key]) if key == "embedding" else item["items"][key]
+                            break
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    executor.map(process_item, [item for item in self.index[model] if item["items"]["cid"] in ipfs_cid_set])
+                
                 for cluster_id in range(max_splits):
                     if cluster_id not in list(kmeans_embeddings_splits.keys()):
                         continue
@@ -1758,36 +2302,54 @@ class ipfs_embeddings_py:
                     cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
         
         kmeans_embeddings_splits = {}
-        if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_clusters")):
-            os.makedirs(os.path.join(dst_path, dataset.replace("/", "___")  + "_clusters"))
-        model_splits = os.listdir(os.path.join(dst_path, dataset.replace("/", "___") + "_clusters"))
+        cluster_folder = os.path.join(dst_path, dataset.replace("/", "___") + "_clusters")
+        if not os.path.exists(cluster_folder):
+            os.makedirs(cluster_folder)
+        model_splits = os.listdir(cluster_folder)
         if len(model_splits) == max_splits:
             pass 
         else:
+            cluster_id_list = []
             for cluster_id in range(max_splits):
-                if cluster_id not in list(kmeans_embeddings_splits.keys()):
+                if cluster_id not in cluster_id_list:
+                    cluster_id_list.append(cluster_id)
                     kmeans_embeddings_splits[cluster_id] = {}
             first_item = self.new_dataset[0]
-            for key in first_item["items"].keys():
-                for cluster_id in range(max_splits):
-                    if key not in list(kmeans_embeddings_splits[cluster_id].keys()):
-                        kmeans_embeddings_splits[cluster_id][key] = [ "" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))]    
-            for item in self.new_dataset:
-                if item["items"]["cid"] in ipfs_cid_set:
-                    for cluster_id in range(max_splits):
-                        if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
-                            cluders_id_index = ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
-                            for key in item["items"].keys():
-                                kmeans_embeddings_splits[cluster_id][key][cluders_id_index] = item["items"][key]
-                            break
-                    
+            if "items" in list(first_item.keys()):
+                keys_list = list(first_item["items"].keys())
+            else:
+                keys_list = list(first_item.keys())
+            keys_set = set(keys_list)          
+            cluster_id_set = set(cluster_id_list)
+            kmeans_embeddings_splits_list = []
+            kmeans_embeddings_splits_set = set()       
+            kmeans_embeddings_splits_list = [
+                cluster_id
+                for cluster_id in range(max_splits)
+                if cluster_id not in kmeans_embeddings_splits_list
+                for key in keys_list
+                if not kmeans_embeddings_splits[cluster_id].__setitem__(key, [""] * len(ipfs_cid_clusters_list[cluster_id]))
+            ]
+            kmeans_embeddings_splits_set = set(kmeans_embeddings_splits_list)
+            [
+                kmeans_embeddings_splits[cluster_id][key].__setitem__(
+                    ipfs_cid_clusters_list[cluster_id].index(this_cid),
+                    item["items"][key] if "items" in list(item.keys()) else item[key]
+                )
+                for item in self.new_dataset
+                for this_cid in [item["items"]["cid"] if "items" in list(item.keys()) else item["cid"]]
+                if this_cid in ipfs_cid_set
+                for cluster_id in range(max_splits)
+                if this_cid in ipfs_cid_clusters_set[cluster_id]
+                for key in keys_list
+            ]
             for cluster_id in range(max_splits):
+                cluster_filename = os.path.join(cluster_folder, dataset.replace("/", "___") + "cluster_{cluster_id}.parquet")
                 if cluster_id not in list(kmeans_embeddings_splits.keys()):
                     continue
                 cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
-                cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___"), f"cluster_{cluster_id}.parquet"))
-                return None
-    
+                cluster_dataset.to_parquet(cluster_filename)
+        return True
     
 if __name__ == "__main__":
     metadata = {
@@ -1810,23 +2372,26 @@ if __name__ == "__main__":
         "dst_path": "/storage/teraflopai/tmp",
     }
     resources = {
-        "local_endpoints": {
+        "local_endpoints": [
             ["thenlper/gte-small", "cpu", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "cpu", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cpu", 32768]
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cpu", 32768],
             ["thenlper/gte-small", "cuda:0", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "cuda:0", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:0", 32768]
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:0", 32768],
             ["thenlper/gte-small", "cuda:1", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "cuda:1", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:1", 32768]
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:1", 32768],
             ["thenlper/gte-small", "openvino", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "openvino", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "openvino", 32768]
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "openvino", 32768],
             ["thenlper/gte-small", "llama_cpp", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "llama_cpp", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "llama_cpp", 32768]
-        },
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "llama_cpp", 32768],
+            ["thenlper/gte-small", "ipex", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "ipex", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "ipex", 32768],
+        ],
         "openvino_endpoints": [
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
             # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
@@ -1857,5 +2422,6 @@ if __name__ == "__main__":
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
     # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    asyncio.run(create_embeddings_batch.index_sparse_chunks(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
-    asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
+    # asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
