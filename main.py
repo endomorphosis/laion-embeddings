@@ -66,8 +66,8 @@ search = search_embeddings.search_embeddings(resources, metadata)
 create = create_embeddings.create_embeddings(resources, metadata)
 sparse = sparse_embeddings.sparse_embeddings(resources, metadata)
 shards = shard_embeddings.shard_embeddings(resources, metadata)
-index_cluster = ipfs_cluster_index.ipfs_cluster_index(resources, metadata)
 storacha = storacha_clusters.storacha_clusters(resources, metadata)
+index_cluster = ipfs_cluster_index.ipfs_cluster_index(resources, metadata)
 
 app = FastAPI(port=9999)
 
@@ -141,11 +141,9 @@ async def search_item_post(request: SearchRequest, background_tasks: BackgroundT
     return search_results
 
 async def shard_embeddings_task(request: ShardEmbeddingsRequest):
-    shard_embeddings_results = await shards.kmeans_cluster_split(request)
-    return shard_embeddings_results
+    #args
 
-async def shard_embeddings_post(request: ShardEmbeddingsRequest, background_tasks: BackgroundTasks):
-    shard_embeddings_results = background_tasks.add_task(shard_embeddings_task, request)
+    shard_embeddings_results = await shards.kmeans_cluster_split(request)
     return shard_embeddings_results
 
 @app.post("/shard_embeddings")

@@ -9,7 +9,8 @@ class shard_embeddings:
         return None
     
     async def __call__(self, metadata=None):
-        results = None
+        if metadata is None and metadata in list(dir(self)):
+            metadata = self.metadata
         try: 
             if metadata is None and metadata in list(dir(self)):
                 metadata = self.metadata
