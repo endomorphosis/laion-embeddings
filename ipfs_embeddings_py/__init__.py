@@ -18,4 +18,11 @@ try:
     from ipfs_parquet_to_car import ipfs_parquet_to_car_py
 except:
     from .ipfs_parquet_to_car import ipfs_parquet_to_car_py
- 
+    pass
+try:
+    import node_parser
+    from node_parser import *
+except:
+    from .node_parser import *
+    pass
+print("ipfs_embeddings_py.ipfs_embeddings_py_version: ", ipfs_embeddings_py.ipfs_embeddings_py_version)

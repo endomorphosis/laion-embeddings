@@ -1,12 +1,15 @@
 import bisect
 import logging
 from typing import Dict, List, Optional, Tuple, Union
-import llama_index
-from llama_index.core.node_parser import SemanticSplitterNodeParser
+from schema import Document
 from llama_index.core.schema import Document
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from transformers import AutoTokenizer
-
+from huggingface import HuggingFaceEmbedding
+from node_parser import SemanticSplitterNodeParser
+# from node_parser import *
+# import llama_index
+# from llama_index.core.node_parser import SemanticSplitterNodeParser
+# from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 # Set the logging level to WARNING to suppress INFO and DEBUG messages
 logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
 
@@ -30,8 +33,10 @@ class chunker:
         else:
             self.embedding_model_name = None
             self.embed_model = None
+            
+        self.chunker = self._setup_semantic_chunking(self.embedding_model_name, metadata, resources)
 
-    def _setup_semantic_chunking(self, embedding_model_name):
+    def _setup_semantic_chunking(self, embedding_model_name, metadata, resources):
         if embedding_model_name:
             self.embedding_model_name = embedding_model_name
 
@@ -71,7 +76,6 @@ class chunker:
                 [Document(text=text)], show_progress=False
             )
         ]
-
         # Tokenize the entire text
         tokens = tokenizer.encode_plus(
             text,
@@ -245,3 +249,5 @@ class chunker:
             return self.chunk_by_sliding_window(text, chunk_size, step_size, tokenizer, embedding_model_name)
         else:
             raise ValueError("Unsupported chunking strategy")
+        
+__all__ = ['chunker']

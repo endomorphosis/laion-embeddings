@@ -18,4 +18,6 @@ rank_bm25
 llama-index-embeddings-huggingface
 llama-index
 torch
-faiss_cpu
+faiss
+faiss-cpu
+faiss-gpu
