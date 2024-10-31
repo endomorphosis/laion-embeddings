@@ -337,6 +337,7 @@ class ipfs_embeddings_py:
         self.producer = self.producer
         self.process_item = self.process_item
         self.save_checkpoints_to_disk = self.save_checkpoints_to_disk
+        self.save_chunks_to_disk = self.save_chunks_to_disk
         self.status = self.status
         self.setStatus = self.setStatus
         self.index_cid = self.index_cid
@@ -611,6 +612,24 @@ class ipfs_embeddings_py:
             return 1
         else:
             return 2**(exponent-1)
+    
+    async def save_chunks_to_disk(self, dataset, dst_path, models):
+        self.saved = False
+        while True:
+            await asyncio.sleep(60)
+            if self.saved == False:
+                if len(self.chunk_cache) > 0: 
+                    for this_cid in list(self.chunk_cache.keys()):
+                        this_chunk = self.chunk_cache[this_cid]
+                        this_cid_dataset = datasets.Dataset.from_dict({"items":this_chunk["items"]})
+                        this_cid_dataset.to_parquet(os.path.join(dst_path, "checkpoints", "sparse_chunks", this_cid + ".parquet"))
+                        print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + this_cid + " at " + dst_path)
+                        self.cid_chunk_set.add(this_cid)
+                        self.cid_chunk_list.append(this_cid)
+                        del self.chunk_cache[this_cid]
+                        del this_cid_dataset
+                    self.saved = True
+        return None
         
     async def infer_local_cuda(self, model, samples):
         
@@ -969,26 +988,27 @@ class ipfs_embeddings_py:
     async def chunk_consumer(self, batch_size, model_name, endpoint):
         print("chunk consumer started")
         while True:
-            chunked_item = await self.cid_chunk_queue.get()
-            batch_results = []
-            batch = []
-            chunk_data = []
-            if chunked_item is not None:
-                for item in chunked_item["items"]:
-                    batch.append(item)
-                    chunk_data.append(item)
-                    if len(batch) >= batch_size or len(batch) == len(chunked_item["items"]):
-                        results = await self.send_batch_to_endpoint(batch, "content", model_name, endpoint)
-                        for i in range(len(results)):
-                            batch_results.append({"cid": batch[i]["cid"], "index": chunk_data[i]["index"], "content": chunk_data[i]["content"] , "embedding": results[i]})
-                        batch = []
-                        chunk_data = []
-            if len(batch_results) > 0:
-                self.chunk_cache[chunked_item["parent_cid"]] = {"items": batch_results, "parent_cid": chunked_item["parent_cid"]}
-                self.cid_chunk_set.add(chunked_item["parent_cid"])
-                self.cid_chunk_list.append(chunked_item["parent_cid"])
-                self.cid_chunk_queue.task_done()
-                self.saved = False
+            if self.cid_chunk_queue is not None:
+                chunked_item = await self.cid_chunk_queue.get()
+                batch_results = []
+                batch = []
+                chunk_data = []
+                if chunked_item is not None:
+                    for item in chunked_item["items"]:
+                        batch.append(item)
+                        chunk_data.append(item)
+                        if len(batch) >= batch_size or len(batch) == len(chunked_item["items"]):
+                            results = await self.send_batch_to_endpoint(batch, "content", model_name, endpoint)
+                            for i in range(len(results)):
+                                batch_results.append({"cid": batch[i]["cid"], "index": chunk_data[i]["index"], "content": chunk_data[i]["content"] , "embedding": results[i]})
+                            batch = []
+                            chunk_data = []
+                if len(batch_results) > 0:
+                    self.chunk_cache[chunked_item["parent_cid"]] = {"items": batch_results, "parent_cid": chunked_item["parent_cid"]}
+                    self.cid_chunk_set.add(chunked_item["parent_cid"])
+                    self.cid_chunk_list.append(chunked_item["parent_cid"])
+                    self.cid_chunk_queue.task_done()
+                    self.saved = False
 
     async def producer(self, dataset_stream, column, queues):
         tasks = []
@@ -1487,7 +1507,7 @@ class ipfs_embeddings_py:
                         self.batch_sizes[model][endpoint] = batch_size
                     if self.batch_sizes[model][endpoint] > 0:
                         self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
-                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(column, batch_size, model, endpoint))
+                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint))
             if len(cuda) > 0 and gpus > 0:
                 self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
                 for gpu in range(gpus):
@@ -1502,9 +1522,9 @@ class ipfs_embeddings_py:
                 raise ValueError("No endpoints available for model " + model)
         self.cid_set = set.intersection(*self.all_cid_set.values())
         producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, self.queues))        
-        save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
+        save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, *consumer_tasks.values(), save_task)
-        self.save_checkpoints_to_disk(dataset, dst_path, models)
+        self.save_chunks_to_disk(dataset, dst_path, models)
         return None             
 
     async def index_dataset(self, dataset, split, column, dst_path, models = None):
