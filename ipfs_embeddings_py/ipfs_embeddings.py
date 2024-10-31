@@ -18,14 +18,46 @@ from transformers import AutoTokenizer
 from transformers import AutoModel
 import datasets
 from datasets import Dataset, concatenate_datasets, load_dataset
-from ipfs_multiformats import ipfs_multiformats_py
-from ipfs_multiformats import *
-from chunker import chunker
+try:
+    from .ipfs_multiformats import ipfs_multiformats_py
+    from .ipfs_multiformats import *
+except Exception as e:
+    try:
+        from ipfs_multiformats import ipfs_multiformats_py
+        from ipfs_multiformats import *
+    except Exception as e:
+        pass
+try:
+    from .chunker import chunker
+    from .chunker import *
+except Exception as e:
+    try:
+        from chunker import chunker
+        from chunker import *
+    except Exception as e:
+        pass
 import time
 import math
-from elasticsearch_kit import elasticsearch_kit
+try:
+    from .elasticsearch_kit import elasticsearch_kit
+    from .elasticsearch_kit import *
+except Exception as e:
+    try:
+        from elasticsearch_kit import elasticsearch_kit
+        from elasticsearch_kit import *
+    except Exception as e:
+        pass
+try:
+    from .ipfs_parquet_to_car import ipfs_parquet_to_car_py
+    from .ipfs_parquet_to_car import *
+except Exception as e:
+    try:
+        from ipfs_parquet_to_car import ipfs_parquet_to_car_py
+        from ipfs_parquet_to_car import *
+    except Exception as e:
+        pass
+    
 from elasticsearch import Elasticsearch
-from ipfs_parquet_to_car import ipfs_parquet_to_car_py
 from multiprocessing import Process
 import concurrent.futures
 import concurrent
@@ -210,6 +242,7 @@ def process_chunk_files(path, datatype="cids"):
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
+        self.multiformats_py = ipfs_multiformats_py(resources, metadata)
         self.datasets = datasets.Dataset
         self.process_new_dataset_shard = process_new_dataset_shard
         self.process_index_shard = process_index_shard
@@ -2062,7 +2095,10 @@ class ipfs_embeddings_py:
                     cluster_id_list.append(cluster_id)
                     kmeans_embeddings_splits[cluster_id] = {}
             first_item = self.new_dataset[0]
-            keys_list = list(first_item["items"].keys())
+            if "items" in list(first_item.keys()):
+                keys_list = list(first_item["items"].keys())
+            else:
+                keys_list = list(first_item.keys())
             keys_set = set(keys_list)          
             cluster_id_set = set(cluster_id_list)
             kmeans_embeddings_splits_list = []
@@ -2076,19 +2112,16 @@ class ipfs_embeddings_py:
             ]
             kmeans_embeddings_splits_set = set(kmeans_embeddings_splits_list)
             [
-                [
-                    [
-                        kmeans_embeddings_splits[cluster_id][key].__setitem__(
-                            ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"]),
-                            item["items"][key] 
-                        )
-                        for key in keys_list
-                    ]
-                    for cluster_id in range(max_splits)
-                    if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]
-                ]
+                kmeans_embeddings_splits[cluster_id][key].__setitem__(
+                    ipfs_cid_clusters_list[cluster_id].index(this_cid),
+                    item["items"][key] if "items" in list(item.keys()) else item[key]
+                )
                 for item in self.new_dataset
-                if item["items"]["cid"] in ipfs_cid_set
+                for this_cid in [item["items"]["cid"] if "items" in list(item.keys()) else item["cid"]]
+                if this_cid in ipfs_cid_set
+                for cluster_id in range(max_splits)
+                if this_cid in ipfs_cid_clusters_set[cluster_id]
+                for key in keys_list
             ]
             for cluster_id in range(max_splits):
                 cluster_filename = os.path.join(cluster_folder, dataset.replace("/", "___") + "cluster_{cluster_id}.parquet")
@@ -2167,7 +2200,7 @@ if __name__ == "__main__":
             ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
         ]
     }
-    # create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
+    create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
     # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
-    # asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
+    asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))

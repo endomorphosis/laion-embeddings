@@ -50,17 +50,82 @@ class StorachaClustersRequest(BaseModel):
     resources: dict
     metadata: dict
     
-    
 metadata = {
-    "dataset": "laion/Wikipedia-X-Concat",
-    "faiss_index": "laion/Wikipedia-M3",
-    "model": "BAAI/bge-m3"
+    "dataset": "TeraflopAI/Caselaw_Access_Project",
+    "column": "text",
+    "split": "train",
+    "models": [
+        "thenlper/gte-small",
+        "Alibaba-NLP/gte-large-en-v1.5",
+        "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+    ],
+    "chunk_settings": {
+        "chunk_size": 512,
+        "n_sentences": 8,
+        "step_size": 256,
+        "method": "fixed",
+        "embed_model": "thenlper/gte-small",
+        "tokenizer": None
+    },
+    "dst_path": "/storage/teraflopai/tmp",
 }
 resources = {
-    # "https_endpoints": [["BAAI/bge-m3", "http://127.0.0.1:8080/embed",1]],
-    "https_endpoints": [],
-    "libp2p_endpoints": []
+    "local_endpoints": [
+        ["thenlper/gte-small", "cpu", 512],
+        ["Alibaba-NLP/gte-large-en-v1.5", "cpu", 8192],
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cpu", 32768],
+        ["thenlper/gte-small", "cuda:0", 512],
+        ["Alibaba-NLP/gte-large-en-v1.5", "cuda:0", 8192],
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:0", 32768],
+        ["thenlper/gte-small", "cuda:1", 512],
+        ["Alibaba-NLP/gte-large-en-v1.5", "cuda:1", 8192],
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:1", 32768],
+        ["thenlper/gte-small", "openvino", 512],
+        ["Alibaba-NLP/gte-large-en-v1.5", "openvino", 8192],
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "openvino", 32768],
+        ["thenlper/gte-small", "llama_cpp", 512],
+        ["Alibaba-NLP/gte-large-en-v1.5", "llama_cpp", 8192],
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "llama_cpp", 32768],
+        ["thenlper/gte-small", "ipex", 512],
+        ["Alibaba-NLP/gte-large-en-v1.5", "ipex", 8192],
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "ipex", 32768],
+    ],
+    "openvino_endpoints": [
+        # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+        # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+        # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+        # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+        # ["aapot/bge-m3-onnx", "https://bge-m3-onnx0-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx0/infer", 1024],
+        # ["aapot/bge-m3-onnx", "https://bge-m3-onnx1-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx1/infer", 1024],
+        # ["aapot/bge-m3-onnx", "https://bge-m3-onnx2-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx2/infer", 1024],
+        # ["aapot/bge-m3-onnx", "https://bge-m3-onnx3-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx3/infer", 1024],
+        # ["aapot/bge-m3-onnx", "https://bge-m3-onnx4-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx4/infer", 1024],
+        # ["aapot/bge-m3-onnx", "https://bge-m3-onnx5-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx5/infer", 1024],
+        # ["aapot/bge-m3-onnx", "https://bge-m3-onnx6-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx6/infer", 1024],
+        # ["aapot/bge-m3-onnx", "https://bge-m3-onnx7-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx7/infer", 1024]
+    ],
+    "tei_endpoints": [
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
+        ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+        ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
+        ["thenlper/gte-small", "http://62.146.169.111:8081/embed-tiny", 512],
+        ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+        ["thenlper/gte-small", "http://62.146.169.111:8082/embed-tiny", 512],
+        ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
+        ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+        ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
+    ]
 }
+
+def metadata_generator(src_metadata):
+    dst_metadata = src_metadata 
+    return dst_metadata
+
+def resources_generator(src_resources):
+    dst_resources = src_resources
+    return dst_resources    
 
 search = search_embeddings.search_embeddings(resources, metadata)
 create = create_embeddings.create_embeddings(resources, metadata)
@@ -141,8 +206,50 @@ async def search_item_post(request: SearchRequest, background_tasks: BackgroundT
     return search_results
 
 async def shard_embeddings_task(request: ShardEmbeddingsRequest):
-    #args
-
+    if request is None:
+        request = {
+            "dataset": "TeraflopAI/Caselaw_Access_Project",
+            "column": "text",
+            "split": "train",
+            "models": [
+                "thenlper/gte-small",
+                "Alibaba-NLP/gte-large-en-v1.5",
+                "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            ],
+            "chunk_settings": {
+                "chunk_size": 512,
+                "n_sentences": 8,
+                "step_size": 256,
+                "method": "fixed",
+                "embed_model": "thenlper/gte-small",
+                "tokenizer": None
+            },
+            "dst_path": "/storage/teraflopai/tmp",
+        }
+    else:
+        if "dataset" not in request.keys():
+            request["dataset"] = "TeraflopAI/Caselaw_Access_Project"
+        if "column" not in request.keys():
+            request["column"] = "text"
+        if "split" not in request.keys():
+            request["split"] = "train"
+        if "models" not in request.keys():
+            request["models"] = [
+                "thenlper/gte-small",
+                "Alibaba-NLP/gte-large-en-v1.5",
+                "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            ]
+        if "chunk_settings" not in request.keys():
+            request["chunk_settings"] = {
+                "chunk_size": 512,
+                "n_sentences": 8,
+                "step_size": 256,
+                "method": "fixed",
+                "embed_model": "thenlper/gte-small",
+                "tokenizer": None
+            }
+        if "dst_path" not in request.keys():
+            request["dst_path"] = "/storage/teraflopai/tmp"
     shard_embeddings_results = await shards.kmeans_cluster_split(request)
     return shard_embeddings_results
 

@@ -1,4 +1,10 @@
-from ..ipfs_embeddings_py import ipfs_embeddings_py
+try:
+    from ..ipfs_embeddings_py import ipfs_embeddings_py
+except:
+    try:    
+        from ipfs_embeddings_py import ipfs_embeddings_py
+    except: 
+        import ipfs_embeddings_py 
 
 class shard_embeddings:
     def __init__(self, resources, metadata):

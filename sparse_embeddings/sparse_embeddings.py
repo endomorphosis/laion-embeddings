@@ -3,16 +3,19 @@ from multiprocessing import Pool
 from transformers import AutoTokenizer
 import datasets
 from datasets import Dataset, concatenate_datasets, load_dataset
-from ..ipfs_embeddings_py import ipfs_embeddings_py
-from ..ipfs_embeddings_py import *
-from ..ipfs_embeddings_py import ipfs_multiformats_py
-
+try:    
+    from ..ipfs_embeddings_py import ipfs_embeddings_py
+except:
+    try:
+        from ipfs_embeddings_py import ipfs_embeddings_py
+    except:
+         import ipfs_embeddings_py
 class sparse_embeddings:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
         self.ipfs_embeddings_py = ipfs_embeddings_py(resources, metadata)
-        self.ipfs_multiformats_py = ipfs_multiformats_py(resources, metadata)
+        self.ipfs_multiformats_py = self.ipfs_embeddings_py.ipfs_multiformats_py(resources, metadata)
         self.index_dataset = self.index_dataset
         self.index_sparse_embeddings = self.index_sparse_embeddings        
         return None

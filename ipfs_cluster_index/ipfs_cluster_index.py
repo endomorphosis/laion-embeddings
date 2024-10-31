@@ -1,8 +1,21 @@
-import ipfs_kit_py
-from ipfs_kit_py import *
+
+try:
+    from ipfs_kit_py import ipfs_kit_py
+except:
+    try:    
+        from ipfs_kit_py import *
+    except:
+        pass
+    
 import datasets
 from datasets import *
-from ..ipfs_embeddings_py import ipfs_embeddings_py
+try:
+    from ..ipfs_embeddings_py import ipfs_embeddings_py
+except Exception as e:
+    try:
+        from ipfs_embeddings_py import ipfs_embeddings_py
+    except Exception as e:  
+        pass
 class ipfs_cluster_index:
     def __init__(self, resources, metadata):
         self.resources = resources
