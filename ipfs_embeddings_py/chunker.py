@@ -1,7 +1,6 @@
 import bisect
 import logging
 from typing import Dict, List, Optional, Tuple, Union
-
 from schema import Document
 from llama_index.core.schema import Document
 from transformers import AutoTokenizer
@@ -34,8 +33,10 @@ class chunker:
         else:
             self.embedding_model_name = None
             self.embed_model = None
+            
+        self.chunker = self._setup_semantic_chunking(self.embedding_model_name, metadata, resources)
 
-    def _setup_semantic_chunking(self, embedding_model_name):
+    def _setup_semantic_chunking(self, embedding_model_name, metadata, resources):
         if embedding_model_name:
             self.embedding_model_name = embedding_model_name
 
@@ -248,3 +249,5 @@ class chunker:
             return self.chunk_by_sliding_window(text, chunk_size, step_size, tokenizer, embedding_model_name)
         else:
             raise ValueError("Unsupported chunking strategy")
+        
+__all__ = ['chunker']

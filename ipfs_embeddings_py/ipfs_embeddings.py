@@ -268,7 +268,7 @@ class ipfs_embeddings_py:
         self.datasets = datasets.Dataset
         self.process_new_dataset_shard = process_new_dataset_shard
         self.process_index_shard = process_index_shard
-        self.chunker = chunker.chunker(resources, metadata)
+        self.chunker = chunker(resources, metadata)
         self.ipfs_parquet_to_car = ipfs_parquet_to_car_py(resources, metadata)
         self.ipfs_parquet_to_car_test = self.ipfs_parquet_to_car.test
         self.ipfs_parquet_to_car_install = self.ipfs_parquet_to_car.install
