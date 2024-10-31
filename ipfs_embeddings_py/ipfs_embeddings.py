@@ -57,6 +57,7 @@ except Exception as e:
             import chunker
         except Exception as e:
             pass
+    pass
 try:
     from .elasticsearch_kit import elasticsearch_kit
     from .elasticsearch_kit import *
@@ -66,7 +67,7 @@ except Exception as e:
         from elasticsearch_kit import *
     except Exception as e:
         pass
-
+    pass
 try:
     from .ipfs_parquet_to_car import ipfs_parquet_to_car_py
 except Exception as e:
@@ -985,27 +986,28 @@ class ipfs_embeddings_py:
     async def chunk_consumer(self, batch_size, model_name, endpoint):
         print("chunk consumer started")
         while True:
-            if self.cid_chunk_queue is not None:
-                chunked_item = await self.cid_chunk_queue.get()
-                batch_results = []
-                batch = []
-                chunk_data = []
-                if chunked_item is not None:
-                    for item in chunked_item["items"]:
-                        batch.append(item)
-                        chunk_data.append(item)
-                        if len(batch) >= batch_size or len(batch) == len(chunked_item["items"]):
-                            results = await self.send_batch_to_endpoint(batch, "content", model_name, endpoint)
-                            for i in range(len(results)):
-                                batch_results.append({"cid": batch[i]["cid"], "index": chunk_data[i]["index"], "content": chunk_data[i]["content"] , "embedding": results[i]})
-                            batch = []
-                            chunk_data = []
-                if len(batch_results) > 0:
-                    self.chunk_cache[chunked_item["parent_cid"]] = {"items": batch_results, "parent_cid": chunked_item["parent_cid"]}
-                    self.cid_chunk_set.add(chunked_item["parent_cid"])
-                    self.cid_chunk_list.append(chunked_item["parent_cid"])
-                    self.cid_chunk_queue.task_done()
-                    self.saved = False
+            while self.cid_chunk_queue.empty():
+                asyncio.sleep(0.1)
+            chunked_item = await self.cid_chunk_queue.get()
+            batch_results = []
+            batch = []
+            chunk_data = []
+            if chunked_item is not None:
+                for item in chunked_item["items"]:
+                    batch.append(item)
+                    chunk_data.append(item)
+                    if len(batch) >= batch_size or len(batch) == len(chunked_item["items"]):
+                        results = await self.send_batch_to_endpoint(batch, "content", model_name, endpoint)
+                        for i in range(len(results)):
+                            batch_results.append({"cid": batch[i]["cid"], "index": chunk_data[i]["index"], "content": chunk_data[i]["content"] , "embedding": results[i]})
+                        batch = []
+                        chunk_data = []
+            if len(batch_results) > 0:
+                self.chunk_cache[chunked_item["parent_cid"]] = {"items": batch_results, "parent_cid": chunked_item["parent_cid"]}
+                self.cid_chunk_set.add(chunked_item["parent_cid"])
+                self.cid_chunk_list.append(chunked_item["parent_cid"])
+                self.cid_chunk_queue.task_done()
+                self.saved = False
 
     async def producer(self, dataset_stream, column, queues):
         tasks = []
@@ -1343,7 +1345,78 @@ class ipfs_embeddings_py:
             return ValueError(e)
         return None
     
+    def test_cuda(self):
+        try:
+            gpus = torch.cuda.device_count()
+            return gpus
+        except Exception as e:
+            print(e)
+            return ValueError(e)
+    
+    def install_openvino(self):
+        
+        return None
+    
+    def install_cuda(self): 
+        
+        return None
+    
+    def install_llama_cpp(self):
+        
+        return None
+    
+    
+    def test_hardware(self):
+        cuda_test = None
+        openvino_test = None
+        llama_cpp_test = None
+        ipex_test = None
+        try:
+            openvino_test = self.test_local_openvino()
+        except Exception as e:
+            try:
+                openvino_install = self.install_openvino()
+            except Exception as e:
+                print(e)        
+            pass
+            
+        try:
+            llama_cpp_test = self.test_llama_cpp()
+        except Exception as e:
+            try:
+                llama_cpp_install = self.install_llama_cpp()
+            except Exception as e:
+                print(e)
+            pass
+        try:
+            ipex_test = self.test_ipex()
+        except Exception as e:
+            try:
+                install_ipex = self.install_ipex()
+            except Exception as e:
+                print(e)
+            pass
+        try:
+            cuda_test = self.test_cuda()
+        except Exception as e:
+            try:
+                install_cuda = self.install_cuda()
+            except Exception as e:
+                print(e)
+            pass
+                
+        print("local_endpoint_test")
+        test_results = {
+            "cuda": cuda_test,
+            "openvino": openvino_test,
+            "llama_cpp": llama_cpp_test,
+            "ipex": ipex_test
+        }
+        print(test_results)
+    
     async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
+        await self.load_clusters( dataset, split, dst_path)
+        test_hardware = await self.test_hardware()
         if not os.path.exists(dst_path):
             os.makedirs(dst_path)
         self.queues = {}
@@ -1395,33 +1468,7 @@ class ipfs_embeddings_py:
                     self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
                     consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
             elif len(local) > 0 and cpus > 0:
-                #detect openvino locally
-                openvino_test = None
-                llama_cpp_test = None
-                ipex_test = None
-                try:
-                    openvino_test = self.test_local_openvino()
-                except Exception as e:
-                    print(e)
-                    pass
-                try:
-                    llama_cpp_test = self.test_llama_cpp()
-                except Exception as e:
-                    print(e)
-                    pass
-                try:
-                    ipex_test = self.test_ipex()
-                except Exception as e:
-                    print(e)
-                    pass
                 
-                print("local_endpoint_test")
-                results = {
-                    "openvino": openvino_test,
-                    "llama_cpp": llama_cpp_test,
-                    "ipex": ipex_test
-                }
-                print(results)
                 if not openvino_test and not llama_cpp_test and not ipex_test:                
                     self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
                     self.queues[model]["cpu"] = asyncio.Queue()
@@ -2246,10 +2293,46 @@ class ipfs_embeddings_py:
                 combined_embedding_datasets.to_parquet(os.path.join(dst_path, "secondary_combined", + dataset.replace("/","___") + model.replace("/","___") + ".parquet"))
                 combined_embedding_datasets_cids = datasets.Dataset.from_dict({"cids": self.unique_cid_list})
                 combined_embedding_datasets_cids.to_parquet(os.path.join(dst_path, "secondary_combined", dataset.replace("/","___") + model.replace("/","___") + "_cids.parquet"))
-        
         return None              
+    
+    async def generate_clusters(self, dataset, split, dst_path):
+        
+        return None
 
+    async def load_clusters(self, dataset, split, dst_path):
+        ipfs_cid_clusters_list = []
+        ipfs_cid_clusters_set = ()
+        ipfs_cid_set = set()
+        ipfs_cid_list = []
+        cluster_cids_dataset = None
+        try:
+            if os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet")):
+                cluster_cids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))["train"]
+                ipfs_cid_clusters_list = cluster_cids_dataset["cluster_cids"]
+                ipfs_cid_clusters_set = [set(x) for x in ipfs_cid_clusters_list]
+                ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
+            else:
+                await self.generate_clusters(dataset, split, dst_path)
+                pass
+        except Exception as e:
+            print(e)
+            pass
+        
+        if cluster_cids_dataset is not None:
+            self.cluster_cids_dataset = cluster_cids_dataset
+        if ipfs_cid_clusters_list is not None:
+            self.ipfs_cid_clusters_list = ipfs_cid_clusters_list
+        if ipfs_cid_clusters_set is not None:
+            self.ipfs_cid_clusters_set = ipfs_cid_clusters_set
+        if ipfs_cid_list is not None:
+            self.ipfs_cid_set = ipfs_cid_set
+        if ipfs_cid_set is not None:
+            self.ipfs_cid_set = ipfs_cid_set
+                     
+        return cluster_cids_dataset, ipfs_cid_clusters_list, ipfs_cid_clusters_set, ipfs_cid_list, ipfs_cid_set
+        
     async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits=None):
+        await self.load_clusters(dataset, split, dst_path)
         await self.load_dataset(dataset, split)
         await self.load_checkpoints(dataset, split, dst_path, models)
         centroids = []
