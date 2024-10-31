@@ -18,7 +18,7 @@ from transformers import AutoTokenizer
 from transformers import AutoModel
 import datasets
 from datasets import Dataset, concatenate_datasets, load_dataset
-import ipfs_multiformats
+from ipfs_multiformats import ipfs_multiformats_py
 from ipfs_multiformats import *
 from chunker import chunker
 import time

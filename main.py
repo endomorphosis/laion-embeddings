@@ -113,7 +113,7 @@ async def create_embeddings_task(request: CreateEmbeddingsRequest):
     column = request.column
     dst_path = request.dst_path
     models = request.models
-    create_embeddings_results = await create_embeddings.create_embeddings(dataset, split, column, dst_path, models)
+    create_embeddings_results = await create.create_embeddings(dataset, split, column, dst_path, models)
     return create_embeddings_results
 
 @app.post("/create_embeddings")

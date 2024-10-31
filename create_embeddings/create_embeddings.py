@@ -34,11 +34,11 @@ class create_embeddings:
     def add_https_endpoint(self, model, endpoint, ctx_length):
         return self.ipfs_embeddings_py.add_https_endpoint(model, endpoint, ctx_length)
 
-    async def index_dataset(self, dataset, split, column, dst_path, models):
+    async def create_embeddings(self, dataset, split, column, dst_path, models):
         await self.ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
         return None
            
-    async def main(self, dataset, split, column, dst_path, models):
+    async def __call__(self, dataset, split, column, dst_path, models):
         await self.ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
         return None
 
