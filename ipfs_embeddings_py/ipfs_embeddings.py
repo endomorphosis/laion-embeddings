@@ -1455,7 +1455,11 @@ class ipfs_embeddings_py:
     
     async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
         await self.load_clusters( dataset, split, dst_path)
-        test_hardware = await self.test_hardware()
+        hardware_test = await self.test_hardware()
+        openvino_test = hardware_test["openvino"]
+        llama_cpp_test = hardware_test["llama_cpp"]
+        ipex_test = hardware_test["ipex"]
+        cuda_test = hardware_test["cuda"]
         if not os.path.exists(dst_path):
             os.makedirs(dst_path)
         self.queues = {}
