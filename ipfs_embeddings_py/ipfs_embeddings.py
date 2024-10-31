@@ -2447,7 +2447,7 @@ class ipfs_embeddings_py:
                 for key in keys_list
             ]
             for cluster_id in range(max_splits):
-                cluster_filename = os.path.join(cluster_folder, dataset.replace("/", "___") + "cluster_{cluster_id}.parquet")
+                cluster_filename = os.path.join(cluster_folder, dataset.replace("/", "___") + "_cluster_" + str(cluster_id) + ".parquet")
                 if cluster_id not in list(kmeans_embeddings_splits.keys()):
                     continue
                 cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
