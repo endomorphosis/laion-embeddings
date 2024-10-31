@@ -1362,6 +1362,7 @@ class ipfs_embeddings_py:
             libp2p = self.get_endpoints(model, "libp2p")
             tei = self.get_endpoints(model, "tei")
             cuda = self.get_endpoints(model, "cuda")
+            endpoints = tei + local + openvino + libp2p + cuda
             if model not in self.batch_sizes:
                 self.batch_sizes[model] = {}
             if model not in self.tokenizer.keys():
@@ -1486,7 +1487,7 @@ class ipfs_embeddings_py:
                         self.batch_sizes[model][endpoint] = batch_size
                     if self.batch_sizes[model][endpoint] > 0:
                         self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
-                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(column, batch_size, model, endpoint))
             if len(cuda) > 0 and gpus > 0:
                 self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
                 for gpu in range(gpus):
@@ -1496,10 +1497,9 @@ class ipfs_embeddings_py:
                     self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
                     batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
                     self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
-                    consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(self.queues[model]["cuda:" + str(gpu)], column, batch_size, model, "cuda:" + str(gpu)))
-            # if not endpoints:
-            #     raise ValueError("No endpoints available for model " + model)
-           # Compute commonn
+                    consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
+            if not endpoints or len(endpoints) == 0:
+                raise ValueError("No endpoints available for model " + model)
         self.cid_set = set.intersection(*self.all_cid_set.values())
         producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, self.queues))        
         save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
