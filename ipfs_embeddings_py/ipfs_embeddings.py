@@ -1424,7 +1424,7 @@ class ipfs_embeddings_py:
                             if self.batch_sizes[model][endpoint_name] > 0:
                                 self.queues[model][endpoint_name] = asyncio.Queue()
                                 consumer_tasks[(model, endpoint_name )] = asyncio.create_task(self.consumer(self.queues[model][endpoint_name], column, batch_size, model, endpoint))
-                            openvino_count = openvino_count + 1
+                            ov_count = ov_count + 1
                 elif llama_cpp_test:
                     llama_count = 0
                     for endpoint in local:
