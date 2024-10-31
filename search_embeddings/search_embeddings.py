@@ -21,13 +21,29 @@ class search_embeddings:
         if len(list(metadata.keys())) > 0:
             for key in metadata.keys():
                 setattr(self, key, metadata[key])
-        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
         self.qdrant_kit_py = ipfs_embeddings_py.qdrant_kit_py(resources, metadata)
-        if "https_endpoints" in resources.keys():
-            for endpoint in resources["https_endpoints"]:
-                self.ipfs_embeddings_py.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])
+        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
+        if "tei_endpoints" in resources.keys():
+            for endpoint in resources["tei_endpoints"]:
+                self.ipfs_embeddings_py.add_tei_endpoint(endpoint[0], endpoint[1], endpoint[2])
         else:
-            self.ipfs_embeddings_py.add_https_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
+            self.ipfs_embeddings_py.add_tei_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
+        if "openvino_endpoints" in resources.keys():
+            for endpoint in resources["openvino_endpoints"]:
+                self.ipfs_embeddings_py.add_openvino_endpoint(endpoint[0], endpoint[1], endpoint[2])
+        else:
+            pass
+        if "local_endpoints" in resources.keys():
+            for endpoint in resources["local_endpoints"]:
+                self.ipfs_embeddings_py.add_local_endpoint(endpoint[0], endpoint[1], endpoint[2])
+        else:
+            pass
+        if "libp2p_endpoints" in resources.keys():
+            for endpoint in resources["libp2p_endpoints"]:
+                self.ipfs_embeddings_py.add_libp2p_endpoint(endpoint[0], endpoint[1], endpoint[2])
+        else:
+            pass
+        
         self.join_column = None
         self.qdrant_found = False
         qdrant_port_cmd = "nc -zv localhost 6333"
@@ -41,11 +57,22 @@ class search_embeddings:
                 print("Qdrant failed to start, fallback to faiss")
         else:
             self.qdrant_found = True
-        self.add_https_endpoint = self.add_https_endpoint
+        self.add_tei_endpoint = self.add_tei_endpoint
+        self.add_openvino_endpoint = self.add_openvino_endpoint
+        self.add_local_endpoint = self.add_local_endpoint
+        self.add_libp2p_endpoint = self.add_libp2p_endpoint
 
-    def add_https_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_https_endpoint(model, endpoint, ctx_length)
+    def add_tei_endpoint(self, model, endpoint, ctx_length):
+        return self.ipfs_embeddings_py.add_tei_endpoint(model, endpoint, ctx_length)
     
+    def add_openvino_endpoint(self, model, endpoint, ctx_length):
+        return self.ipfs_embeddings_py.add_openvino_endpoint(model, endpoint, ctx_length)
+    
+    def add_local_endpoint(self, model, endpoint, ctx_length):
+        return self.ipfs_embeddings_py.add_local_endpoint(model, endpoint, ctx_length)
+
+    def add_libp2p_endpoint(self, model, endpoint, ctx_length):
+        return self.ipfs_embeddings_py.add_libp2p_endpoint(model, endpoint, ctx_length)
     
     def rm_cache(self):
         homedir = os.path.expanduser("~")
@@ -66,33 +93,70 @@ class search_embeddings:
         embeddings = await self.ipfs_embeddings_py.index_knn(selected_endpoint, self.model)
         return embeddings
     
-    def search_embeddings(self, embeddings):
-        scores, samples = self.qdrant_kit_py.knn_index.get_nearest_examples(
-           "embeddings", embeddings, k=5
-        )
-        return scores, samples 
+    # def search_embeddings(self, embeddings):
+    #     scores, samples = self.qdrant_kit_py.knn_index.get_nearest_examples(
+    #        "embeddings", embeddings, k=5
+    #     )
+    #     return scores, samples 
         
     async def search(self, collection, query, n=5):
+        query_embeddings = await self.generate_embeddings(query)
         if self.qdrant_found == True:
-            query_embeddings = await self.ipfs_embeddings_py.index_knn(query, self.metadata["model"])
             vector_search = await self.qdrant_kit_py.search_qdrant(collection, query_embeddings, n)
         else:
-            print("Qdrant failed to start")
-            ## Fallback to faiss
-            return None
+            vector_search = self.search_faiss(collection, query_embeddings, n)
         return vector_search
 
-    async def test_low_memory(self):
-        start = self.qdrant_kit_py.start_qdrant()
-        # load_qdrant = await self.load_qdrant_iter("laion/Wikipedia-X-Concat", "laion/Wikipedia-M3", "enwiki_concat", "enwiki_embed")
-        # ingest_qdrant = await self.ingest_qdrant_iter("Concat Abstract")
-        load_qdrant = await self.qdrant_kit_py.load_qdrant_iter("laion/English-ConcatX-Abstract", "laion/English-ConcatX-M3")
-        ingest_qdrant = await self.qdrant_kit_py.ingest_qdrant_iter(["Concat Abstract","Title"])
-        load_qdrant = await self.qdrant_kit_py.load_qdrant_iter("laion/German-ConcatX-Abstract", "laion/German-ConcatX-M3")
-        ingest_qdrant = await self.qdrant_kit_py.ingest_qdrant_iter("Concat Abstract")
-        results = await search_embeddings.search("laion/German-ConcatX-Abstract", "Machine Learning")
-        results = await search_embeddings.search("German-ConcatX-Abstract", "Machine Learning")
-        return None
+    async def test_low_memory(self, collections=[], datasets=[], column=None, query=None):
+        if query is None:
+            query = "the quick brown fox jumps over the lazy dog"
+        if column is None:
+            column = "Concat Abstract"
+        if len(datasets) == 0:
+            datasets = ["laion/German-ConcatX-Abstract", "laion/German-ConcatX-M3"]
+        if len(collections) == 0:
+            collections = [ x for x in datasets if "/" in x]
+            collections = [ x.split("/")[1] for x in collections]
+        start_qdrant = self.qdrant_kit_py.start_qdrant()
+        if start_qdrant == True:
+            print("Qdrant started")
+            datasets_pairs = ["",""]
+            search_results = {
+                collections: [],
+                results: []
+            }
+            for i in range(len(datasets)):
+                if i % 2 == 0:
+                    datasets_pairs.append(datasets[i-1], datasets[i])
+                await self.qdrant_kit_py.load_qdrant(datasets_pairs[0], datasets_pairs[1])
+                await self.qdrant_kit_py.ingest_qdrant(column)
+            for collection in collections:
+                results = await self.search(collection, query)
+                search_results[collection] = results
+
+            return search_results
+        else:
+            start_faiss = self.ipfs_embeddings_py.start_faiss(collection, query)
+            if start_faiss == True:
+                print("Faiss started")
+                datasets_pairs = ["",""]
+                search_results = {
+                    collections: [],
+                    results: []
+                }
+                for i in range(len(datasets)):
+                    if i % 2 == 0:
+                        datasets_pairs.append(datasets[i-1], datasets[i])
+                    await self.ipfs_embeddings_py.load_faiss(datasets_pairs[0], datasets_pairs[1])
+                    await self.ipfs_embeddings_py.ingest_faiss(column)
+                for collection in collections:
+                    results = await self.search(collection, query)
+                    search_results[collection] = results
+
+                return search_results
+            else:
+                print("Faiss failed to start")
+                return None
     
     async def load_qdrant_iter(self, dataset, knn_index, dataset_split=None, knn_index_split=None):
         await self.qdrant_kit_py.load_qdrant_iter(dataset, knn_index, dataset_split, knn_index_split)
@@ -108,6 +172,14 @@ class search_embeddings:
         results = await search_embeddings.search("Wikipedia-X-Concat", "Machine Learning")
         return results
 
+    async def test(self,memory="low"):
+        if memory == "low":
+            return await self.test_low_memory()
+        elif memory == "high":
+            return await self.test_high_memory()
+        else:
+            return None
+
     async def test_query(self):
         query = "Machine Learning"
         collection = "English-ConcatX-Abstract"
@@ -115,18 +187,87 @@ class search_embeddings:
         print(search_results)
         return None
         
-if __name__ == '__main__':
+    async def start_faiss(self, collection, query):
+        return self.ipfs_embeddings_py.start_faiss(collection, query)
+    
+    async def load_faiss(self, dataset, knn_index):
+        return self.ipfs_embeddings_py.load_faiss(dataset, knn_index)
+    
+    async def ingest_faiss(self, column):
+        return self.ipfs_embeddings_py.ingest_faiss(column)
+    
+    
+if __name__ == "__main__":
     metadata = {
-        "dataset": "laion/Wikipedia-X-Concat",
-        "faiss_index": "laion/Wikipedia-M3",
-        "model": "BAAI/bge-m3"
+        "dataset": "TeraflopAI/Caselaw_Access_Project",
+        "column": "text",
+        "split": "train",
+        "models": [
+            "thenlper/gte-small",
+            "Alibaba-NLP/gte-large-en-v1.5",
+            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+        ],
+        "chunk_settings": {
+            "chunk_size": 512,
+            "n_sentences": 8,
+            "step_size": 256,
+            "method": "fixed",
+            "embed_model": "thenlper/gte-small",
+            "tokenizer": None
+        },
+        "dst_path": "/storage/teraflopai/tmp",
     }
     resources = {
-        "https_endpoints": [["BAAI/bge-m3" , "http://62.146.169.111:8083/embed-small" , 8192]]
+        "local_endpoints": [
+            ["thenlper/gte-small", "cpu", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cpu", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cpu", 32768],
+            ["thenlper/gte-small", "cuda:0", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cuda:0", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:0", 32768],
+            ["thenlper/gte-small", "cuda:1", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cuda:1", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:1", 32768],
+            ["thenlper/gte-small", "openvino", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "openvino", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "openvino", 32768],
+            ["thenlper/gte-small", "llama_cpp", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "llama_cpp", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "llama_cpp", 32768],
+            ["thenlper/gte-small", "ipex", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "ipex", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "ipex", 32768],
+        ],
+        "openvino_endpoints": [
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx0-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx0/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx1-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx1/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx2-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx2/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx3-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx3/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx4-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx4/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx5-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx5/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx6-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx6/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx7-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx7/infer", 1024]
+        ],
+        "tei_endpoints": [
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8081/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8082/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
+        ]
     }
     search_embeddings = search_embeddings(resources, metadata)
     # asyncio.run(search_embeddings.test_high_memory())
     # asyncio.run(search_embeddings.test_low_memory())
-    asyncio.run(search_embeddings.test_query())
-
+    asyncio.run(search_embeddings.test())
     print()

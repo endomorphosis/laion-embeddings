@@ -5,6 +5,8 @@ pandas
 numpy
 qdrant-client
 multiformats
+ipfs_kit_py==0.0.8
+ipfs_datasets_py==0.0.6
 ipfs_embeddings_py==0.0.18
 datasets
 transformers
@@ -19,6 +21,3 @@ torch
 faiss
 faiss-cpu
 faiss-gpu
-datasets
-transformers
-ovmsclient

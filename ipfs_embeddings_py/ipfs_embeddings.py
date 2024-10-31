@@ -73,10 +73,7 @@ except Exception as e:
     try: 
         from ipfs_parquet_to_car import ipfs_parquet_to_car_py
     except Exception as e:
-        try:
-            import ipfs_parquet_to_car_py
-        except Exception as e:
-            pass
+        pass
     pass
 
 from elasticsearch import Elasticsearch
@@ -2525,6 +2522,5 @@ if __name__ == "__main__":
     }
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
     # asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
-    asyncio.run(create_embeddings_batch.index_sparse_chunks(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
-    # asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
+    asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))

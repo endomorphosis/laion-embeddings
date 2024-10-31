@@ -1,107 +1,39 @@
-from ..search_embeddings import search_embeddings
-from ..create_embeddings import create_embeddings
-from ..sparse_embeddings import sparse_embeddings
-from ..shard_embeddings import shard_embeddings
-from ..storacha_clusters import storacha_clusters
+try:
+    from ..ipfs_embeddings_py import ipfs_embeddings_py
+except:
+    try:    
+        from ipfs_embeddings_py import ipfs_embeddings_py
+    except: 
+        import ipfs_embeddings_py 
 
-class test_search_embeddings:
+class shard_embeddings:
     def __init__(self, resources, metadata):
-        self.search_embeddings = search_embeddings.search_embeddings(resources, metadata)
+        self.resources = resources
+        self.metadata = metadata
+        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
+        self.kmeans_cluster_split = self.ipfs_embeddings_py.kmeans_cluster_split
         return None
     
-    def __call__(self, request):
-        return self.search_embeddings.search(request)
-    
-    def __test__(self):
-        test_text = "Hello World"
-        test_search = self(test_text)
-        print(test_search)
-        return None
+    async def __call__(self, metadata=None):
+        if metadata is None and metadata in list(dir(self)):
+            metadata = self.metadata
+        try: 
+            if metadata is None and metadata in list(dir(self)):
+                metadata = self.metadata
+            return await self.ipfs_embeddings_py.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"])
+        except Exception as e:
+            print(e)
+            raise e
+        
+    def test (self):
+        results = None
+        try:
+            results = self()
+            return results
+        except Exception as e:
+            print(e)
+            raise e
 
-class test_create_embeddings:
-    def __init__(self, resources, metadata):
-        self.create_embeddings = create_embeddings.create_embeddings(resources, metadata)
-        return None
-    
-    def __call__(self, request):
-        return self.create_embeddings.index_dataset(request)
-    
-    def __test__(self):
-        test_dataset = "laion/Wikipedia-X-Concat"
-        test_faiss_index = "laion/Wikipedia-M3"
-        test_model = "BAAI/bge-m3"
-        test_create = self.create_embeddings(test_dataset, test_faiss_index, test_model)
-        print(test_create)
-        return None 
-    
-class test_shard_dataset:
-    def __init__(self, resources, metadata):
-        self.shard_embeddings = shard_embeddings.shard_embeddings(resources, metadata)
-        return None
-    
-    def __call__(self, request):
-        return self.shard_embeddings.kmeans_cluster_split(request)
-
-    def __test__(self):
-        test_dataset = "laion/Wikipedia-X-Concat"
-        test_faiss_index = "laion/Wikipedia-M3"
-        test_model = "BAAI/bge-m3"
-        test_shard_dataset = self(test_dataset, test_faiss_index, test_model)
-        print(test_shard_dataset)
-        return None
-    
-class test_sparse_embeddings:
-    def __init__(self, resources, metadata):
-        self.sparse_embeddings = sparse_embeddings.sparse_embeddings(resources, metadata)
-        return None
-    
-    def __call__(self, request):
-        return self.sparse_embeddings.index_sparse_embeddings(request)
-    
-    def __test__(self):
-        test_dataset = "laion/Wikipedia-X-Concat"
-        test_faiss_index = "laion/Wikipedia-M3"
-        test_model = "BAAI/bge-m3"
-        test_sparse_embeddings= self(test_dataset, test_faiss_index, test_model)
-        print(test_sparse_embeddings)
-        return None
-
-class test_storacha_clusters:
-    def __init__(self, resources, metadata):
-        self.storacha_clusters = storacha_clusters.storacha_clusters(resources, metadata)
-        return None
-    
-    def __call__(self, request):
-        return self.storacha_clusters._init(request)
-    
-    def __test__(self):
-        results = {}
-        test_ipfs_kit_init = None
-        test_ipfs_kit = None
-        test_storacha = self.storacha_clusters.test()
-        results = {"test_ipfs_kit_init": test_ipfs_kit_init, "test_ipfs_kit": test_ipfs_kit, "test_storacha": test_storacha}
-        return self()
-
-    
-def test(metadata, resources):
-    results = {}
-    test_search = test_search_embeddings(resources, metadata)
-    test_search.__test__()
-    results["search"] = test_search
-    test_create = test_create_embeddings(resources, metadata)
-    test_create.__test__()
-    results["create"] = test_create
-    test_shard = test_shard_dataset(resources, metadata)
-    test_shard.__test__()
-    results["shard"] = test_shard
-    test_sparse = test_sparse_embeddings(resources, metadata)
-    test_sparse.__test__()
-    results["sparse"] = test_sparse
-    test_storacha_clusters = test_storacha_clusters(resources, metadata)
-    test_storacha_clusters.__test__()
-    results["storacha_clusters"] = test_storacha_clusters
-    return results
-    
 if __name__ == '__main__':
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
@@ -171,5 +103,15 @@ if __name__ == '__main__':
             ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
         ]
     }
-    results = test(metadata, resources)
-    print (results)
+
+    shard_embeddings_test = shard_embeddings(resources, metadata)
+    results = None
+    try:
+        results = shard_embeddings_test.test()
+        print("shard_embeddings_test passed")
+        print(results)
+        exit(0)
+    except Exception as e:
+        print("shard_embeddings_test failed")
+        print(e)
+        exit(1)
