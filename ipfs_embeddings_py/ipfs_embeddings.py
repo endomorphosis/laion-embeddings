@@ -328,6 +328,7 @@ class ipfs_embeddings_py:
         self.endpoint_status = {}
         self.new_dataset = {}
         self.new_dataset_children = {}
+        self.endpoint_handler = {}
         self.saved = False
         self.resources = resources
         self.metadata = metadata
@@ -1510,7 +1511,6 @@ class ipfs_embeddings_py:
             pass
         if not endpoints_set:
             raise ValueError("No endpoints available for model " + model)
-        self.endpoint_handler = {}
         cuda_test = self.hwtest["cuda"]
         openvino_test = self.hwtest["openvino"]
         llama_cpp_test = self.hwtest["llama_cpp"]
