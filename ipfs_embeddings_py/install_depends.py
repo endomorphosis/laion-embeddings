@@ -41,6 +41,10 @@ class install_depends_py():
             return await self.install_elasticsearch()
         elif package == "openvino":
             return await self.install_openvino()
+        elif package == "llama_cpp":
+            return await self.install_llama_cpp()
+        elif package == "ollama":
+            return await self.install_ollama()
         elif package == "ipex":
             return await self.install_ipex()
         elif package == "tortch":
@@ -51,6 +55,12 @@ class install_depends_py():
             return await self.install_ipfs_kit()
         else:
             return None
+    
+    async def install_ollama(self):
+        return None
+    
+    async def install_llama_cpp(self):
+        return None
     
     async def install_ipfs_kit(self):
         return None    
@@ -140,3 +150,8 @@ class install_depends_py():
     
     async def install_elasticsearch(self):
         return None
+
+    def __call__(self, request):
+        return self.install(request)
+
+install_depends_py = install_depends_py
