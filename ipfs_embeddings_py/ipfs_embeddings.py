@@ -446,12 +446,48 @@ class ipfs_embeddings_py:
             return self.libp2p_endpoints[model]
         return None
 
-    def request_tei_endpoint(self, model, batch_size):
-        if model in self.tei_endpoints:
-            for endpoint in self.tei_endpoints[model]:
-                if self.endpoint_status[endpoint] >= batch_size:
-                    return endpoint
-        return None
+    def request_tei_endpoint(self, model, endpoint, endpoint_type, batch):
+        incoming_batch_size = len(batch)
+        endpoint_batch_size = 0
+        if endpoint in self.endpoint_status:
+            endpoint_batch_size = self.endpoint_status[endpoint]
+        elif endpoint_type == None:
+            for endpoint_type in self.endpoint_types:
+                if endpoint_type in self.__dict__.keys():
+                    if model in self.__dict__[endpoint_type]:
+                        for endpoint in self.__dict__[endpoint_type][model]:
+                            endpoint_batch_size = self.endpoint_status[endpoint]
+                            if self.endpoint_status[endpoint] >= incoming_batch_size:
+                                return endpoint
+                    else:
+                        if incoming_batch_size > endpoint_batch_size:
+                            return ValueError("Batch size too large")
+                        else:
+                            return None
+                else:
+                    pass
+        else:
+            if model in self.__dict__[endpoint_type]:
+                for endpoint in self.__dict__[endpoint_type][model]:
+                    endpoint_batch_size = self.endpoint_status[endpoint]
+                    if self.endpoint_status[endpoint] >= incoming_batch_size:
+                        return endpoint
+                    else:
+                        if incoming_batch_size > endpoint_batch_size:
+                            return ValueError("Batch size too large")
+                        else:
+                            return None
+            else:
+                return None
+                
+        if incoming_batch_size > endpoint_batch_size:
+            return ValueError("Batch size too large")
+        else:
+            if model in self.endpoints:
+                for endpoint in self.tei_endpoints[model]:
+                    if self.endpoint_status[endpoint] >= incoming_batch_size:
+                        return endpoint
+            return None
     
     def request_openvino_endpoint(self, model, batch_size):
         if model in self.openvino_endpoints:
@@ -489,8 +525,13 @@ class ipfs_embeddings_py:
             raise ValueError("samples must be a list or string")
         return results
     
-    async def parse_knn(self, embeddings, model, endpoint, endpoint_type=None):
+    async def parse_knn(self, request, model, endpoint, endpoint_type=None):
+        token_length_size = 0
+        embeddings = request
         embeddings_request = embeddings
+        endpoint_context_size = 0
+        if endpoint_type is None:
+            return ValueError("Endpoint type must be defined")
         try:
             if not isinstance(embeddings, list):
                 if isinstance(embeddings, ValueError):
@@ -563,18 +604,30 @@ class ipfs_embeddings_py:
         else:
             return results
         
-    async def request_knn(self, embeddings, model, endpoint, endpoint_type):
+    async def request_knn(self, request_batch, model, endpoint, endpoint_type):
+        request = None
         if endpoint_type is None:
+            request = None
             pass
         elif endpoint_type == "tei_endpoints":
+            request = await self.request_tei_endpoint(model, len(request_batch))
             pass
         elif endpoint_type == "openvino_endpoints":
+            request = await self.request_openvino_endpoint(model, len(request_batch))
             pass
         elif endpoint_type == "libp2p_endpoints":
+            request = await self.request_libp2p_endpoint(model, len(request_batch))
             pass
         elif endpoint_type == "local_endpoints":
+            request = await self.request_local_endpoint(model, len(request_batch))
             pass
-        return None
+        else:
+            request = None
+            pass
+        if request is not None:
+            return request
+        else:   
+            return None
 
     async def max_batch_size(self, model, endpoint=None, endpoint_type=None ):
         embed_fail = False
@@ -636,7 +689,7 @@ class ipfs_embeddings_py:
             embeddings = None
             request_knn_results = None
             try:
-                request_knn_results = await self.request_knn(embeddings, model, endpoint, endpoint_type)
+                request_knn_results = await self.request_knn(test_batch, model, endpoint, endpoint_type)
             except Exception as e:
                 try:
                     embeddings = await self.index_knn(test_batch, model, endpoint)
@@ -645,7 +698,7 @@ class ipfs_embeddings_py:
             if request_knn_results is not None and parsed_knn_embeddings is None:
                 parsed_knn_embeddings = await self.parse_knn(request_knn_results, model, endpoint, endpoint_type)
             if parsed_knn_embeddings is not None:
-                embeddings = parsed_knn_embeddings
+               embeddings = parsed_knn_embeddings
             
         self.endpoint_status[endpoint] = 2**(exponent-1)
         if exponent == 0:
