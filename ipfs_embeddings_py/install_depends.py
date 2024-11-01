@@ -1,7 +1,8 @@
 import subprocess
 from qdrant_kit import qdrant_kit_py
 from ipfs_parquet_to_car import ipfs_parquet_to_car_py
-
+import os
+import sys
 class install_depends_py():
     def __init__(self, resources, metadata):
         self.resources = resources
@@ -63,7 +64,7 @@ class install_depends_py():
     async def install_ollama(self):
         install_results = {}    
         try:
-            install_cmd = ["pip", "install", "ollama"]
+            install_cmd = ["pip", "install", "ollama", "--break-system-packages"]
             result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
             install_results["ollama"] = result.stdout
         except subprocess.CalledProcessError as e:
@@ -91,8 +92,10 @@ class install_depends_py():
     async def install_torch(self):
         ## install torch
         install_results = {}
+
         try:
-            install_torch_cmd = ["pip", "install", "torch", "--break-system-packages"]
+            install_torch_cmd = ["pip", "install", "torch", "torchvision", "torchaudio", "torchtext", "--index-url", " https://download.pytorch.org/whl/cpu", "--break-system-packages"]
+            print(install_torch_cmd)
             install_results["torch"] = subprocess.run(install_torch_cmd, check=True)
         except Exception as e:
             install_results["torch"] = e
@@ -102,7 +105,7 @@ class install_depends_py():
             gpus = torch.cuda.device_count()
             install_results["torch"] = gpus
         except Exception as e:
-            install_torch_cmd = ["pip", "install", "torch", "torchvision, torchaudio, torchtext"]
+            install_torch_cmd = ["pip", "install", "torch", "torchvision, torchaudio, torchtext", "--index-url", "https://download.pytorch.org/whl/cu102", "--break-system-packages"]
             result = subprocess.run(install_torch_cmd, check=True, capture_output=True, text=True)
             install_results["torch"] = result.stdout
         except subprocess.CalledProcessError as e:
@@ -134,19 +137,94 @@ class install_depends_py():
         return install_results
     
     async def install_ipex(self):
-        install_results = {}    
+        install_results = {}
+        # python -m pip install intel-extension-for-pytorch
+        # python -m pip install oneccl_bind_pt --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/cpu/us/
+        install_results["install_torch"] = await self.install_torch()
+        install_results["install_oneccl_bind_pt"] = await self.install_oneccl_bind_pt()
         try:
-            install_cmd = ["pip", "install", "intel-pytorch-extension"]
+            install_cmd = ["pip", "install", "intel-pytorch-extension", "--extra-index-url", "https://pytorch-extension.intel.com/release-whl/stable/cpu/us/", "--break-system-packages"]
             result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
             install_results["ipex"] = result.stdout
         except subprocess.CalledProcessError as e:
             install_results["ipex"] = e.stderr
             print(f"Failed to install IPEX: {e.stderr}")
         return install_results
-    
+
+    async def install_oneccl_bind_pt_git(self):
+        install_results = {}
+        commands = [
+            "git clone https://github.com/intel/torch-ccl.git",
+            "git submodule sync",
+            "git submodule update --init --recursive"
+        ]
+        try:
+            result = { }
+            if not os.path.exists("torch-ccl"):
+                result["clone"] = subprocess.check_output(commands[0], shell=True, text=True)
+                os.chdir("torch-ccl")
+                result["sync"] = subprocess.check_output(commands[1], shell=True, text=True)
+                result["update"] = subprocess.check_output(commands[2], shell=True, text=True)
+            else:
+                os.chdir("torch-ccl")
+                try:
+                    result["sync"] = subprocess.check_output(commands[1], shell=True, text=True)
+                except subprocess.CalledProcessError as e:
+                    result["sync"] = e.stderr
+                try:
+                    result["update"] = subprocess.check_output(commands[2], shell=True, text=True)
+                except subprocess.CalledProcessError as e:
+                    result["update"] = e.stderr
+                install_results["commands1"] = result
+        except subprocess.CalledProcessError as e:
+            install_results["commands1"] = e.stderr 
+            print(f"Failed to install OneCCL Bind PT: {e.stderr}")
+        
+        homedir = os.path.expanduser("~")
+        get_cwdir = os.getcwd()
+        ls_files = os.listdir(get_cwdir)
+        commands2 = [
+            # for CPU Backend Only
+            # "sudo python3 setup.py install",
+            # for XPU Backend: use DPC++ Compiler to enable support for Intel XPU
+            # build with oneCCL from third party
+            # "sudo COMPUTE_BACKEND=dpcpp python3 setup.py install",
+            # build with oneCCL from basekit
+            "sudo export INTELONEAPIROOT="+ homedir + "/intel/oneapi",
+            "sudo USE_SYSTEM_ONECCL=ON COMPUTE_BACKEND=dpcpp python3 setup.py install"
+        ]
+        results = { }
+        for command in commands2:
+            command_index =  commands2.index(command) 
+            try:
+                result = subprocess.check_output(command, shell=True, text=True)
+                result[str(command_index)] = result
+            except subprocess.CalledProcessError as e:
+                result[str(command_index)] = e
+                print(f"Failed to install OneCCL Bind PT:")
+        install_results["commands2"] = results
+        return install_results
+
+    async def install_oneccl_bind_pt(self):
+        install_results = {} 
+        try:
+            install_cmd = ["pip", "install", "oneccl_bind_pt", "--extra-index-url", "https://pytorch-extension.intel.com/release-whl/stable/cpu/us/", "--break-system-packages"]
+            result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
+            install_results["oneccl_bind_pt"] = result.stdout
+        except subprocess.CalledProcessError as e:
+            install_results["oneccl_bind_pt"] = e.stderr
+            print(f"Failed to install OneCCL Bind PT: {e.stderr}")
+            try:    
+                install_results["oneccl_bind_pt_git"] = await self.install_oneccl_bind_pt_git()
+            except Exception as e:
+                install_results["oneccl_bind_pt_git"] = e
+                print(e)
+            pass
+        return install_results
+
     async def install_cuda(self):
         install_results = {}
-        install_cuda_cmd = ["apt-get", "install", "nvidia-cuda-toolkit"]
+        install_cuda_cmd = ["apt-get", "install", "nvidia-cuda-toolkit", "--break-system-packages"]
         try:
             install_results["install_cuda"] = subprocess.run(install_cuda_cmd, check=True)
         except Exception as e:

@@ -1353,7 +1353,7 @@ class ipfs_embeddings_py:
         return None
     
     async def test_ipex(self):        
-        test_ipex_cmd = "python3 -c 'import ipex; print(ipex.__version__)'"
+        test_ipex_cmd = 'python -c "import torch; import intel_extension_for_pytorch as ipex; print(torch.__version__); print(ipex.__version__);"'
         try:
             test_ipex = subprocess.check_output(test_ipex_cmd, shell=True)
             return test_ipex
@@ -1505,7 +1505,8 @@ class ipfs_embeddings_py:
                     model, endpoint, context_length = endpoint_info
                     await self.add_endpoint(model, endpoint, context_length, endpoint_type)    
         if "hwtest" not in dir(self):
-            self.hwtest = await self.test_hardware()
+            hwtest = await self.test_hardware()
+            self.hwtest = hwtest
         for model in models:
             if model not in self.queues:
                 self.queues[model] = {}
@@ -1518,6 +1519,19 @@ class ipfs_embeddings_py:
             cuda = self.get_endpoints(model, "cuda")
             endpoints =  { "tei" : tei , "local" : local , "openvino": openvino , "libp2p": libp2p , "cuda": cuda }
             endpoints_set = set(endpoints["tei"] + endpoints["local"] + endpoints["openvino"] + endpoints["libp2p"] + endpoints["cuda"])
+        else:
+            endpoints = endpoint_list
+            self.endpoints = endpoints
+            endpoints_list = [ k for k in endpoints.keys() ]
+            self.endpoints_list = endpoints_list
+            self.endpoints = { k : v for k, v in enumerate(endpoints_list) }
+            endpoints_set = set(endpoints_list)
+            self.endpoint_set = endpoints_set
+            local = [ endpoint for endpoint in endpoints["local_endpoints"] if "local" in endpoint or "cpu" in endpoint or "cuda" in endpoint or "openvino" in endpoint or "llama_cpp" in endpoint or "ipex" in endpoint]
+            openvino = [endpoint for endpoint in endpoints["openvino_endpoints"] ]
+            libp2p = []
+            tei = [endpoint for endpoint in endpoints["tei_endpoints"]]
+            pass
         if type(endpoint_list) == list:
             self.endpoints = { k : v for k, v in enumerate(endpoint_list) }
             endpoints = endpoint_list
@@ -1529,15 +1543,6 @@ class ipfs_embeddings_py:
             endpoints_list = list(endpoint_list.keys())
             endpoints_set = set(endpoints_list)
             self.endpoint_set = endpoints_set
-        else:
-            endpoints = endpoint_list
-            self.endpoints = endpoints
-            endpoints_list = [ k for k in endpoints.keys() ]
-            self.endpoints_list = endpoints_list
-            self.endpoints = { k : v for k, v in enumerate(endpoints_list) }
-            endpoints_set = set(endpoints_list)
-            self.endpoint_set = endpoints_set
-            pass
         if not endpoints_set:
             raise ValueError("No endpoints available for model " + model)
         cuda_test = self.hwtest["cuda"]
@@ -1547,9 +1552,6 @@ class ipfs_embeddings_py:
         cpus = os.cpu_count()
         cuda = torch.cuda.is_available()
         gpus = torch.cuda.device_count()
-        openvino = 0 if openvino_test is None else 1
-        llama_cpp = 0 if llama_cpp_test is None else 1
-        ipex = 0 if ipex_test is None else 1
         for model in models:
             if model not in self.tokenizer:
                 self.tokenizer[model] = {}
@@ -1575,10 +1577,11 @@ class ipfs_embeddings_py:
                         torch.cuda.empty_cache()
                         self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(64)
                         batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
+                        self.local_endpoints[model]["cuda:" + str(gpu)] = batch_size
                         self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
                         self.endpoint_handler[(model, "cuda:" + str(gpu))] = ""
                         # consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
-            elif len(local) > 0 and cpus > 0:
+            if len(local) > 0 and cpus > 0:
                 all_test_types = [ type(openvino_test), type(llama_cpp_test), type(ipex_test)]
                 all_tests_ValueError = all(x is ValueError for x in all_test_types)
                 all_tests_none = all(x is None for x in all_test_types)
@@ -1590,7 +1593,7 @@ class ipfs_embeddings_py:
                 elif openvino_test and type(openvino_test) != ValueError:
                     ov_count = 0
                     for endpoint in local:
-                        if "openvino" in endpoint:
+                        if "openvino" in endpoint[1]:
                             endpoint_name = "openvino:"+str(ov_count)
                             batch_size = 0
                             if model not in self.batch_sizes:
