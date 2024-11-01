@@ -908,21 +908,33 @@ class ipfs_embeddings_py:
                 print(f"Unexpected error: {str(e)}")
                 return ValueError(f"Unexpected error: {str(e)}")
 
-    def choose_endpoint(self, model):
-        tei_endpoints = self.get_https_endpoint(model)
-        libp2p_endpoints = self.get_libp2p_endpoint(model)
-        filtered_libp2p_endpoints = {k: v for k, v in self.endpoint_status.items() if v >= 1 and libp2p_endpoints is not None and k in list(libp2p_endpoints.keys())}
-        filtered_tei_endpoints = {k: v for k, v in self.endpoint_status.items() if v >= 1 and tei_endpoints is not None and k in list(tei_endpoints.keys())}
-        if not filtered_tei_endpoints and not filtered_libp2p_endpoints:
-            return None
+    def choose_endpoint(self, model, endpoint_type=None):
+        if endpoint_type != None:
+            this_endpoints = self.get_endpoints(model, endpoint_type)
         else:
-            this_endpoint = None
-            if len(list(filtered_tei_endpoints.keys())) > 0:
-                this_endpoint = random.choice(list(filtered_tei_endpoints.keys()))
-            elif len(list(filtered_libp2p_endpoints.keys())) > 0:
-                this_endpoint = random.choice(list(filtered_libp2p_endpoints.keys()))
-            print("chosen endpoint for " + model + " is " + this_endpoint)
-            return this_endpoint
+            tei_endpoints = self.get_endpoints(model, endpoint_type="tei")
+            libp2p_endpoints = self.get_endpoints(model, endpoint_type="libp2p")
+            openvino_endpoints = self.get_endpoints(model, endpoint_type="openvino")
+            local_endpoints = self.get_endpoints(model, endpoint_type="local")
+            filtered_libp2p_endpoints = {k: v for k, v in self.endpoint_status.items() if v >= 1 and libp2p_endpoints is not None and k in list(libp2p_endpoints.keys())}
+            filtered_tei_endpoints = {k: v for k, v in self.endpoint_status.items() if v >= 1 and tei_endpoints is not None and k in list(tei_endpoints.keys())}
+            filtered_openvino_endpoints = {k: v for k, v in self.endpoint_status.items() if v >= 1 and openvino_endpoints is not None and k in list(openvino_endpoints.keys())}
+            filtered_local_endpoints = {k: v for k, v in self.endpoint_status.items() if v >= 1 and local_endpoints is not None and k in list(local_endpoints.keys())}
+            if not filtered_tei_endpoints and not filtered_libp2p_endpoints and not filtered_openvino_endpoints and not filtered_local_endpoints:
+                return None
+            else:
+                this_endpoint = None
+                if len(list(filtered_local_endpoints.keys())) > 0:
+                    this_endpoint = random.choice(list(filtered_local_endpoints.keys()))
+                if len(list(filtered_tei_endpoints.keys())) > 0:
+                    this_endpoint = random.choice(list(filtered_tei_endpoints.keys()))
+                if len(list(filtered_openvino_endpoints.keys())) > 0:
+                    this_endpoint = random.choice(list(filtered_openvino_endpoints.keys()))
+                elif len(list(filtered_libp2p_endpoints.keys())) > 0:
+                    this_endpoint = random.choice(list(filtered_libp2p_endpoints.keys()))
+                print("chosen endpoint for " + model + " is " + this_endpoint)
+                return this_endpoint
+
 
     def get_endpoints(self, model, endpoint_type=None):
         if endpoint_type is None:
