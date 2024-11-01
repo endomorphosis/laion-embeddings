@@ -526,36 +526,39 @@ class ipfs_embeddings_py:
             raise ValueError("samples must be a list or string")
         return results
 
-    async def max_batch_size(self, model, endpoint=None):
+    async def max_batch_size(self, model, endpoint=None, endpoint_type=None ):
         embed_fail = False
         exponent = 0
         batch = []
+        token_length_size = 0
         batch_size = 2**exponent
-        if "cuda" in endpoint or "cpu" in endpoint:
-            for endpoints in self.endpoints["local_endpoints"]:
-                this_model = endpoint[0]
-                this_endpoint = endpoint[1]
-                this_context_length = endpoint[2]
-                if model is this_model and endpoint is this_endpoint:
-                    token_length_size = round(self.endpoints["local_endpoints"][model][endpoint].config.max_position_embeddings * 0.99)
+        if endpoint_type is None:
+            this_model = None[0]
+            this_endpoint = None[1]
+            this_context_length = None[2]
+            if "/embed" in endpoint:
+                endpoint_type = "tei_endpoints"
+            elif "/infer" in endpoint:
+                endpoint_type = "openvino_endpoints"
+            elif "http" in endpoint:
+                endpoint_type = "tei_endpoints"
+            elif "cuda" in endpoint or "cpu" in endpoint or "local" in endpoint:
+                endpoint_type = "local_endpoints"
+            elif "libp2p" in endpoint:
+                endpoint_type = "libp2p_endpoints"
+            if endpoint_type is None:
+                print('Endpoint not found')
+                return 0
             else:
-                token_length_size = round(self.endpoints["local_endpoints"][model][endpoint] * 0.99)
-        elif "openvino" in endpoint:            
-            for endpoints in self.endpoints["openvino_endpoints"]:
-                this_model = endpoint[0]
-                this_endpoint = endpoint[1]
-                this_context_length = endpoint[2]
-                if model is this_model and endpoint is this_endpoint:
-                    token_length_size = round(self.endpoints["openvino_endpoints"][model][endpoint] * 0.99)
-        elif "libp2p" in endpoint:
-            pass
-        elif "tei" in endpoint:
-            for endpoints in self.endpoints["tei_endpoints"]:
-                this_model = endpoint[0]
-                this_endpoint = endpoint[1]
-                this_context_length = endpoint[2]
-                if model is this_model and endpoint is this_endpoint:
-                    token_length_size = round(self.endpoints["tei_endpoints"][model][endpoint] * 0.99)            
+                pass
+                  
+        for endpoints in self.endpoints[endpoint_type]:
+            this_model = endpoint[0]
+            this_endpoint = endpoint[1]
+            this_context_length = endpoint[2]
+            if model is this_model and endpoint is this_endpoint:
+                token_length_size = round(self.endpoints[endpoint_type][model][endpoint] * 0.99) 
+        
         test_tokens = []
         if model not in self.tokenizer.keys():
             self.tokenizer[model] = {}
