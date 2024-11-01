@@ -488,6 +488,28 @@ class ipfs_embeddings_py:
         else:
             raise ValueError("samples must be a list or string")
         return results
+    
+    async def parse_knn(self, results, endpoint_type=None):
+        if isinstance(results, list):
+            return results
+        elif isinstance(results, str):
+            if "cid" in results:
+                return results
+            else:
+                return results
+        else:
+            return results
+        
+    async def request_knn(self, embeddings, model, endpoint, endpoint_type):
+        if endpoint_type is None:
+            pass
+        elif endpoint_type is "tei_endpoints":
+            pass
+        elif endpoint_type is "openvino_endpoints":
+            pass
+        elif endpoint_type is "libp2p_endpoints":
+            pass
+        return None
 
     async def max_batch_size(self, model, endpoint=None, endpoint_type=None ):
         embed_fail = False
@@ -545,8 +567,21 @@ class ipfs_embeddings_py:
             test_batch = []
             for i in range(batch_size):
                 test_batch.append(test_text)
+            parsed_knn_embeddings = None
+            embeddings = None
+            request_knn_results = None
             try:
-                embeddings = await self.index_knn(test_batch, model, endpoint)
+                request_knn_results = await self.request_knn(embeddings, model, endpoint, endpoint_type)
+            except Exception as e:
+                try:
+                    embeddings = await self.index_knn(test_batch, model, endpoint)
+                except Exception as e:
+                        pass
+            if request_knn_results is not None and parsed_knn_embeddings is None:
+                parsed_knn_embeddings = await self.parse_knn(request_knn_results, endpoint_type)
+            if parsed_knn_embeddings is not None:
+                embeddings = parsed_knn_embeddings
+            try:
                 if not isinstance(embeddings, list):
                     if isinstance(embeddings, ValueError):
                         fail_reason = embeddings.args[0]
