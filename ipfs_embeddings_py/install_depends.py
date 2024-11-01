@@ -16,10 +16,14 @@ class install_depends_py():
         if resources is None:
             if self.resources is not None and len(list(self.resources.keys())) != 0:
                 resources = self.resources
+                if "packages" in list(self.resources.keys()):
+                    resources["packages"] = self.resources["packages"]
+                else:
+                    resources["packages"] = [[]]
             else:
-                resources["packagess"] = ["faiss", "faiss-cuda", "faiss-amx", "qdrant", "elasticsearch"]
+                resources["packagess"] = [[]]
             pass
-        for package in self.resources["packages"]:
+        for package in resources["packages"]:
             try:
                 self.stdout[package] = await self.install_package(package)
             except Exception as e:
