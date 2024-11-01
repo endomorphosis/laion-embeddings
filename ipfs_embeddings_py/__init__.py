@@ -29,3 +29,10 @@ try:
 except:
     from .node_parser import *
     pass
+
+try:
+    import install_depends
+    from install_depends import *
+except:
+    from .install_depends import *
+    pass

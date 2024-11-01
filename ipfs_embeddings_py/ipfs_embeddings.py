@@ -1370,14 +1370,13 @@ class ipfs_embeddings_py:
             test_results["llama_cpp"] = test_llama_cpp
         except Exception as e:
             print(e)
-            return ValueError(e)
+            raise ValueError(e)
         try:
             test_ollama = subprocess.check_output("ollama --version", shell=True)
             test_results["ollama"] = test_ollama
         except Exception as e:
             print(e)
-            return ValueError(e)
-        
+            raise ValueError(e)
         return test_results
         
     
@@ -1388,7 +1387,7 @@ class ipfs_embeddings_py:
             return test_openvino
         except Exception as e:
             print(e)
-            return ValueError(e)
+            raise ValueError(e)
         return None
     
     def test_ipex(self):        
@@ -1398,7 +1397,7 @@ class ipfs_embeddings_py:
             return test_ipex
         except Exception as e:
             print(e)
-            return ValueError(e)
+            raise ValueError(e)
         return None
     
     def test_cuda(self):
@@ -1407,59 +1406,91 @@ class ipfs_embeddings_py:
             return gpus
         except Exception as e:
             print(e)
-            return ValueError(e)
+            raise ValueError(e)
     
-    def install_openvino(self):
-        
+    async def install_openvino(self):
+        from install_depends import install_depends_py
+        this_install_package = install_depends_py()
+        try:
+            results = await this_install_package.install_package("openvino")
+        except Exception as e:
+            print(e)
+            return ValueError(e)    
         return None
     
-    def install_ipex(self):
-        
+    async def install_ipex(self):
+        from install_depends import install_depends_py
+        this_install_package = install_depends_py()
+        try:
+            results = await this_install_package.install_package("ipex")
+        except Exception as e:
+            print(e)
+            return ValueError(e)    
         return None
     
-    def install_cuda(self): 
-        
+    async def install_cuda(self): 
+        from install_depends import install_depends_py
+        this_install_package = install_depends_py(self.metadata,self.resources)
+        try:
+            results = await this_install_package.install_package("cuda")
+        except Exception as e:
+            print(e)
+            return ValueError(e)    
         return None
     
-    def install_llama_cpp(self):
-        
+    async def install_llama_cpp(self):
+        from install_depends import install_depends_py
+        this_install_package = install_depends_py(self.metadata,self.resources)
+        try:
+            results = await this_install_package.install_package("llama_cpp")
+        except Exception as e:
+            print(e)
+            return ValueError(e)    
         return None
-    
+        
     async def test_hardware(self):
         cuda_test = None
         openvino_test = None
         llama_cpp_test = None
         ipex_test = None
         try:
-            openvino_test = self.test_local_openvino()
+            openvino_test = await self.test_local_openvino()
         except Exception as e:
+            openvino_test = e
+            print(e)
             try:
-                openvino_install = self.install_openvino()
+                openvino_install = await self.install_openvino()
             except Exception as e:
+                openvino_install = e
                 print(e)        
             pass
             
         try:
-            llama_cpp_test = self.test_llama_cpp()
+            llama_cpp_test = await self.test_llama_cpp()
         except Exception as e:
+            llama_cpp_test = e
             try:
-                llama_cpp_install = self.install_llama_cpp()
+                llama_cpp_install = await self.install_llama_cpp()
             except Exception as e:
+                print(e)
+                llama_cpp_install = e
+            pass
+        try:
+            ipex_test = await self.test_ipex()
+        except Exception as e:
+            ipex_test = e
+            print(e)
+            try:
+                install_ipex = await self.install_ipex()
+            except Exception as e:
+                install_ipex = e
                 print(e)
             pass
         try:
-            ipex_test = self.test_ipex()
+            cuda_test = await self.test_cuda()
         except Exception as e:
             try:
-                install_ipex = self.install_ipex()
-            except Exception as e:
-                print(e)
-            pass
-        try:
-            cuda_test = self.test_cuda()
-        except Exception as e:
-            try:
-                install_cuda = self.install_cuda()
+                install_cuda = await self.install_cuda()
             except Exception as e:
                 print(e)
             pass

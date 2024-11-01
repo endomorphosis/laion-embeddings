@@ -292,7 +292,6 @@ class qdrant_kit_py:
         print("Data successfully ingested into Qdrant")
         print("All data successfully ingested into Qdrant from huggingface dataset")
         return True
-
     
     async def ingest_qdrant_iter(self, column_names):
         if isinstance(column_names, str):
@@ -360,7 +359,6 @@ class qdrant_kit_py:
         print("All data successfully ingested into Qdrant from huggingface dataset")
         return True
 
-
     async def search_qdrant(self, collection_name, query_vector,  n=5):
         query_vector = np.array(query_vector[0])
         client = QdrantClient(url="http://localhost:6333")
@@ -414,3 +412,14 @@ class qdrant_kit_py:
                 os.system(start_qdrant_cmd + " > /dev/null 2>&1")
         return 1
     
+    def install(self):
+        this_dir = os.getcwd()
+        file_dir = os.path.dirname(os.path.abspath(__file__))
+        if not os.path.exists(file_dir + "/qdrant"):
+            git_clone_cmd = "git clone http://github.com/qdrant/qdrant"
+            os.system(git_clone_cmd + " > /dev/null 2>&1")
+        
+        return 1
+
+    def test(self):
+        return 1
