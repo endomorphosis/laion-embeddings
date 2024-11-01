@@ -74,12 +74,12 @@ class install_depends_py():
     async def install_llama_cpp(self):
         install_results = {}
         try:
-            install_cmd = ["pip", "install", "llama_cpp"]
+            install_cmd = ["pip", "install", "llama_cpp", "--break-system-packages"]
             result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
             install_results["llama_cpp"] = result.stdout
         except subprocess.CalledProcessError as e:
             install_results["llama_cpp"] = e.stderr
-            print(f"Failed to install Llama_CPP: {e.stderr}")
+            print(f"Failed to install llama_cpp: {e.stderr}")
         return install_results
     
     async def install_ipfs_kit(self):

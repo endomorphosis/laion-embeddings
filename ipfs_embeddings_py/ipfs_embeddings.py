@@ -363,12 +363,12 @@ class ipfs_embeddings_py:
         self.kmeans_cluster_split = self.kmeans_cluster_split
         # Initialize endpoints
         self.endpoint_types = ["tei_endpoints", "openvino_endpoints", "libp2p_endpoints", "local_endpoints"]
-        for endpoint_type in self.endpoint_types:
-            if endpoint_type in resources.keys():
-                for endpoint_info in resources[endpoint_type]:
-                    model, endpoint, context_length = endpoint_info
-                    self.add_endpoint(model, endpoint, context_length, endpoint_type)        
+        self.init_endpoints = self.init_endpoints
+        self.add_endpoint = self.add_endpoint
+        self.rm_endpoint = self.rm_endpoint
+        self.init_endpoints = self.init_endpoints       
         return None
+    
 
     async def add_endpoint(self, model, endpoint, context_length, endpoint_type):
         if endpoint_type in self.endpoint_types:
@@ -1425,7 +1425,11 @@ class ipfs_embeddings_py:
             print(e)
             try:
                 openvino_install = await self.install_openvino()
-                openvino_test = await self.test_local_openvino()
+                try:
+                    openvino_test = await self.test_local_openvino()
+                except Exception as e:
+                    openvino_test = e
+                    print(e)
             except Exception as e:
                 openvino_install = e
                 print(e)        
@@ -1437,7 +1441,10 @@ class ipfs_embeddings_py:
             llama_cpp_test = e
             try:
                 llama_cpp_install = await self.install_llama_cpp()
-                llama_cpp_test = await self.test_llama_cpp()
+                try:
+                    llama_cpp_test = await self.test_llama_cpp()
+                except:
+                    llama_cpp_test = e
             except Exception as e:
                 print(e)
                 llama_cpp_install = e
@@ -1449,7 +1456,11 @@ class ipfs_embeddings_py:
             print(e)
             try:
                 ipex_install = await self.install_ipex()
-                ipex_test = await self.test_ipex()
+                try:
+                    ipex_test = await self.test_ipex()
+                except Exception as e:
+                    ipex_test = e
+                    print(e)
             except Exception as e:
                 ipex_install = e
                 print(e)
@@ -1459,7 +1470,11 @@ class ipfs_embeddings_py:
         except Exception as e:
             try:
                 cuda_install = await self.install_cuda()
-                cuda_test = await self.test_cuda()
+                try:
+                    cuda_test = await self.test_cuda()
+                except Exception as e:
+                    cuda_test = e
+                    print(e)                    
             except Exception as e:
                 cuda_install = e
                 print(e)
@@ -1484,6 +1499,11 @@ class ipfs_embeddings_py:
     
     
     async def init_endpoints(self, models=None, endpoint_list=None):
+        for endpoint_type in self.endpoint_types:
+            if endpoint_type in resources.keys():
+                for endpoint_info in resources[endpoint_type]:
+                    model, endpoint, context_length = endpoint_info
+                    await self.add_endpoint(model, endpoint, context_length, endpoint_type)    
         if "hwtest" not in dir(self):
             self.hwtest = await self.test_hardware()
         for model in models:
