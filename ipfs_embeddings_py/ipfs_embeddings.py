@@ -1410,23 +1410,23 @@ class ipfs_embeddings_py:
     
     async def install_openvino(self):
         from install_depends import install_depends_py
-        this_install_package = install_depends_py()
+        this_install_package = install_depends_py(self.resources, self.metadata)
         try:
             results = await this_install_package.install_package("openvino")
         except Exception as e:
             print(e)
             return ValueError(e)    
-        return None
+        return results
     
     async def install_ipex(self):
         from install_depends import install_depends_py
-        this_install_package = install_depends_py()
+        this_install_package = install_depends_py(self.resources, self.metadata)
         try:
             results = await this_install_package.install_package("ipex")
         except Exception as e:
             print(e)
             return ValueError(e)    
-        return None
+        return results
     
     async def install_cuda(self): 
         from install_depends import install_depends_py
@@ -1436,7 +1436,7 @@ class ipfs_embeddings_py:
         except Exception as e:
             print(e)
             return ValueError(e)    
-        return None
+        return results
     
     async def install_llama_cpp(self):
         from install_depends import install_depends_py
@@ -1446,7 +1446,7 @@ class ipfs_embeddings_py:
         except Exception as e:
             print(e)
             return ValueError(e)    
-        return None
+        return results
         
     async def test_hardware(self):
         cuda_test = None

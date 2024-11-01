@@ -59,11 +59,50 @@ class install_depends_py():
         return None
     
     async def install_torch(self):
-        return None
-            
+        ## install torch
+        install_results = {}
+
+        install_torch_cmd = ["pip", "install", "torch"]
+        try:
+            install_results["torch"] = subprocess.run(install_torch_cmd, check=True)
+        except Exception as e:
+            install_results["torch"] = e
+            print(e)
+        try:
+            import torch
+            gpus = torch.cuda.device_count()
+            install_results["torch"] = gpus
+        except Exception as e:
+            install_torch_cmd = ["pip", "install", "torch", "torchvision, torchaudio, torchtext"]
+            result = subprocess.run(install_torch_cmd, check=True, capture_output=True, text=True)
+            install_results["torch"] = result.stdout
+        except subprocess.CalledProcessError as e:
+            install_results["torch"] = e.stderr
+            print(f"Failed to install Torch: {e.stderr}")
+        return install_results
+
     async def install_openvino(self):
-        return None
-    
+        install_results = {}
+        try:
+            install_cmd = ["pip", "install", "openvino"]
+            result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
+            install_results["openvino"] = result.stdout
+        except subprocess.CalledProcessError as e:
+            install_results["openvino"] = e.stderr
+            print(f"Failed to install OpenVINO: {e.stderr}")
+        return install_results
+
+    async def install_dependencies(self, dependencies=None):
+        install_results = {}
+        for dependency in dependencies:
+            try:
+                install_cmd = ["pip", "install", dependency]
+                result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
+                install_results[dependency] = result.stdout
+            except subprocess.CalledProcessError as e:
+                install_results[dependency] = e.stderr
+                print(f"Failed to install {dependency}: {e.stderr}")
+        return install_results
     async def install_ipex(self):
         return None
     
