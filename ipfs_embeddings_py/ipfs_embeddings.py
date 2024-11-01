@@ -1009,9 +1009,18 @@ class ipfs_embeddings_py:
         return None
 
     async def chunk_consumer(self, batch_size, model_name, endpoint):
-        print("chunk consumer started")
+        print("chunk consumer started for endpoint " + endpoint + " and model " + model_name)
         while True:
-            while self.cid_chunk_queue.empty():
+            test_ready = True
+            if "cid_chunk_queue" not in list(dir(self)):
+                test_ready = False
+                self.cid_chunk_queue = None
+            if "empty" not in list(dir(self.cid_chunk_queue)):
+                test_ready = False 
+                self.cid_chunk_queue.empty = True
+            if self.cid_chunk_queue.empty:
+                test_ready = False
+            while not test_ready:
                 asyncio.sleep(0.1)
             chunked_item = await self.cid_chunk_queue.get()
             batch_results = []
@@ -1405,7 +1414,7 @@ class ipfs_embeddings_py:
         return None
     
     
-    def test_hardware(self):
+    async def test_hardware(self):
         cuda_test = None
         openvino_test = None
         llama_cpp_test = None
@@ -1452,6 +1461,7 @@ class ipfs_embeddings_py:
             "ipex": ipex_test
         }
         print(test_results)
+        return test_results
     
     async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
         await self.load_clusters( dataset, split, dst_path)
@@ -1472,13 +1482,13 @@ class ipfs_embeddings_py:
         for model in models:
             if model not in self.queues:
                 self.queues[model] = {}
-        if split is None:
-            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
-        else:
-            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
-        columns = self.dataset.column_names
-        columns.append("cid")
-        await self.load_checkpoints( dataset, split, dst_path, models)
+        # if split is None:
+        #     self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+        # else:
+        #     self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+        # columns = self.dataset.column_names
+        # columns.append("cid")
+        # await self.load_checkpoints( dataset, split, dst_path, models)
         consumer_tasks = {}
         try:
             gpus = torch.cuda.device_count()            
@@ -1501,18 +1511,18 @@ class ipfs_embeddings_py:
             if model not in self.tokenizer.keys():
                 self.tokenizer[model] = {}                    
             if len(cuda) > 0 and gpus > 0:
-                self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
-                for gpu in range(gpus):
-                    self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
-                    self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
-                    torch.cuda.empty_cache()
-                    self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
-                    batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
-                    self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
-                    consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
+                if cuda_test and type(cuda_test) != ValueError:
+                    self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
+                    for gpu in range(gpus):
+                        self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
+                        self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
+                        torch.cuda.empty_cache()
+                        self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
+                        batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
+                        self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
+                        consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
             elif len(local) > 0 and cpus > 0:
-                
-                if not openvino_test and not llama_cpp_test and not ipex_test:                
+                if ( all ( x == None for x in [openvino_test, llama_cpp_test, ipex_test]) and cpus > 0) or (all (x == ValueError for x in [openvino_test, llama_cpp_test, ipex_test]) and cpus > 0): 
                     self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
                     self.queues[model]["cpu"] = asyncio.Queue()
                     consumer_tasks[(model, "cpu")] = asyncio.create_task(self.chunk_consumer( 1, model, "cpu"))
@@ -1606,7 +1616,15 @@ class ipfs_embeddings_py:
                     self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
                     consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
             if not endpoints or len(endpoints) == 0:
-                raise ValueError("No endpoints available for model " + model)
+                raise ValueError("No endpoints available for model " + model)        
+        if split is None:
+            if "new_dataset" not in list(self.all_cid_set.keys()):
+                self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+            else:
+                self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+            columns = self.dataset.column_names
+            columns.append("cid")
+            await self.load_checkpoints( dataset, split, dst_path, models)
         self.cid_set = set.intersection(*self.all_cid_set.values())
         producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, self.queues))        
         save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
