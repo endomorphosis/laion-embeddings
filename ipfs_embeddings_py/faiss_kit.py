@@ -13,4 +13,4 @@ class faiss_kit_py:
         test_faiss_kit = None
         test_faiss = self.faiss_kit.test()
         results = {"test_faiss_kit_init": test_faiss_kit_init, "test_faiss_kit": test_faiss_kit, "test_faiss": test_faiss}
-        return self()   
+        return results
