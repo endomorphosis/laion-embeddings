@@ -333,14 +333,6 @@ class ipfs_embeddings_py:
         self.resources = resources
         self.metadata = metadata
         self.index_dataset = self.index_dataset
-        self.add_tei_endpoint = self.add_tei_endpoint
-        self.add_libp2p_endpoint = self.add_libp2p_endpoint
-        self.add_openvino_endpoint = self.add_openvino_endpoint
-        self.add_local_endpoint = self.add_local_endpoint
-        self.rm_tei_endpoint = self.rm_tei_endpoint
-        self.rm_libp2p_endpoint = self.rm_libp2p_endpoint
-        self.rm_openvino_endpoint = self.rm_openvino_endpoint
-        self.rm_local_endpoint = self.rm_local_endpoint
         self.get_https_endpoint = self.get_https_endpoint
         self.get_libp2p_endpoint = self.get_libp2p_endpoint
         self.request_tei_endpoint = self.request_tei_endpoint
@@ -370,24 +362,47 @@ class ipfs_embeddings_py:
         self.send_batch_to_endpoint = self.send_batch_to_endpoint
         self.kmeans_cluster_split = self.kmeans_cluster_split
         # Initialize endpoints
-        if "tei_endpoints" in resources.keys():
-            for endpoint_info in resources.get('tei_endpoints', []):
-                model, endpoint, context_length = endpoint_info
-                self.add_tei_endpoint(model, endpoint, context_length)
-        if "openvino_endpoints" in resources.keys():
-            for endpoint_info in resources.get('openvino_endpoints', []):
-                model, endpoint, context_length = endpoint_info
-                self.add_openvino_endpoint(model, endpoint, context_length)
-        if "libp2p_endpoints" in resources.keys():
-            for endpoint_info in resources.get('libp2p_endpoints', []):
-                model, endpoint, context_length = endpoint_info
-                self.add_libp2p_endpoint(model, endpoint, context_length)
-        if "local_endpoints" in resources.keys():
-            for endpoint_info in resources.get('local_endpoints', []):
-                model, endpoint, context_length = endpoint_info
-                self.add_local_endpoint(model, endpoint, context_length)
+        self.endpoint_types = ["tei_endpoints", "openvino_endpoints", "libp2p_endpoints", "local_endpoints"]
+        for endpoint_type in self.endpoint_types:
+            if endpoint_type in resources.keys():
+                for endpoint_info in resources[endpoint_type]:
+                    model, endpoint, context_length = endpoint_info
+                    self.add_endpoint(model, endpoint, context_length, endpoint_type)        
         return None
 
+    async def add_endpoint(self, model, endpoint, context_length, endpoint_type):
+        if endpoint_type in self.endpoint_types:
+            success = False
+            try:
+                if endpoint_type not in list(dir(self)):
+                    self.__dict__[endpoint_type]= {}
+                if model not in list(self.__dict__[endpoint_type].keys()):
+                    self.__dict__[endpoint_type][model] = {}
+                if endpoint not in list(self.__dict__[endpoint_type][model].keys()):
+                    self.__dict__[endpoint_type][model][endpoint] = context_length
+                self.endpoint_status[endpoint] = context_length
+                success = True
+            except Exception as e:
+                print(e)
+                pass
+            return success        
+        return None
+    
+    async def rm_endpoint(self, model, endpoint, endpoint_type):
+        if endpoint_type in self.endpoint_types:
+            success = False
+            try:
+                if model in self.__dict__[endpoint_type] and endpoint in self.__dict__[endpoint_type][model]:
+                    del self.__dict__[endpoint_type][model][endpoint]
+                if endpoint in self.endpoint_status:
+                    del self.endpoint_status[endpoint]
+                success = True
+            except Exception as e:
+                print(e)
+                pass
+            return success
+        return None
+    
     def load_index(self, index):
         self.index = index
         return None 
@@ -399,59 +414,6 @@ class ipfs_embeddings_py:
             self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
         columns = self.dataset.column_names
         columns.append("cid")
-        return None
-
-    def add_tei_endpoint(self, model, endpoint, context_length):
-        if model not in self.tei_endpoints:
-            self.tei_endpoints[model] = {}
-        self.tei_endpoints[model][endpoint] = context_length
-        # Initialize endpoint status with context_length as max batch size
-        self.endpoint_status[endpoint] = context_length
-        return None
-    
-    def add_openvino_endpoint(self, model, endpoint, context_length):
-        if model not in self.openvino_endpoints:
-            self.openvino_endpoints[model] = {}
-        self.openvino_endpoints[model][endpoint] = context_length
-        self.endpoint_status[endpoint] = context_length
-        return None
-
-    def add_libp2p_endpoint(self, model, endpoint, context_length):
-        if model not in self.libp2p_endpoints:
-            self.libp2p_endpoints[model] = {}
-        self.libp2p_endpoints[model][endpoint] = context_length
-        self.endpoint_status[endpoint] = context_length
-        return None
-    
-    def add_local_endpoint(self, model, endpoint, context_length):
-        if model not in self.local_endpoints:
-            self.local_endpoints[model] = {}
-        self.local_endpoints[model][endpoint] = context_length
-        self.endpoint_status[endpoint] = context_length
-        return None
-
-    def rm_tei_endpoint(self, model, endpoint):
-        if model in self.tei_endpoints and endpoint in self.tei_endpoints[model]:
-            del self.tei_endpoints[model][endpoint]
-            del self.endpoint_status[endpoint]
-        return None
-
-    def rm_libp2p_endpoint(self, model, endpoint):
-        if model in self.libp2p_endpoints and endpoint in self.libp2p_endpoints[model]:
-            del self.libp2p_endpoints[model][endpoint]
-            del self.endpoint_status[endpoint]
-        return None
-    
-    def rm_openvino_endpoint(self, model, endpoint):
-        if model in self.openvino_endpoints and endpoint in self.openvino_endpoints[model]:
-            del self.openvino_endpoints[model][endpoint]
-            del self.endpoint_status[endpoint]
-        return None
-    
-    def rm_local_endpoint(self, model, endpoint):
-        if model in self.local_endpoints and endpoint in self.local_endpoints[model]:
-            del self.local_endpoints[model][endpoint]
-            del self.endpoint_status[endpoint]
         return None
 
     def test_tei_https_endpoint(self, model, endpoint):
@@ -1362,7 +1324,7 @@ class ipfs_embeddings_py:
         self.endpoint_status[endpoint] = status
         return None
     
-    def test_llama_cpp(self):
+    async def test_llama_cpp(self):
         test_llama_cpp_cmd = "llama_cpp --version"
         test_results = {}
         try:
@@ -1380,17 +1342,17 @@ class ipfs_embeddings_py:
         return test_results
         
     
-    def test_local_openvino(self):
+    async def test_local_openvino(self):
         test_openvino_cmd = "python3 -c 'import openvino; print(openvino.__version__)'"
         try:
-            test_openvino = subprocess.check_output(test_openvino_cmd, shell=True)
+            test_openvino = subprocess.check_output(test_openvino_cmd, shell=True).decode("utf-8")  
             return test_openvino
         except Exception as e:
             print(e)
             raise ValueError(e)
         return None
     
-    def test_ipex(self):        
+    async def test_ipex(self):        
         test_ipex_cmd = "python3 -c 'import ipex; print(ipex.__version__)'"
         try:
             test_ipex = subprocess.check_output(test_ipex_cmd, shell=True)
@@ -1400,7 +1362,7 @@ class ipfs_embeddings_py:
             raise ValueError(e)
         return None
     
-    def test_cuda(self):
+    async def test_cuda(self):
         try:
             gpus = torch.cuda.device_count()
             return gpus
@@ -1412,21 +1374,19 @@ class ipfs_embeddings_py:
         from install_depends import install_depends_py
         this_install_package = install_depends_py(self.resources, self.metadata)
         try:
-            results = await this_install_package.install_package("openvino")
+            return await this_install_package.install_package("openvino")
         except Exception as e:
             print(e)
             return ValueError(e)    
-        return results
     
     async def install_ipex(self):
         from install_depends import install_depends_py
         this_install_package = install_depends_py(self.resources, self.metadata)
         try:
-            results = await this_install_package.install_package("ipex")
+            return await this_install_package.install_package("ipex")
         except Exception as e:
             print(e)
             return ValueError(e)    
-        return results
     
     async def install_cuda(self): 
         from install_depends import install_depends_py
@@ -1453,6 +1413,11 @@ class ipfs_embeddings_py:
         openvino_test = None
         llama_cpp_test = None
         ipex_test = None
+        cuda_install = None
+        openvino_install = None
+        llama_cpp_install = None
+        ipex_install = None
+        
         try:
             openvino_test = await self.test_local_openvino()
         except Exception as e:
@@ -1460,6 +1425,7 @@ class ipfs_embeddings_py:
             print(e)
             try:
                 openvino_install = await self.install_openvino()
+                openvino_test = await self.test_local_openvino()
             except Exception as e:
                 openvino_install = e
                 print(e)        
@@ -1471,6 +1437,7 @@ class ipfs_embeddings_py:
             llama_cpp_test = e
             try:
                 llama_cpp_install = await self.install_llama_cpp()
+                llama_cpp_test = await self.test_llama_cpp()
             except Exception as e:
                 print(e)
                 llama_cpp_install = e
@@ -1481,21 +1448,31 @@ class ipfs_embeddings_py:
             ipex_test = e
             print(e)
             try:
-                install_ipex = await self.install_ipex()
+                ipex_install = await self.install_ipex()
+                ipex_test = await self.test_ipex()
             except Exception as e:
-                install_ipex = e
+                ipex_install = e
                 print(e)
             pass
         try:
             cuda_test = await self.test_cuda()
         except Exception as e:
             try:
-                install_cuda = await self.install_cuda()
+                cuda_install = await self.install_cuda()
+                cuda_test = await self.test_cuda()
             except Exception as e:
+                cuda_install = e
                 print(e)
             pass
                 
         print("local_endpoint_test")
+        install_results = {
+            "cuda": cuda_install,
+            "openvino": openvino_install,
+            "llama_cpp": llama_cpp_install,
+            "ipex": ipex_install
+        }
+        print(install_results)
         test_results = {
             "cuda": cuda_test,
             "openvino": openvino_test,

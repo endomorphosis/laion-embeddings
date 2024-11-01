@@ -61,10 +61,26 @@ class install_depends_py():
             return None
     
     async def install_ollama(self):
-        return None
-    
+        install_results = {}    
+        try:
+            install_cmd = ["pip", "install", "ollama"]
+            result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
+            install_results["ollama"] = result.stdout
+        except subprocess.CalledProcessError as e:
+            install_results["ollama"] = e.stderr
+            print(f"Failed to install Ollama: {e.stderr}")
+        return install_results
+
     async def install_llama_cpp(self):
-        return None
+        install_results = {}
+        try:
+            install_cmd = ["pip", "install", "llama_cpp"]
+            result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
+            install_results["llama_cpp"] = result.stdout
+        except subprocess.CalledProcessError as e:
+            install_results["llama_cpp"] = e.stderr
+            print(f"Failed to install Llama_CPP: {e.stderr}")
+        return install_results
     
     async def install_ipfs_kit(self):
         return None    
@@ -75,9 +91,8 @@ class install_depends_py():
     async def install_torch(self):
         ## install torch
         install_results = {}
-
-        install_torch_cmd = ["pip", "install", "torch"]
         try:
+            install_torch_cmd = ["pip", "install", "torch", "--break-system-packages"]
             install_results["torch"] = subprocess.run(install_torch_cmd, check=True)
         except Exception as e:
             install_results["torch"] = e
@@ -98,7 +113,7 @@ class install_depends_py():
     async def install_openvino(self):
         install_results = {}
         try:
-            install_cmd = ["pip", "install", "openvino"]
+            install_cmd = ["pip", "install", "openvino", "--break-system-packages"]
             result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
             install_results["openvino"] = result.stdout
         except subprocess.CalledProcessError as e:
@@ -117,8 +132,17 @@ class install_depends_py():
                 install_results[dependency] = e.stderr
                 print(f"Failed to install {dependency}: {e.stderr}")
         return install_results
+    
     async def install_ipex(self):
-        return None
+        install_results = {}    
+        try:
+            install_cmd = ["pip", "install", "intel-pytorch-extension"]
+            result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
+            install_results["ipex"] = result.stdout
+        except subprocess.CalledProcessError as e:
+            install_results["ipex"] = e.stderr
+            print(f"Failed to install IPEX: {e.stderr}")
+        return install_results
     
     async def install_cuda(self):
         install_results = {}
