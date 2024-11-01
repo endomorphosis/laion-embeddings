@@ -532,20 +532,30 @@ class ipfs_embeddings_py:
         batch = []
         batch_size = 2**exponent
         if "cuda" in endpoint or "cpu" in endpoint:
-            token_length_size = round(self.local_endpoints[model][endpoint].config.max_position_embeddings * 0.99)
-        elif "openvino" in endpoint:
-            try:
-                token_length_size = round(self.openvino_endpoints[model][endpoint] * 0.99)
-            except Exception as e:
-                try:
-                    token_length_size = round(self.local_endpoints[model][endpoint].config.max_position_embeddings * 0.99)
-                except Exception as e:
-                    try:
-                        token_length_size = round(self.tei_endpoints[model][endpoint] * 0.99)
-                    except Exception as e:
-                        token_length_size = 512
-        else:
-            token_length_size = round(self.tei_endpoints[model][endpoint] * 0.99)
+            for endpoints in self.endpoints["local_endpoints"]:
+                this_model = endpoint[0]
+                this_endpoint = endpoint[1]
+                this_context_length = endpoint[2]
+                if model is this_model and endpoint is this_endpoint:
+                    token_length_size = round(self.endpoints["local_endpoints"][model][endpoint].config.max_position_embeddings * 0.99)
+            else:
+                token_length_size = round(self.endpoints["local_endpoints"][model][endpoint] * 0.99)
+        elif "openvino" in endpoint:            
+            for endpoints in self.endpoints["openvino_endpoints"]:
+                this_model = endpoint[0]
+                this_endpoint = endpoint[1]
+                this_context_length = endpoint[2]
+                if model is this_model and endpoint is this_endpoint:
+                    token_length_size = round(self.endpoints["openvino_endpoints"][model][endpoint] * 0.99)
+        elif "libp2p" in endpoint:
+            pass
+        elif "tei" in endpoint:
+            for endpoints in self.endpoints["tei_endpoints"]:
+                this_model = endpoint[0]
+                this_endpoint = endpoint[1]
+                this_context_length = endpoint[2]
+                if model is this_model and endpoint is this_endpoint:
+                    token_length_size = round(self.endpoints["tei_endpoints"][model][endpoint] * 0.99)            
         test_tokens = []
         if model not in self.tokenizer.keys():
             self.tokenizer[model] = {}
@@ -1475,14 +1485,28 @@ class ipfs_embeddings_py:
             cuda = self.get_endpoints(model, "cuda")
             endpoints =  { "tei" : tei , "local" : local , "openvino": openvino , "libp2p": libp2p , "cuda": cuda }
             endpoints_set = set(endpoints["tei"] + endpoints["local"] + endpoints["openvino"] + endpoints["libp2p"] + endpoints["cuda"])
+        if type(endpoint_list) == list:
+            self.endpoints = { k : v for k, v in enumerate(endpoint_list) }
+            endpoints = endpoint_list
+            self.endpoint_list = endpoint_list
+            endpoints_set = set(endpoints)
+            self.endpoint_set = endpoints_set
+        if type(endpoint_list) == dict:
+            self.endpoints = endpoint_list
+            endpoints_list = list(endpoint_list.keys())
+            endpoints_set = set(endpoints_list)
+            self.endpoint_set = endpoints_set
         else:
             endpoints = endpoint_list
-            endpoints_set = set(endpoints)
+            self.endpoints = endpoints
+            endpoints_list = [ k for k in endpoints.keys() ]
+            self.endpoints_list = endpoints_list
+            self.endpoints = { k : v for k, v in enumerate(endpoints_list) }
+            endpoints_set = set(endpoints_list)
+            self.endpoint_set = endpoints_set
             pass
-        if not endpoints:
+        if not endpoints_set:
             raise ValueError("No endpoints available for model " + model)
-        self.endpoints = endpoints
-        self.endpoints_set = endpoints_set
         self.endpoint_handler = {}
         cuda_test = self.hwtest["cuda"]
         openvino_test = self.hwtest["openvino"]
@@ -1491,6 +1515,9 @@ class ipfs_embeddings_py:
         cpus = os.cpu_count()
         cuda = torch.cuda.is_available()
         gpus = torch.cuda.device_count()
+        openvino = 0 if openvino_test is None else 1
+        llama_cpp = 0 if llama_cpp_test is None else 1
+        ipex = 0 if ipex_test is None else 1
         for model in models:
             if model not in self.tokenizer:
                 self.tokenizer[model] = {}
@@ -1582,8 +1609,8 @@ class ipfs_embeddings_py:
                                 self.endpoint_handler[(model, endpoint_name)] = ""
                                 # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
                             ipex_count = ipex_count + 1
-            if len(openvino) > 0 :
-                for endpoint in openvino:
+            if len(self.endpoints["openvino_endpoints"]) > 0 :
+                for endpoint in self.endpoints["openvino_endpoints"]:
                     batch_size = 0
                     if model not in self.batch_sizes:
                         self.batch_sizes[model] = {}
@@ -1596,8 +1623,8 @@ class ipfs_embeddings_py:
                         self.queues[model][endpoint] = asyncio.Queue(64)  # Unbounded queue
                         self.endpoint_handler[(model, endpoint)] = ""
                         # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-            if len(tei) > 0:
-                for endpoint in tei:
+            if len(self.endpoints["tei_endpoints"]) > 0:
+                for endpoint in self.endpoints["tei_endpoints"]:
                     batch_size = 0
                     if model not in self.batch_sizes:
                         self.batch_sizes[model] = {}
@@ -1610,6 +1637,18 @@ class ipfs_embeddings_py:
                         self.queues[model][endpoint] = asyncio.Queue(64)  # Unbounded queue
                         self.endpoint_handler[(model, endpoint)] = ""
                         # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint)) 
+            if len(endpoints["libp2p_endpoints"]) > 0:
+                for endpoint in self.endpoints["libp2p_endpoints"]:
+                    batch_size = 0
+                    if model not in self.batch_sizes:
+                        self.batch_sizes[model] = {}
+                    if model not in self.queues:
+                        self.queues[model] = {}
+                    if endpoint not in list(self.batch_sizes[model].keys()):
+                        batch_size = await self.max_batch_size(model, endpoint)
+                        self.batch_sizes[model][endpoint] = batch_size
+                    if self.batch_sizes[model][endpoint] > 0:
+                        self.queues[model][endpoint] = asyncio.Queue(64)
         return None
 
     async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
