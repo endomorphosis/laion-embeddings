@@ -1011,17 +1011,14 @@ class ipfs_embeddings_py:
     async def chunk_consumer(self, batch_size, model_name, endpoint):
         print("chunk consumer started for endpoint " + endpoint + " and model " + model_name)
         while True:
-            test_ready = True
-            if "cid_chunk_queue" not in list(dir(self)):
-                test_ready = False
-                self.cid_chunk_queue = None
-            if "empty" not in list(dir(self.cid_chunk_queue)):
-                test_ready = False 
-                self.cid_chunk_queue.empty = True
-            if self.cid_chunk_queue.empty:
-                test_ready = False
+            test_ready = all([
+                "cid_chunk_queue" in dir(self),
+                "empty" in dir(self.cid_chunk_queue),
+                not self.cid_chunk_queue
+            ])
             while not test_ready:
-                asyncio.sleep(0.1)
+                await asyncio.sleep(1)
+                pass     
             chunked_item = await self.cid_chunk_queue.get()
             batch_results = []
             batch = []
@@ -1463,70 +1460,76 @@ class ipfs_embeddings_py:
         print(test_results)
         return test_results
     
-    async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
-        await self.load_clusters( dataset, split, dst_path)
-        hardware_test = await self.test_hardware()
-        openvino_test = hardware_test["openvino"]
-        llama_cpp_test = hardware_test["llama_cpp"]
-        ipex_test = hardware_test["ipex"]
-        cuda_test = hardware_test["cuda"]
-        if not os.path.exists(dst_path):
-            os.makedirs(dst_path)
-        self.queues = {}
-        self.cid_set = set()
-        self.all_cid_list = {}
-        consumer_tasks = {}
-        batch_sizes = {}
-        if models is None:
-            models = list(self.tei_endpoints.keys())
+    
+    async def init_endpoints(self, models=None, endpoint_list=None):
+        if "hwtest" not in dir(self):
+            self.hwtest = await self.test_hardware()
         for model in models:
             if model not in self.queues:
                 self.queues[model] = {}
-        # if split is None:
-        #     self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
-        # else:
-        #     self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
-        # columns = self.dataset.column_names
-        # columns.append("cid")
-        # await self.load_checkpoints( dataset, split, dst_path, models)
-        consumer_tasks = {}
-        try:
-            gpus = torch.cuda.device_count()            
-        except:
-            gpus = 0
-        try:
-            cpus = torch.get_num_threads()
-        except:
-            cpus = 0
-        for model in models:
+        if endpoint_list is None:    
             endpoints = self.get_endpoints(model)
             local = self.get_endpoints(model, "local")
             openvino = self.get_endpoints(model, "openvino")
             libp2p = self.get_endpoints(model, "libp2p")
             tei = self.get_endpoints(model, "tei")
             cuda = self.get_endpoints(model, "cuda")
-            endpoints = tei + local + openvino + libp2p + cuda
+            endpoints =  { "tei" : tei , "local" : local , "openvino": openvino , "libp2p": libp2p , "cuda": cuda }
+            endpoints_set = set(endpoints["tei"] + endpoints["local"] + endpoints["openvino"] + endpoints["libp2p"] + endpoints["cuda"])
+        else:
+            endpoints = endpoint_list
+            endpoints_set = set(endpoints)
+            pass
+        if not endpoints:
+            raise ValueError("No endpoints available for model " + model)
+        self.endpoints = endpoints
+        self.endpoints_set = endpoints_set
+        self.endpoint_handler = {}
+        cuda_test = self.hwtest["cuda"]
+        openvino_test = self.hwtest["openvino"]
+        llama_cpp_test = self.hwtest["llama_cpp"]
+        ipex_test = self.hwtest["ipex"]
+        cpus = os.cpu_count()
+        cuda = torch.cuda.is_available()
+        gpus = torch.cuda.device_count()
+        for model in models:
+            if model not in self.tokenizer:
+                self.tokenizer[model] = {}
+            if model not in self.local_endpoints:
+                self.local_endpoints[model] = {}
+            if model not in self.queues:    
+                self.queues[model] = {}
             if model not in self.batch_sizes:
                 self.batch_sizes[model] = {}
-            if model not in self.tokenizer.keys():
-                self.tokenizer[model] = {}                    
-            if len(cuda) > 0 and gpus > 0:
+            if "cpu" not in self.local_endpoints[model]:
+                self.local_endpoints[model]["cpu"] = ""
+            if "cpu" not in self.queues[model]:
+                self.queues[model]["cpu"] = ""
+            if "cpu" not in self.batch_sizes[model]:
+                self.batch_sizes[model]["cpu"] = 1
+        for model in models:
+            if cuda and gpus > 0:
                 if cuda_test and type(cuda_test) != ValueError:
                     self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
                     for gpu in range(gpus):
                         self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
                         self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
                         torch.cuda.empty_cache()
-                        self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
+                        self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(64)
                         batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
                         self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
-                        consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
+                        self.endpoint_handler[(model, "cuda:" + str(gpu))] = ""
+                        # consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
             elif len(local) > 0 and cpus > 0:
-                if ( all ( x == None for x in [openvino_test, llama_cpp_test, ipex_test]) and cpus > 0) or (all (x == ValueError for x in [openvino_test, llama_cpp_test, ipex_test]) and cpus > 0): 
+                all_test_types = [ type(openvino_test), type(llama_cpp_test), type(ipex_test)]
+                all_tests_ValueError = all(x is ValueError for x in all_test_types)
+                all_tests_none = all(x is None for x in all_test_types)
+                if all_tests_ValueError or all_tests_none:  
                     self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
-                    self.queues[model]["cpu"] = asyncio.Queue()
-                    consumer_tasks[(model, "cpu")] = asyncio.create_task(self.chunk_consumer( 1, model, "cpu"))
-                elif openvino_test:
+                    self.queues[model]["cpu"] = asyncio.Queue(4)
+                    self.endpoint_handler[(model, "cpu")] = ""
+                    # consumer_tasks[(model, "cpu")] = asyncio.create_task(self.chunk_consumer( 1, model, "cpu"))
+                elif openvino_test and type(openvino_test) != ValueError:
                     ov_count = 0
                     for endpoint in local:
                         if "openvino" in endpoint:
@@ -1540,10 +1543,11 @@ class ipfs_embeddings_py:
                                 batch_size = await self.max_batch_size(model, endpoint)
                                 self.batch_sizes[model][endpoint_name] = batch_size
                             if self.batch_sizes[model][endpoint_name] > 0:
-                                self.queues[model][endpoint_name] = asyncio.Queue()
-                                consumer_tasks[(model, endpoint_name )] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint_name))
+                                self.queues[model][endpoint_name] = asyncio.Queue(64)
+                                self.endpoint_handler[(model, endpoint_name)] = ""
+                                # consumer_tasks[(model, endpoint_name )] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint_name))
                             ov_count = ov_count + 1
-                elif llama_cpp_test:
+                elif llama_cpp_test and type(llama_cpp_test) != ValueError:
                     llama_count = 0
                     for endpoint in local:
                         if "llama_cpp" in endpoint:
@@ -1557,10 +1561,11 @@ class ipfs_embeddings_py:
                                 batch_size = await self.max_batch_size(model, endpoint)
                                 self.batch_sizes[model][endpoint] = batch_size
                             if self.batch_sizes[model][endpoint] > 0:
-                                self.queues[model][endpoint] = asyncio.Queue()
-                                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint_name))
+                                self.queues[model][endpoint] = asyncio.Queue(64)
+                                self.endpoint_handler[(model, endpoint_name)] = ""
+                                # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint_name))
                             llama_count = llama_count + 1
-                elif ipex_test:
+                elif ipex_test and type(ipex_test) != ValueError:
                     ipex_count = 0
                     for endpoint in local:
                         if "ipex" in endpoint:
@@ -1574,10 +1579,11 @@ class ipfs_embeddings_py:
                                 batch_size = await self.max_batch_size(model, endpoint)
                                 self.batch_sizes[model][endpoint] = batch_size
                             if self.batch_sizes[model][endpoint] > 0:
-                                self.queues[model][endpoint] = asyncio.Queue()
-                                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+                                self.queues[model][endpoint] = asyncio.Queue(64)
+                                self.endpoint_handler[(model, endpoint_name)] = ""
+                                # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
                             ipex_count = ipex_count + 1
-            if len(openvino) > 0:
+            if len(openvino) > 0 :
                 for endpoint in openvino:
                     batch_size = 0
                     if model not in self.batch_sizes:
@@ -1588,10 +1594,9 @@ class ipfs_embeddings_py:
                         batch_size = await self.max_batch_size(model, endpoint)
                         self.batch_sizes[model][endpoint] = batch_size
                     if self.batch_sizes[model][endpoint] > 0:
-                        self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
-                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-            if not endpoints:
-                raise ValueError("No endpoints available for model " + model)
+                        self.queues[model][endpoint] = asyncio.Queue(64)  # Unbounded queue
+                        self.endpoint_handler[(model, endpoint)] = ""
+                        # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
             if len(tei) > 0:
                 for endpoint in tei:
                     batch_size = 0
@@ -1603,20 +1608,24 @@ class ipfs_embeddings_py:
                         batch_size = await self.max_batch_size(model, endpoint)
                         self.batch_sizes[model][endpoint] = batch_size
                     if self.batch_sizes[model][endpoint] > 0:
-                        self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
-                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint))
-            if len(cuda) > 0 and gpus > 0:
-                self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
-                for gpu in range(gpus):
-                    self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
-                    self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
-                    torch.cuda.empty_cache()  # Free up unused memory
-                    self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
-                    batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
-                    self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
-                    consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
-            if not endpoints or len(endpoints) == 0:
-                raise ValueError("No endpoints available for model " + model)        
+                        self.queues[model][endpoint] = asyncio.Queue(64)  # Unbounded queue
+                        self.endpoint_handler[(model, endpoint)] = ""
+                        # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint)) 
+        return None
+
+    async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
+        self.queues = {}
+        self.cid_set = set()
+        self.all_cid_list = {}
+        consumer_tasks = {}
+        batch_sizes = {}
+        resource_keys = list(self.resources.keys())
+        endpoints = {}
+        for resource in resource_keys:
+            if "endpoints" in resource:
+                endpoints[resource] = self.resources[resource]
+        await self.load_clusters(dataset, split, dst_path)
+        await self.init_endpoints(models, endpoints)
         if split is None:
             if "new_dataset" not in list(self.all_cid_set.keys()):
                 self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
@@ -1625,7 +1634,17 @@ class ipfs_embeddings_py:
             columns = self.dataset.column_names
             columns.append("cid")
             await self.load_checkpoints( dataset, split, dst_path, models)
-        self.cid_set = set.intersection(*self.all_cid_set.values())
+        if split is None:
+            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+        else:
+            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+        columns = self.dataset.column_names
+        columns.append("cid")
+        await self.load_checkpoints( dataset, split, dst_path, models)       
+        for model, endpoint in self.endpoints:
+            for endpoint in self.endpoints[model]:
+                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, self.batch_sizes[model][endpoint], model, endpoint))
+            consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, self.batch_sizes[model][endpoint], model, endpoint))
         producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, self.queues))        
         save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, *consumer_tasks.values(), save_task)
@@ -2207,6 +2226,7 @@ class ipfs_embeddings_py:
         
         return None
     
+    
     def demux_checkpoints_old4(self, this_dataset):
         self.unique_cid_set = set()
         self.unique_cid_list = []
@@ -2371,6 +2391,7 @@ class ipfs_embeddings_py:
                 cluster_cids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))["train"]
                 ipfs_cid_clusters_list = cluster_cids_dataset["cluster_cids"]
                 ipfs_cid_clusters_set = [set(x) for x in ipfs_cid_clusters_list]
+                ipfs_cid_list = [cid for sublist in ipfs_cid_clusters_list for cid in sublist]
                 ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
             else:
                 await self.generate_clusters(dataset, split, dst_path)
@@ -2378,7 +2399,6 @@ class ipfs_embeddings_py:
         except Exception as e:
             print(e)
             pass
-        
         if cluster_cids_dataset is not None:
             self.cluster_cids_dataset = cluster_cids_dataset
         if ipfs_cid_clusters_list is not None:
@@ -2386,10 +2406,10 @@ class ipfs_embeddings_py:
         if ipfs_cid_clusters_set is not None:
             self.ipfs_cid_clusters_set = ipfs_cid_clusters_set
         if ipfs_cid_list is not None:
-            self.ipfs_cid_set = ipfs_cid_set
+            self.ipfs_cid_list = ipfs_cid_list
         if ipfs_cid_set is not None:
             self.ipfs_cid_set = ipfs_cid_set
-                     
+        self.cid_set = self.ipfs_cid_set
         return cluster_cids_dataset, ipfs_cid_clusters_list, ipfs_cid_clusters_set, ipfs_cid_list, ipfs_cid_set
         
     async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits=None):
@@ -2602,8 +2622,8 @@ if __name__ == "__main__":
         "split": "train",
         "models": [
             "thenlper/gte-small",
-            "Alibaba-NLP/gte-large-en-v1.5",
-            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            # "Alibaba-NLP/gte-large-en-v1.5",
+            # "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         ],
         "chunk_settings": {
             "chunk_size": 512,
