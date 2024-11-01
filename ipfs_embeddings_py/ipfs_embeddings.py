@@ -496,6 +496,13 @@ class ipfs_embeddings_py:
                     return endpoint
         return None
     
+    def request_llama_cpp_endpoint(self, model, batch_size):
+        if model in self.llama_cpp_endpoints:
+            for endpoint in self.llama_cpp_endpoints[model]:
+                if self.endpoint_status[endpoint] >= batch_size:
+                    return endpoint
+        return None
+    
     def request_libp2p_endpoint(self, model, batch_size):
         if model in self.libp2p_endpoints:
             for endpoint in self.libp2p_endpoints[model]:
@@ -525,84 +532,123 @@ class ipfs_embeddings_py:
             raise ValueError("samples must be a list or string")
         return results
     
+    async def parse_knn_errors(self, request, model, endpoint, endpoint_type=None):
+        fatal = False
+        return fatal
+    
+    
     async def parse_knn(self, request, model, endpoint, endpoint_type=None):
         token_length_size = 0
+        incoming_batch_size = len(request)
+        endpoint_batch_size = self.batch_sizes[endpoint]
         embeddings = request
         embeddings_request = embeddings
         endpoint_context_size = 0
         if endpoint_type is None:
-            return ValueError("Endpoint type must be defined")
-        try:
-            if not isinstance(embeddings, list):
-                if isinstance(embeddings, ValueError):
-                    fail_reason = embeddings.args[0]
-                    if "413" in str(fail_reason):
-                        error = fail_reason
-                        if error.status == 413:
-                            if error.reason == "Payload Too Large":
-                                error_content = error.content._buffer[0].decode("utf-8")
-                                error_content = json.loads(error_content)
-                                if "error" in error_content.keys() and "error_type" in error_content.keys():
-                                    if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
-                                        expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
-                                        given = int(error_content["error"].split("Given: ")[1])
-                                        difference = given - expected
-                                        self.tei_endpoints[model][endpoint] = token_length_size - difference
-                                        return await self.max_batch_size(model, endpoint)
-                    if "502" in str(fail_reason):
-                        self.endpoint_status[endpoint] = 0
-                        return 0
-                    if "504" in str(fail_reason):
-                        self.endpoint_status[endpoint] = 0
-                        return 0
-                    if "400" in str(fail_reason):
-                        return await self.max_batch_size(model, endpoint)
-                raise Exception(embeddings)
-            exponent += 1
-            batch_size = 2**exponent
-        except Exception as e:
-            fail_reason = e.args[0]
-            embed_fail = True
-            if isinstance(e, ValueError) or isinstance(e, Exception):
-                if "CUDA out of memory" in str(fail_reason):
-                    if exponent == 0:
-                        self.endpoint_status[endpoint] = 0
-                        return 1
-                    else:
-                        self.endpoint_status[endpoint] = 2**(exponent-1)
-                        return 2 ** (exponent-1)
-                if "413" in str(fail_reason):
-                    error = fail_reason.args[0]
-                    if error.status == 413:
-                        if error.reason == "Payload Too Large":
-                            error_content = error.content._buffer[0].decode("utf-8")
-                            error_content = json.loads(error_content)
-                            if "error" in error_content.keys() and "error_type" in error_content.keys():
-                                if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
-                                    expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
-                                    given = int(error_content["error"].split("Given: ")[1])
-                                    difference = given - expected
-                                    self.tei_endpoints[model][endpoint] = self.tei_endpoints[model][endpoint] - difference
-                                    results = await self.max_batch_size(model, endpoint)
-                                    return results
-                    pass
-                if "504" in str(fail_reason):
-                    self.endpoint_status[endpoint] = 0
-                    return 0
-                if "502" in str(fail_reason):
-                    self.endpoint_status[endpoint] = 0
-                    return 0
-            pass
-        
-        if isinstance(results, list):
-            return results
-        elif isinstance(results, str):
-            if "cid" in results:
-                return results
+            raise ValueError("Endpoint type must be defined")
+        if endpoint_type == "local_endpoints":
+            if incoming_batch_size > endpoint_batch_size:
+                raise ValueError("Batch size too large")
             else:
-                return results
-        else:
-            return results
+                if "cuda" in endpoint or "cpu" in endpoint:
+                    response = self.request_local_endpoint(model, endpoint, endpoint_type)
+                elif "openvino:" in endpoint:
+                    response_= self.request_openvino_endpoint(model, endpoint, endpoint_type)
+                elif "llama_cpp" in endpoint:
+                    response = self.request_llama_cpp_endpoint(model, endpoint, endpoint_type)
+                else:
+                    response = ValueError("Endpoint not found")
+        if endpoint_type == "tei_endpoints":
+            if incoming_batch_size > endpoint_batch_size:
+                raise ValueError("Batch size too large")
+            else:
+                response = self.request_tei_endpoint(model, endpoint, endpoint_type)
+        if endpoint_type == "openvino_endpoints":
+            if incoming_batch_size > endpoint_batch_size:
+                raise ValueError("Batch size too large")
+            else:
+                response = self.request_openvino_endpoint(model, endpoint, endpoint_type)
+        if endpoint_type == "libp2p_endpoints":
+            if incoming_batch_size > endpoint_batch_size:
+                raise ValueError("Batch size too large")
+            else:
+                response = self.request_libp2p_endpoint(model, endpoint, endpoint_type)
+        
+        errors = await self.parse_knn_errors(response, model, endpoint, endpoint_type)
+        
+        return not errors
+    
+        # try:
+        #     if not isinstance(embeddings, list):
+        #         if isinstance(embeddings, ValueError):
+        #             fail_reason = embeddings.args[0]
+        #             if "413" in str(fail_reason):
+        #                 error = fail_reason
+        #                 if error.status == 413:
+        #                     if error.reason == "Payload Too Large":
+        #                         error_content = error.content._buffer[0].decode("utf-8")
+        #                         error_content = json.loads(error_content)
+        #                         if "error" in error_content.keys() and "error_type" in error_content.keys():
+        #                             if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
+        #                                 expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
+        #                                 given = int(error_content["error"].split("Given: ")[1])
+        #                                 difference = given - expected
+        #                                 self.tei_endpoints[model][endpoint] = token_length_size - difference
+        #                                 return await self.max_batch_size(model, endpoint)
+        #             if "502" in str(fail_reason):
+        #                 self.endpoint_status[endpoint] = 0
+        #                 return 0
+        #             if "504" in str(fail_reason):
+        #                 self.endpoint_status[endpoint] = 0
+        #                 return 0
+        #             if "400" in str(fail_reason):
+        #                 return await self.max_batch_size(model, endpoint)
+        #         raise Exception(embeddings)
+        #     exponent += 1
+        #     batch_size = 2**exponent
+        # except Exception as e:
+        #     fail_reason = e.args[0]
+        #     embed_fail = True
+        #     if isinstance(e, ValueError) or isinstance(e, Exception):
+        #         if "CUDA out of memory" in str(fail_reason):
+        #             if exponent == 0:
+        #                 self.endpoint_status[endpoint] = 0
+        #                 return 1
+        #             else:
+        #                 self.endpoint_status[endpoint] = 2**(exponent-1)
+        #                 return 2 ** (exponent-1)
+        #         if "413" in str(fail_reason):
+        #             error = fail_reason.args[0]
+        #             if error.status == 413:
+        #                 if error.reason == "Payload Too Large":
+        #                     error_content = error.content._buffer[0].decode("utf-8")
+        #                     error_content = json.loads(error_content)
+        #                     if "error" in error_content.keys() and "error_type" in error_content.keys():
+        #                         if "Validation" in error_content["error_type"] and "must have less than" in error_content["error"]:
+        #                             expected = int(error_content["error"].split("must have less than ")[1].split(" tokens")[0])
+        #                             given = int(error_content["error"].split("Given: ")[1])
+        #                             difference = given - expected
+        #                             self.tei_endpoints[model][endpoint] = self.tei_endpoints[model][endpoint] - difference
+        #                             results = await self.max_batch_size(model, endpoint)
+        #                             return results
+        #             pass
+        #         if "504" in str(fail_reason):
+        #             self.endpoint_status[endpoint] = 0
+        #             return 0
+        #         if "502" in str(fail_reason):
+        #             self.endpoint_status[endpoint] = 0
+        #             return 0
+        #     pass
+        
+        # if isinstance(results, list):
+        #     return results
+        # elif isinstance(results, str):
+        #     if "cid" in results:
+        #         return results
+        #     else:
+        #         return results
+        # else:
+        #     return results
         
     async def request_knn(self, request_batch, model, endpoint, endpoint_type):
         request = None
