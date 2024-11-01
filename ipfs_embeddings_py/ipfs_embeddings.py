@@ -1410,7 +1410,6 @@ class ipfs_embeddings_py:
         
         return None
     
-    
     async def test_hardware(self):
         cuda_test = None
         openvino_test = None
@@ -2618,6 +2617,7 @@ class ipfs_embeddings_py:
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
+        "namespace": "TeraflopAI/Caselaw_Access_Project",
         "column": "text",
         "split": "train",
         "models": [
