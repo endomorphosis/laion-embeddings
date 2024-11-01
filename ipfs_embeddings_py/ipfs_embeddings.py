@@ -326,9 +326,9 @@ class ipfs_embeddings_py:
         self.join_column = None
         self.tokenizer = {}
         self.endpoint_status = {}
+        self.endpoint_handler = {}
         self.new_dataset = {}
         self.new_dataset_children = {}
-        self.endpoint_handler = {}
         self.saved = False
         self.resources = resources
         self.metadata = metadata
@@ -534,9 +534,9 @@ class ipfs_embeddings_py:
         token_length_size = 0
         batch_size = 2**exponent
         if endpoint_type is None:
-            this_model = None[0]
-            this_endpoint = None[1]
-            this_context_length = None[2]
+            this_model = None
+            this_endpoint = None
+            this_context_length = None
             if "/embed" in endpoint:
                 endpoint_type = "tei_endpoints"
             elif "/infer" in endpoint:
@@ -553,12 +553,13 @@ class ipfs_embeddings_py:
             else:
                 pass
                   
-        for endpoints in self.endpoints[endpoint_type]:
-            this_model = endpoint[0]
-            this_endpoint = endpoint[1]
-            this_context_length = endpoint[2]
-            if model is this_model and endpoint is this_endpoint:
-                token_length_size = round(self.endpoints[endpoint_type][model][endpoint] * 0.99) 
+        for this_endpoint in self.endpoints[endpoint_type]:
+            if "cuda" in this_endpoint[1] or "cpu" in this_endpoint[1] or "local" in this_endpoint[1]:
+                this_endpoint_index = self.endpoints[endpoint_type].index(this_endpoint)
+                token_length_size = round(self.endpoints["local_endpoints"][this_endpoint_index][2] * 0.99)
+            elif model is this_endpoint[0]:
+                this_endpoint_index = self.endpoints[endpoint_type].index(this_endpoint)
+                token_length_size = round(self.endpoints[endpoint_type][this_endpoint_index][2] * 0.99) 
         
         test_tokens = []
         if model not in self.tokenizer.keys():
@@ -1612,46 +1613,52 @@ class ipfs_embeddings_py:
                                 self.endpoint_handler[(model, endpoint_name)] = ""
                                 # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
                             ipex_count = ipex_count + 1
-            if len(self.endpoints["openvino_endpoints"]) > 0 :
-                for endpoint in self.endpoints["openvino_endpoints"]:
-                    batch_size = 0
-                    if model not in self.batch_sizes:
-                        self.batch_sizes[model] = {}
-                    if model not in self.queues:
-                        self.queues[model] = {}
-                    if endpoint not in list(self.batch_sizes[model].keys()):
-                        batch_size = await self.max_batch_size(model, endpoint)
-                        self.batch_sizes[model][endpoint] = batch_size
-                    if self.batch_sizes[model][endpoint] > 0:
-                        self.queues[model][endpoint] = asyncio.Queue(64)  # Unbounded queue
-                        self.endpoint_handler[(model, endpoint)] = ""
-                        # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-            if len(self.endpoints["tei_endpoints"]) > 0:
-                for endpoint in self.endpoints["tei_endpoints"]:
-                    batch_size = 0
-                    if model not in self.batch_sizes:
-                        self.batch_sizes[model] = {}
-                    if model not in self.queues:
-                        self.queues[model] = {}
-                    if endpoint not in list(self.batch_sizes[model].keys()):
-                        batch_size = await self.max_batch_size(model, endpoint)
-                        self.batch_sizes[model][endpoint] = batch_size
-                    if self.batch_sizes[model][endpoint] > 0:
-                        self.queues[model][endpoint] = asyncio.Queue(64)  # Unbounded queue
-                        self.endpoint_handler[(model, endpoint)] = ""
-                        # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint)) 
-            if len(endpoints["libp2p_endpoints"]) > 0:
-                for endpoint in self.endpoints["libp2p_endpoints"]:
-                    batch_size = 0
-                    if model not in self.batch_sizes:
-                        self.batch_sizes[model] = {}
-                    if model not in self.queues:
-                        self.queues[model] = {}
-                    if endpoint not in list(self.batch_sizes[model].keys()):
-                        batch_size = await self.max_batch_size(model, endpoint)
-                        self.batch_sizes[model][endpoint] = batch_size
-                    if self.batch_sizes[model][endpoint] > 0:
-                        self.queues[model][endpoint] = asyncio.Queue(64)
+            if "openvino_endpoints" in list(self.endpoints.keys()):
+                if len(self.endpoints["openvino_endpoints"]) > 0 :
+                    for endpoint in self.endpoints["openvino_endpoints"]:
+                        batch_size = 0
+                        if model not in self.batch_sizes:
+                            self.batch_sizes[model] = {}
+                        if model not in self.queues:
+                            self.queues[model] = {}
+                        if endpoint not in list(self.batch_sizes[model].keys()):
+                            batch_size = await self.max_batch_size(model, endpoint)
+                            self.batch_sizes[model][endpoint] = batch_size
+                        if self.batch_sizes[model][endpoint] > 0:
+                            self.queues[model][endpoint] = asyncio.Queue(64)  # Unbounded queue
+                            self.endpoint_handler[(model, endpoint)] = ""
+                            # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
+            if "tei_endpoints" in list(self.endpoints.keys()):
+                if len(self.endpoints["tei_endpoints"]) > 0:
+                    for endpoint in self.endpoints["tei_endpoints"]:
+                        this_model = endpoint[0]
+                        this_endpoint = endpoint[1]
+                        context_length = endpoint[2]
+                        batch_size = 0
+                        if this_model not in self.batch_sizes:
+                            self.batch_sizes[this_model] = {}
+                        if this_model not in self.queues:
+                            self.queues[model] = {}
+                        if endpoint not in list(self.batch_sizes[model].keys()):
+                            batch_size = await self.max_batch_size(model, endpoint)
+                            self.batch_sizes[model][this_endpoint] = batch_size
+                        if self.batch_sizes[model][this_endpoint] > 0:
+                            self.queues[model][this_endpoint] = asyncio.Queue(64)  # Unbounded queue
+                            self.endpoint_handler[(model, this_endpoint)] = ""
+                            # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint)) 
+            if "libp2p_endpoints" in list(self.endpoints.keys()):
+                if len(self.endpoints["libp2p_endpoints"]) > 0:
+                    for endpoint in self.endpoints["libp2p_endpoints"]:
+                        batch_size = 0
+                        if model not in self.batch_sizes:
+                            self.batch_sizes[model] = {}
+                        if model not in self.queues:
+                            self.queues[model] = {}
+                        if endpoint not in list(self.batch_sizes[model].keys()):
+                            batch_size = await self.max_batch_size(model, endpoint)
+                            self.batch_sizes[model][endpoint] = batch_size
+                        if self.batch_sizes[model][endpoint] > 0:
+                            self.queues[model][endpoint] = asyncio.Queue(64)
         return None
 
     async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
