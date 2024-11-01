@@ -503,11 +503,11 @@ class ipfs_embeddings_py:
     async def request_knn(self, embeddings, model, endpoint, endpoint_type):
         if endpoint_type is None:
             pass
-        elif endpoint_type is "tei_endpoints":
+        elif endpoint_type == "tei_endpoints":
             pass
-        elif endpoint_type is "openvino_endpoints":
+        elif endpoint_type == "openvino_endpoints":
             pass
-        elif endpoint_type is "libp2p_endpoints":
+        elif endpoint_type == "libp2p_endpoints":
             pass
         return None
 
