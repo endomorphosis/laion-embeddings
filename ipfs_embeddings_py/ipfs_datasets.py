@@ -8,6 +8,7 @@ class ipfs_datasets_py:
         self.resources = resources
         self.metadata = metadata
         self.load_dataset = load_dataset
+        self.ipfs_cluster_name = None
         self.dataset = None
         self.caches = {}
         self.combine_checkpoints = self.combine_checkpoints
@@ -29,8 +30,8 @@ class ipfs_datasets_py:
         self.ipfs_cid_clusters_set = ()
         self.ipfs_cid_set = set()
         self.ipfs_cid_list = []
-        self.schemas = {}
-        self.all_cid_list = {} 
+        self.all_cid_list = {}
+        self.schemas = {} 
         return None
     
     async def load_combined_checkpoints(self, dataset, split, dst_path, models):
