@@ -1,18 +1,15 @@
 import os
 import datasets
 import multiprocessing
-from datasets import Dataset,load_dataset, concatenate_datasets, load_from_disk
+from datasets import Dataset, load_dataset, concatenate_datasets, load_from_disk
 
 class ipfs_datasets:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
-        return None
-
-    def test():    
-        return None
-    
-    def __call__(self, *args, **kwds):
+        self.load_dataset = load_dataset
+        self.dataset = None
+        self.caches = {} 
         return None
     
     async def combine_checkpoints(self, dataset, split, column, dst_path, models):
@@ -281,10 +278,263 @@ class ipfs_datasets:
         self.cid_set = self.ipfs_cid_set
         return cluster_cids_dataset, ipfs_cid_clusters_list, ipfs_cid_clusters_set, ipfs_cid_list, ipfs_cid_set
         
+
+    def test():    
+        return None
+
+
+
+
+def process_new_dataset_shard(shard, datatype=None, split="train"):
+    items = None
+    cids = None
+    schema = None
+    if type(shard) is not str:
+        if type(shard) is list:
+            if len(shard) == 1:
+                shard = shard[0]
+            elif len(shard) == 2:
+                shard, datatype = shard
+            elif len(shard) == 3:
+                shard, datatype, split = shard
+        if type(shard) is dict:
+            if "shard" in list(shard.keys()):
+                shard = shard["shard"]
+            if "datatype" in list(shard.keys()):
+                datatype = shard["datatype"]
+            if "split" in list(shard.keys()):
+                split = shard["split"]
+                
+    if datatype is None:
+        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+            datatype = "cids"
+        else:
+            if os.path.exists(shard.replace(".parquet","")+".parquet"):
+                datatype = "items"
+            else:
+                return ValueError("No dataset found")      
+    elif "cids" in datatype:
+        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+            tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")[split]
+            items = None
+            schema = None
+        else:
+            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet")[split]
+            tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+            tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
+            tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
+        cids = list(tmp_new_dataset_cid_dataset["cids"])
+    elif "items" in datatype:
+        if os.path.exists(shard.replace(".parquet", "")+".parquet"):
+            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet")[split]
+            if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+                tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")[split]
+            else:
+                tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+                tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
+                tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
+            items = {key: [item["items"][key] for item in tmp_new_dataset_items_dataset] for key in tmp_new_dataset_items_dataset[0]["items"].keys()}
+            cids = list(tmp_new_dataset_cid_dataset["cids"])
+            schema = None
+            del tmp_new_dataset_cid_dataset
+            del tmp_new_dataset_items_dataset
+        else:
+            return ValueError("No dataset found")
+    else:
+        return ValueError("datatype must be 'cids' or 'items' , received: '" + str(datatype) + "'")
+            
+    return [ cids , items, schema ]            
+
+def process_index_shard(shard, datatype=None, split="train"):
+    items = None
+    cids = None
+    schema = None
+    if type(shard) is not str:
+        if type(shard) is list:
+            if len(shard) == 1:
+                shard = shard[0]
+            elif len(shard) == 2:
+                shard, datatype = shard
+            elif len(shard) == 3:
+                shard, datatype, split = shard
+        if type(shard) is dict:
+            if "shard" in list(shard.keys()):
+                shard = shard["shard"]
+            if "datatype" in list(shard.keys()):
+                datatype = shard["datatype"]
+            if "split" in list(shard.keys()):
+                split = shard["split"]
+                
+    if datatype is None:
+        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+            datatype = "cids"
+        else:
+            if os.path.exists(shard.replace(".parquet","")+".parquet"):
+                datatype = "items"
+            else:
+                return ValueError("No dataset found")      
+    elif "cids" in datatype:
+        if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+            tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")[split]
+            items = None
+            schema = None
+        else:
+            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet")[split]
+            tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+            tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
+            tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
+        cids = list(tmp_new_dataset_cid_dataset["cids"])
+    elif "items" in datatype:
+        if os.path.exists(shard.replace(".parquet", "")+".parquet"):
+            tmp_new_dataset_items_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+".parquet")[split]
+            if os.path.exists(shard.replace(".parquet","")+"_cids.parquet"):
+                tmp_new_dataset_cid_dataset = load_dataset('parquet', data_files=shard.replace(".parquet","")+"_cids.parquet")[split]
+            else:
+                tmp_new_dataset_cid_dataset = tmp_new_dataset_items_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+                tmp_new_dataset_cid_dataset = datasets.Dataset.from_dict({"cids": tmp_new_dataset_cid_dataset})
+                tmp_new_dataset_cid_dataset.to_parquet(shard.replace(".parquet","")+"_cids.parquet")
+            cids = list(tmp_new_dataset_cid_dataset["cids"])
+            items = {key: [item["items"][key] for item in tmp_new_dataset_items_dataset] for key in tmp_new_dataset_items_dataset[0]["items"].keys()}
+            cids = list(tmp_new_dataset_cid_dataset["cids"])
+            schema = None
+            del tmp_new_dataset_cid_dataset
+            del tmp_new_dataset_items_dataset
+        else:
+            return ValueError("No dataset found")
+    else:
+        return ValueError("datatype must be 'cids' or 'items' , received: '" + str(datatype) + "'")
+            
+    return [ cids , items, schema ]            
+
+def process_chunk_files(path, datatype="cids"):
+    cids = None
+    items = None
+    schema = None
     
-if __name__ == "main":
-    metadata = {}
-    resources = {}
+    if type(path) is not str:
+        if type(path) is list:
+            if len(path) == 1:
+                path = path[0]
+            elif len(path) == 2:
+                path, datatype = path
+        if type(path) is dict:
+            if "file" in list(path.keys()):
+                path = path["file"]
+            if "type" in list(path.keys()):
+                datatype = path["type"]
+    
+    if datatype == "cids":
+        if os.path.exists(path):
+            cid_path = path.replace(".parquet","")+"_cids.parquet"
+            if os.path.exists(cid_path):
+                cids = load_dataset('parquet', data_files=cid_path)["cids"]
+        else:
+            return ValueError("No dataset found") 
+        
+    elif datatype == "items":
+        cid_path = path.replace(".parquet","")+"_cids.parquet"
+        chunk_dataset = None
+        cids = None
+        if os.path.exists(cid_path):
+            cids = load_dataset('parquet', data_files=cid_path)["cids"]
+        else:
+            if os.path.exists(path):
+                chunk_dataset = load_dataset('parquet', data_files=path)
+                cids = [ item["items"]["cid"] for item in chunk_dataset ]
+                tmp_dataset = datasets.Dataset.from_dict({"cids": cids})
+                tmp_dataset.to_parquet(cid_path)
+            else:
+                return ValueError("No dataset found")
+        if chunk_dataset is None:
+            chunk_dataset = load_dataset('parquet', data_files = path)   
+            if cids is None and os.path.exists(cid_path):
+                cids = load_dataset('parquet', data_files = cid_path)["cids"]
+            else:
+                cids = [ item["items"]["cid"] for item in chunk_dataset ]
+                tmp_dataset = datasets.Dataset.from_dict({"cids": cids})
+                tmp_dataset.to_parquet(cid_path)
+            pass
+        items = {key: [item["items"][key] for item in chunk_dataset] for key in chunk_dataset[0]["items"].keys()}
+        schema = None        
+    elif datatype == "schema":
+        schema = None
+
+    return [ cids , items, schema ]
+
+
+
+    
+
+if __name__ == "__main__":
+    metadata = {
+        "dataset": "TeraflopAI/Caselaw_Access_Project",
+        "namespace": "TeraflopAI/Caselaw_Access_Project",
+        "column": "text",
+        "split": "train",
+        "models": [
+            "thenlper/gte-small",
+            # "Alibaba-NLP/gte-large-en-v1.5",
+            # "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+        ],
+        "chunk_settings": {
+            "chunk_size": 512,
+            "n_sentences": 8,
+            "step_size": 256,
+            "method": "fixed",
+            "embed_model": "thenlper/gte-small",
+            "tokenizer": None
+        },
+        "dst_path": "/storage/teraflopai/tmp",
+    }
+    resources = {
+        "local_endpoints": [
+            ["thenlper/gte-small", "cpu", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cpu", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cpu", 32768],
+            ["thenlper/gte-small", "cuda:0", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cuda:0", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:0", 32768],
+            ["thenlper/gte-small", "cuda:1", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cuda:1", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:1", 32768],
+            ["thenlper/gte-small", "openvino", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "openvino", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "openvino", 32768],
+            ["thenlper/gte-small", "llama_cpp", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "llama_cpp", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "llama_cpp", 32768],
+            ["thenlper/gte-small", "ipex", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "ipex", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "ipex", 32768],
+        ],
+        "openvino_endpoints": [
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx0-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx0/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx1-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx1/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx2-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx2/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx3-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx3/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx4-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx4/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx5-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx5/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx6-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx6/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx7-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx7/infer", 1024]
+        ],
+        "tei_endpoints": [
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8081/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8082/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
+        ]
+    }
     test_ipfs_datasets = ipfs_datasets(resources, metadata)
     test_ipfs_datasets.test()
     pass
