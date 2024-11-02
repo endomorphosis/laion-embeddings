@@ -94,7 +94,6 @@ class ipfs_embeddings_py:
         self.datasets = datasets.Dataset
         self.ipfs_datasets = ipfs_datasets_py(resources, metadata)
         self.chunker = chunker(resources, metadata)
-        self.ipfs_parquet_to_car = ipfs_parquet_to_car_py(resources, metadata)
         self.qdrant_kit_py = qdrant_kit_py(resources, metadata)
         self.elasticsearch_kit = elasticsearch_kit(resources, metadata)
         self.faiss_kit = faiss_kit_py(resources, metadata)
