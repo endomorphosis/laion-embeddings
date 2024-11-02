@@ -540,7 +540,7 @@ class ipfs_embeddings_py:
     async def parse_knn(self, request, model, endpoint, endpoint_type=None):
         token_length_size = 0
         incoming_batch_size = len(request)
-        endpoint_batch_size = self.batch_sizes[endpoint]
+        endpoint_batch_size = self.batch_sizes[model]
         embeddings = request
         embeddings_request = embeddings
         endpoint_context_size = 0
@@ -1476,28 +1476,36 @@ class ipfs_embeddings_py:
         return None
     
     async def test_llama_cpp(self):
-        test_llama_cpp_cmd = "llama_cpp --version"
+        test_llama_cpp_cmd = "pip show llama-cpp-python"
         test_results = {}
         try:
             test_llama_cpp = subprocess.check_output(test_llama_cpp_cmd, shell=True)
+            test_llama_cpp = test_llama_cpp.decode("utf-8")
             test_results["llama_cpp"] = test_llama_cpp
         except Exception as e:
             print(e)
             raise ValueError(e)
         try:
-            test_ollama = subprocess.check_output("ollama --version", shell=True)
+            test_ollama = subprocess.check_output("ollama", shell=True)
+            test_ollama = test_ollama.decode("utf-8")
             test_results["ollama"] = test_ollama
         except Exception as e:
             print(e)
             raise ValueError(e)
-        return test_results
+        
+        test_pass = False
+        test_pass = all(isinstance(value, str) for value in test_results.values() if not isinstance(value, ValueError))
+        return test_pass
         
     
     async def test_local_openvino(self):
         test_openvino_cmd = "python3 -c 'import openvino; print(openvino.__version__)'"
         try:
-            test_openvino = subprocess.check_output(test_openvino_cmd, shell=True).decode("utf-8")  
-            return test_openvino
+            test_openvino = subprocess.check_output(test_openvino_cmd, shell=True).decode("utf-8")              
+            if type(test_openvino) == str and type(test_openvino) != ValueError:
+                return True
+            else:
+                return False
         except Exception as e:
             print(e)
             raise ValueError(e)
@@ -1516,7 +1524,10 @@ class ipfs_embeddings_py:
     async def test_cuda(self):
         try:
             gpus = torch.cuda.device_count()
-            return gpus
+            if type(gpus) == int and type(gpus) != ValueError:
+                return True
+            else:
+                return False
         except Exception as e:
             print(e)
             raise ValueError(e)
