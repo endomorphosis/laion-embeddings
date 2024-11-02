@@ -1,7 +1,7 @@
 import os
 import datasets
 import multiprocessing
-from datasets import Dataset, concatenate_datasets, load_dataset
+from datasets import Dataset,load_dataset, concatenate_datasets, load_from_disk
 
 class ipfs_datasets:
     def __init__(self, resources, metadata):

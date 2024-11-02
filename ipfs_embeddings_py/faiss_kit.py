@@ -4,10 +4,8 @@ import faiss
 import numpy as np
 import datasets
 import concurrent.futures
-from datasets import load_dataset
-from datasets import Dataset, concatenate_datasets
-from datasets import load_from_disk
-
+from datasets import Dataset,load_dataset, concatenate_datasets, load_from_disk
+import multiprocessing
 class faiss_kit_py:
     def __init__(self, resources, metadata):
         self.resources = resources
