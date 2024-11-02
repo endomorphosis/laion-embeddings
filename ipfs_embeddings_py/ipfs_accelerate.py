@@ -34,6 +34,10 @@ class ipfs_accelerate_py:
         self.batch_sizes = {}
         self.tokenizer = {}
         self.queues = {}
+        self.local_endpoints = {}
+        self.tei_endpoints = {}
+        self.openvino_endpoints = {}
+        self.libp2p_endpoints = {}
         self.endpoint_types = ["tei_endpoints", "openvino_endpoints", "libp2p_endpoints", "local_endpoints"]
         self.add_endpoint = self.add_endpoint
         self.rm_endpoint = self.rm_endpoint
@@ -364,7 +368,6 @@ class ipfs_accelerate_py:
         torch.cuda.empty_cache()  # Free up GPU memory again
         return results
 
-    
     async def add_endpoint(self, model, endpoint, context_length, endpoint_type):
         if endpoint_type in self.endpoint_types:
             success = False
@@ -397,7 +400,6 @@ class ipfs_accelerate_py:
                 pass
             return success
         return None
-    
     
     async def max_batch_size(self, model, endpoint=None, endpoint_type=None ):
         embed_fail = False
@@ -475,7 +477,6 @@ class ipfs_accelerate_py:
             return 1
         else:
             return 2**(exponent-1)
-    
     
     async def request_openvino_endpoint(self, model, batch_size):
         if model in self.openvino_endpoints:
@@ -643,8 +644,7 @@ class ipfs_accelerate_py:
             except Exception as e:
                 print(f"Unexpected error: {str(e)}")
                 return ValueError(f"Unexpected error: {str(e)}")
-            
-            
+                    
     async def make_post_request_openvino(self, endpoint, data):
         headers = {'Content-Type': 'application/json'}
         timeout = ClientTimeout(total=300) 
@@ -677,7 +677,6 @@ class ipfs_accelerate_py:
             except Exception as e:
                 print(f"Unexpected error: {str(e)}")
                 return ValueError(f"Unexpected error: {str(e)}")
-
  
     async def choose_endpoint(self, model, endpoint_type=None):
         if endpoint_type != None:
