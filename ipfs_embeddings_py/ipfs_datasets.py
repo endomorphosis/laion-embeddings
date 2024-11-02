@@ -20,6 +20,7 @@ class ipfs_datasets_py:
         self.ipfs_cluster_name = None
         self.dataset = None
         self.caches = {}
+        self.ipfs_parquet_to_car_py = ipfs_parquet_to_car_py(resources, metadata)
         self.combine_checkpoints = self.combine_checkpoints
         self.load_checkpoints = self.load_checkpoints
         self.generate_clusters = self.generate_clusters
