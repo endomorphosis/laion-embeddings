@@ -755,10 +755,6 @@ def process_chunk_files(path, datatype="cids"):
 
     return [ cids , items, schema ]
 
-
-
-    
-
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
