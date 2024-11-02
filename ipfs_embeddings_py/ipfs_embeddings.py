@@ -104,19 +104,20 @@ from multiprocessing import Process
 import concurrent.futures
 import concurrent
 import json
-
+from ipfs_datasets import ipfs_datasets_py
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
         self.multiformats_py = ipfs_multiformats_py(resources, metadata)
         self.datasets = datasets.Dataset
+        self.ipfs_datasets = ipfs_datasets_py(resources, metadata)
         self.chunker = chunker(resources, metadata)
         self.ipfs_parquet_to_car = ipfs_parquet_to_car_py(resources, metadata)
         self.qdrant_kit_py = qdrant_kit_py(resources, metadata)
         self.elasticsearch_kit = elasticsearch_kit(resources, metadata)
         self.faiss_kit = faiss_kit_py(resources, metadata)
-        self.process_new_dataset_shard = process_new_dataset_shard
-        self.process_index_shard = process_index_shard
+        self.process_new_dataset_shard = self.ipfs_datasets.process_new_dataset_shard
+        self.process_index_shard = self.ipfs_datasets.process_index_shard
         self.ipfs_parquet_to_car_test = self.ipfs_parquet_to_car.test
         self.ipfs_parquet_to_car_install = self.ipfs_parquet_to_car.install
         if "ipfs_embeddings" not in dir(self) and "ipfs_embeddings" in self.__dict__.keys():

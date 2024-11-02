@@ -3,13 +3,282 @@ import datasets
 import multiprocessing
 from datasets import Dataset, load_dataset, concatenate_datasets, load_from_disk
 
-class ipfs_datasets:
+class ipfs_datasets_py:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
         self.load_dataset = load_dataset
         self.dataset = None
-        self.caches = {} 
+        self.caches = {}
+        self.combine_checkpoints = self.combine_checkpoints
+        self.load_checkpoints = self.load_checkpoints
+        self.generate_clusters = self.generate_clusters
+        self.load_clusters = self.load_clusters
+        self.cid_chunk_list = []
+        self.cid_chunk_set = set()
+        self.cid_list = []
+        self.cid_set = set()
+        self.index = {}
+        self.new_dataset = None
+        self.new_dataset_combined = None
+        self.embedding_datasets = {}
+        self.unique_cid_set = set()
+        self.unique_cid_list = []
+        self.cluster_cids_dataset = None
+        self.ipfs_cid_clusters_list = []
+        self.ipfs_cid_clusters_set = ()
+        self.ipfs_cid_set = set()
+        self.ipfs_cid_list = []
+        self.schemas = {}
+        self.all_cid_list = {} 
+        return None
+    
+    async def load_combined_checkpoints(self, dataset, split, dst_path, models):
+        if "new_dataset" not in list(dir(self)):
+            self.new_dataset = None
+        if "all_cid_list" not in list(dir(self)):
+            self.all_cid_list = {}
+        if "all_cid_set" not in list(dir(self)):
+            self.all_cid_set = {}
+        for model in models:
+            if model not in list(self.index.keys()):
+                self.index[model] = None
+        if self.new_dataset is None or isinstance(self.new_dataset, dict):
+            new_dataset_dst_path = os.path.join(dst_path, "ipfs_" + dataset.replace("/","___") + ".parquet")
+            if os.path.isfile(new_dataset_dst_path):
+                self.new_dataset = load_dataset('parquet', data_files=new_dataset_dst_path)[split]
+                self.all_cid_list["new_dataset"] = []
+                self.all_cid_set["new_dataset"] = set()
+            if os.path.exists(os.path.join(dst_path, "checkpoints")):
+                ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+                new_dataset_shards = [os.path.join(dst_path, "checkpoints", x) for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x ]
+                if "new_dataset" not in list(self.all_cid_list.keys()):
+                    self.all_cid_list["new_dataset"] = []
+                if "new_dataset" not in list(self.all_cid_set.keys()):
+                    self.all_cid_set["new_dataset"] = set()
+                if "new_dataset" not in list(self.caches.keys()):
+                    self.caches["new_dataset"] = {"items" : []}
+                with multiprocessing.Pool() as pool:
+                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards))]
+                    results = pool.map(self.process_new_dataset_shard, args)
+                    if len(results) > 0:
+                        # Initialize accumulators
+                        total_cids = []
+                        total_items = []
+                        for res in results:
+                            cid, items, schemas = (res + [None, None, None])[:3]
+                            if cid is not None:
+                                total_cids += cid
+                            if items is not None:
+                                total_items += items
+                            if schemas is not None:
+                                self.schemas["new_dataset"] = schemas
+                        # Update the shared variables in bulk
+                        
+                        self.all_cid_list["new_dataset"] += total_cids
+                        self.all_cid_set["new_dataset"].update(set(total_cids))
+                        self.caches["new_dataset"]["items"] += total_items
+                        
+                if self.new_dataset is None or isinstance(self.new_dataset, dict):
+                    if len(new_dataset_shards) > 0:
+                        self.new_dataset = load_dataset('parquet', data_files=new_dataset_shards)[split]
+                        
+        for model in models:
+            if model not in list(self.index.keys()):
+                self.index[model] = None
+            if model not in list(self.all_cid_list.keys()):
+                self.all_cid_list[model] = []
+            if model not in list(self.all_cid_set.keys()):
+                self.all_cid_set[model] = set()
+            if model not in list(self.caches.keys()):
+                self.caches[model] = {"items" : []}
+            model_dst_path = dst_path + "/" + model.replace("/","___") + ".parquet"
+            if os.path.isfile(model_dst_path):
+                self.caches[model] = {"items" : []}
+                self.index[model] = load_dataset('parquet', data_files=model_dst_path, streaming=True)[split]
+            if os.path.exists(os.path.join(dst_path, "checkpoints")):
+                ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+                this_model_shards = [os.path.join(dst_path, "checkpoints", x)  for x in ls_checkpoints if model.replace("/", "___") + "_shard" in x and "_cids" not in x]
+                with multiprocessing.Pool() as pool:
+                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards))]
+                    results = pool.map(self.process_new_dataset_shard, args)
+                    if len(results) > 0:
+                        # Initialize accumulators
+                        total_cids = []
+                        total_items = []
+                        for res in results:
+                            cid, items, schemas = (res + [None, None, None])[:3]
+                            if cid is not None:
+                                total_cids += cid
+                            if items is not None:
+                                total_items += items
+                            if schemas is not None:
+                                self.schemas[model] = schemas
+                        # Update the shared variables in bulk
+                        self.all_cid_list[model] += total_cids
+                        self.all_cid_set[model].update(set(total_cids))
+                        self.caches[model]["items"] += total_items
+                        
+                if model not in list(self.index.keys()) or self.index[model] is None or isinstance(self.index[model], dict):
+                    if len(this_model_shards) > 0:
+                        self.index[model] = load_dataset('parquet', data_files=this_model_shards)[split]
+                    else:
+                        self.index[model] = datasets.Dataset.from_dict({"cid": [], "embedding": [] })
+                ls_chunks = []
+                if os.path.exists(os.path.join(dst_path,"sparse_chunks", )):
+                    ls_chunks = os.listdir(os.path.join(dst_path,"sparse_chunks", ))
+                if len(ls_chunks) > 0:
+                    for this_cid in ls_chunks:
+                        this_cid_path = os.path.join(dst_path,"sparse_chunks", this_cid)
+                        this_cid_dataset = load_dataset('parquet', data_files=this_cid_path)
+                        if this_cid not in self.chunk_cache.keys():
+                            self.chunk_cache[this_cid] = {"items": []}
+                        self.chunk_cache[this_cid]["items"] += this_cid_dataset
+                        self.cid_chunk_set.add(this_cid)
+                        self.cid_chunk_list.append(this_cid)
+        return None
+        
+    async def load_chunk_checkpoints(self, dataset, split, src_path, models):
+        files = []
+        if "doc_cid" not in list(dir(self)):
+            self.chunks = {}
+        if "doc_cid" not in list(dir(self)):
+            self.chunk_cache_set = {}
+        if os.path.isdir(src_path):
+            files = os.listdir(src_path)
+            files_by_models = [ [x for x in files if model.replace("/","___") in x and dataset in x and models in x ] for model in models]
+        if len(files_by_models) > 0:
+            with multiprocessing.Pool() as pool:
+                results = pool.map(self.process_chunk_file, files_by_models)
+                for result in results:
+                    model, doc_cid, items = result
+                    if model not in list(self.chunk_cache.keys()):
+                        self.chunk_cache_set[model] = set()
+                    if doc_cid not in list(self.chunk_cache[model].keys()):
+                        self.chunk_cache[model][doc_cid] = {"items": []}
+                    if doc_cid not in self.chunk_cache_set[model]:
+                        self.chunk_cache_set[model].add(doc_cid)
+                    self.doc_cid[model][doc_cid]["items"] += items
+                    
+        return None
+    
+    
+    async def load_checkpoints(self, dataset, split, dst_path, models):
+        if "new_dataset" not in list(dir(self)):
+            self.new_dataset = None
+        if "all_cid_list" not in list(dir(self)):
+            self.all_cid_list = {}
+        if "all_cid_set" not in list(dir(self)):
+            self.all_cid_set = {}
+        for model in models:
+            if model not in list(self.index.keys()):
+                self.index[model] = None
+        if self.new_dataset is None or isinstance(self.new_dataset, dict):
+            new_dataset_dst_path = os.path.join(dst_path, "ipfs_" + dataset.replace("/","___") + ".parquet")
+            if os.path.isfile(new_dataset_dst_path):
+                self.new_dataset = load_dataset('parquet', data_files=new_dataset_dst_path)[split]
+                self.all_cid_list["new_dataset"] = []
+                self.all_cid_set["new_dataset"] = set()
+            if os.path.exists(os.path.join(dst_path, "checkpoints")):
+                ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+                new_dataset_shards = [os.path.join(dst_path, "checkpoints", x) for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x ]
+                if "new_dataset" not in list(self.all_cid_list.keys()):
+                    self.all_cid_list["new_dataset"] = []
+                if "new_dataset" not in list(self.all_cid_set.keys()):
+                    self.all_cid_set["new_dataset"] = set()
+                if "new_dataset" not in list(self.caches.keys()):
+                    self.caches["new_dataset"] = {"items" : []}
+                with multiprocessing.Pool() as pool:
+                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards))]
+                    results = pool.map(self.process_new_dataset_shard, args)
+                    if len(results) > 0:
+                        # Initialize accumulators
+                        total_cids = []
+                        total_items = []
+                        for res in results:
+                            cid, items, schemas = (res + [None, None, None])[:3]
+                            if cid is not None:
+                                total_cids += cid
+                            if items is not None:
+                                total_items += items
+                            if schemas is not None:
+                                self.schemas["new_dataset"] = schemas  # Assuming schemas won't conflict
+                        # Update the shared variables in bulk
+                        self.all_cid_list["new_dataset"] += total_cids
+                        self.all_cid_set["new_dataset"].update(set(total_cids))
+                        self.caches["new_dataset"]["items"] += total_items
+                                            
+                if self.new_dataset is None or isinstance(self.new_dataset, dict):
+                    if len(new_dataset_shards) > 0:
+                        self.new_dataset = load_dataset('parquet', data_files=new_dataset_shards)[split]
+        
+        for model in models:
+            if model not in list(self.index.keys()):
+                self.index[model] = None
+            if model not in list(self.all_cid_list.keys()):
+                self.all_cid_list[model] = []
+            if model not in list(self.all_cid_set.keys()):
+                self.all_cid_set[model] = set()
+            if model not in list(self.caches.keys()):
+                self.caches[model] = {"items" : []}
+            model_dst_path = dst_path + "/" + model.replace("/","___") + ".parquet"
+            if os.path.isfile(model_dst_path):
+                self.caches[model] = {"items" : []}
+                self.index[model] = load_dataset('parquet', data_files=model_dst_path, streaming=True)[split]
+            if os.path.exists(os.path.join(dst_path, "checkpoints")):
+                ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+                this_model_shards = [os.path.join(dst_path, "checkpoints", x)  for x in ls_checkpoints if model.replace("/", "___") + "_shard" in x and "_cids" not in x]
+                with multiprocessing.Pool() as pool:
+                    args = [[new_dataset_shards[i], 'cids'] for i in range(len(new_dataset_shards))]
+                    results = pool.map(self.process_new_dataset_shard, args)
+                    if len(results) > 0:
+                        # Initialize accumulators
+                        total_cids = []
+                        total_items = []
+                        for res in results:
+                            cid, items, schemas = (res + [None, None, None])[:3]
+                            if cid is not None:
+                                total_cids += cid
+                            if items is not None:
+                                total_items += items
+                            if schemas is not None:
+                                self.schemas[model] = schemas  # Assuming schemas won't conflict
+                        # Update the shared variables in bulk
+                        self.all_cid_list[model] += total_cids
+                        self.all_cid_set[model].update(set(total_cids))
+                        self.caches[model]["items"] += total_items
+        
+                if model not in list(self.index.keys()) or self.index[model] is None or isinstance(self.index[model], dict):
+                    if len(this_model_shards) > 0:
+                        self.index[model] = load_dataset('parquet', data_files=this_model_shards)[split]
+                    else:
+                        self.index[model] = datasets.Dataset.from_dict({"cid": [], "embedding": [] })
+                ls_chunks = []
+                if os.path.exists(os.path.join(dst_path,"sparse_chunks", )):
+                    ls_chunks = os.listdir(os.path.join(dst_path, "sparse_chunks"))
+                    for chunk in ls_chunks:
+                        chunk_cid = chunk.replace(".parquet","")
+                        if chunk.replace(".parquet","") not in self.cid_chunk_set:
+                            self.cid_chunk_set.add(chunk_cid)
+                            self.cid_chunk_list.append(chunk_cid)
+                for chunk in ls_chunks:
+                    chunk_cid = chunk.replace(".parquet","")
+                    if chunk.replace(".parquet","") not in self.cid_chunk_set:
+                        self.cid_chunk_set.add(chunk_cid)
+                        self.cid_chunk_list.append(chunk_cid)
+                del ls_chunks
+                del this_model_shards
+                del ls_checkpoints
+        try:
+            del new_dataset_shards
+        except:
+            pass
+        self.cid_set = set.intersection(*self.all_cid_set.values())
+        self.cid_list = list(self.cid_set)
+        return None
+    
+    async def load_combined(self, dataset, split, dst_path, models):
+        
         return None
     
     async def combine_checkpoints(self, dataset, split, column, dst_path, models):
