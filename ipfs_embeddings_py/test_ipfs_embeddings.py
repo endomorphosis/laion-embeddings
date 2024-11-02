@@ -1,14 +1,18 @@
-# from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
-from .ipfs_accelerate import ipfs_accelerate_py
-from .install_depends import install_depends_py
-class test_ipfs_embeddings:
+class test_ipfs_embeddings_py:
     def __init__(self, resources=None, metadata=None):
         self.resources = resources
         self.metadata = metadata
         # self.ipfs_embeddings_py = ipfs_embeddings_py(resources, metadata)
-        self.ipfs_accelerate_py = ipfs_accelerate_py(resources, metadata)
-        self.install_depends = install_depends_py(resources, metadata)
-        return None
+        if "ipfs_embeddings_py" not in globals():
+            import ipfs_embeddings
+            from ipfs_embeddings_py import ipfs_embeddings_py
+        if "install_depends_py" not in globals():
+            import install_depends 
+            from install_depends import install_depends_py
+        if "ipfs_accelerate_py" not in globals():
+            import ipfs_accelerate
+            from ipfs_accelerate import ipfs_accelerate_py
+        
     
        
     def test_dependencencies(self):

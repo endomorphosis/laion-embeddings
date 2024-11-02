@@ -9,13 +9,18 @@ import aiohttp
 from aiohttp import ClientSession, ClientTimeout
 from transformers import AutoTokenizer
 from transformers import AutoModel
-# from test import test_ipfs_embeddings
-from .test import test_ipfs_embeddings
-from .install_depends import install_depends
+# from test_ipfs_embeddings import test_ipfs_embeddings_py
+# from install_depends import install_depends_py
 class ipfs_accelerate_py:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
+        if "test_ipfs_embeddings_py" not in globals():
+            import test_ipfs_embeddings
+            from test_ipfs_embeddings import test_ipfs_embeddings_py
+        if "install_depends_py" not in globals():
+            import install_depends
+            from install_depends import install_depends_py
         self.tei_endpoints = {}
         self.openvino_endpoints = {}
         self.libp2p_endpoints = {}
@@ -23,6 +28,7 @@ class ipfs_accelerate_py:
         self.endpoint_status = {}
         self.endpoint_handler = {}
         self.batch_sizes = {}
+        self.tokenizer = {}
         self.queues = {}
         self.endpoint_types = ["tei_endpoints", "openvino_endpoints", "libp2p_endpoints", "local_endpoints"]
         self.add_endpoint = self.add_endpoint
@@ -38,7 +44,8 @@ class ipfs_accelerate_py:
         self.test_libp2p_endpoint = self.test_libp2p_endpoint
         self.test_openvino_endpoint = self.test_openvino_endpoint
         self.test_local_endpoint = self.test_local_endpoint         
-        self.test_ipfs_embeddings = test_ipfs_embeddings(resources, metadata)
+        self.test_ipfs_embeddings = test_ipfs_embeddings_py(resources, metadata)
+        self.install_depends = install_depends_py(resources, metadata)
         return None
 
     async def init_endpoints(self, models=None, endpoint_list=None):
@@ -48,7 +55,7 @@ class ipfs_accelerate_py:
                     model, endpoint, context_length = endpoint_info
                     await self.add_endpoint(model, endpoint, context_length, endpoint_type)    
         if "hwtest" not in dir(self):
-            hwtest = await self.test_hardware()
+            hwtest = await self.test_ipfs_embeddings.test_hardware()
             self.hwtest = hwtest
         for model in models:
             if model not in self.queues:
@@ -385,6 +392,85 @@ class ipfs_accelerate_py:
                 pass
             return success
         return None
+    
+    
+    async def max_batch_size(self, model, endpoint=None, endpoint_type=None ):
+        embed_fail = False
+        exponent = 0
+        batch = []
+        token_length_size = 0
+        batch_size = 2**exponent
+        if endpoint_type is None:
+            this_model = None
+            this_endpoint = None
+            this_context_length = None
+            if "/embed" in endpoint:
+                endpoint_type = "tei_endpoints"
+            elif "/infer" in endpoint:
+                endpoint_type = "openvino_endpoints"
+            elif "http" in endpoint:
+                endpoint_type = "tei_endpoints"
+            elif "cuda" in endpoint or "cpu" in endpoint or "local" in endpoint:
+                endpoint_type = "local_endpoints"
+            elif "libp2p" in endpoint:
+                endpoint_type = "libp2p_endpoints"
+            if endpoint_type is None:
+                print('Endpoint not found')
+                return 0
+            else:
+                pass
+                  
+        for this_endpoint in self.endpoints[endpoint_type]:
+            if "cuda" in this_endpoint[1] or "cpu" in this_endpoint[1] or "local" in this_endpoint[1]:
+                this_endpoint_index = self.endpoints[endpoint_type].index(this_endpoint)
+                token_length_size = round(self.endpoints["local_endpoints"][this_endpoint_index][2] * 0.99)
+            elif model is this_endpoint[0]:
+                this_endpoint_index = self.endpoints[endpoint_type].index(this_endpoint)
+                token_length_size = round(self.endpoints[endpoint_type][this_endpoint_index][2] * 0.99) 
+        
+        test_tokens = []
+        if model not in self.tokenizer.keys():
+            self.tokenizer[model] = {}
+        if "cpu" not in self.tokenizer[model].keys():
+            self.tokenizer[model]["cpu"] = AutoTokenizer.from_pretrained(model, device='cpu')
+        find_token_str = str("z")
+        find_token_int = self.tokenizer[model]["cpu"].encode(find_token_str)
+        if len(find_token_int) == 3:
+            find_token_int = find_token_int[1]
+        elif len(find_token_int) == 2:
+            find_token_int = find_token_int[1]
+        elif len(find_token_int) == 1:
+            find_token_int = find_token_int[0]
+        for i in range(token_length_size):
+             test_tokens.append(find_token_int)
+        test_text = self.tokenizer[model]["cpu"].decode(test_tokens)
+        if endpoint is None:
+            endpoint = self.choose_endpoint(model)
+        while not embed_fail:
+            test_batch = []
+            for i in range(batch_size):
+                test_batch.append(test_text)
+            parsed_knn_embeddings = None
+            embeddings = None
+            request_knn_results = None
+            try:
+                request_knn_results = await self.request_knn(test_batch, model, endpoint, endpoint_type)
+            except Exception as e:
+                try:
+                    embeddings = await self.index_knn(test_batch, model, endpoint)
+                except Exception as e:
+                        pass
+            if request_knn_results != None and parsed_knn_embeddings == None:
+                parsed_knn_embeddings = await self.parse_knn(request_knn_results, model, endpoint, endpoint_type)
+            if parsed_knn_embeddings is not None:
+               embeddings = parsed_knn_embeddings
+            
+        self.endpoint_status[endpoint] = 2**(exponent-1)
+        if exponent == 0:
+            return 1
+        else:
+            return 2**(exponent-1)
+    
     
     async def request_openvino_endpoint(self, model, batch_size):
         if model in self.openvino_endpoints:
