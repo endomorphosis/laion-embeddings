@@ -12,6 +12,20 @@ except Exception as e:
         pass
     pass
 
+try:
+    from .ipfs_multiformats import ipfs_multiformats_py
+    from .ipfs_multiformats import *
+except Exception as e:
+    try:
+        from ipfs_multiformats import ipfs_multiformats_py
+        from ipfs_multiformats import *
+    except Exception as e:
+        try:
+            import ipfs_multiformats
+        except Exception as e:
+            pass
+    pass
+
 class ipfs_datasets_py:
     def __init__(self, resources, metadata):
         self.resources = resources

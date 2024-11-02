@@ -34,16 +34,6 @@ except Exception as e:
         except Exception as e:
             pass
     pass
-except Exception as e:
-    try:
-        from ipfs_multiformats import ipfs_multiformats_py
-        from ipfs_multiformats import *
-    except Exception as e:
-        try:
-            import ipfs_multiformats
-        except Exception as e:
-            pass
-    pass
 
 try:
     from .chunker import chunker
