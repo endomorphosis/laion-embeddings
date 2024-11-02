@@ -1,18 +1,109 @@
-from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+# from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+from .ipfs_accelerate import ipfs_accelerate_py
+from .install_depends import install_depends_py
 class test_ipfs_embeddings:
     def __init__(self, resources=None, metadata=None):
         self.resources = resources
         self.metadata = metadata
-        self.ipfs_embeddings_py = ipfs_embeddings_py(resources, metadata)
+        # self.ipfs_embeddings_py = ipfs_embeddings_py(resources, metadata)
+        self.ipfs_accelerate_py = ipfs_accelerate_py(resources, metadata)
+        self.install_depends = install_depends_py(resources, metadata)
         return None
     
+       
     def test_dependencencies(self):
         
         return
     
-    def test_hardware(self):
+
+    async def test_hardware(self):
+        cuda_test = None
+        openvino_test = None
+        llama_cpp_test = None
+        ipex_test = None
+        cuda_install = None
+        openvino_install = None
+        llama_cpp_install = None
+        ipex_install = None
         
-        return
+        try:
+            openvino_test = await self.ipfs_accelerate_py.test_local_openvino()
+        except Exception as e:
+            openvino_test = e
+            print(e)
+            try:
+                openvino_install = await self.install_depends.install_openvino()
+                try:
+                    openvino_test = await self.ipfs_accelerate_py.test_local_openvino()
+                except Exception as e:
+                    openvino_test = e
+                    print(e)
+            except Exception as e:
+                openvino_install = e
+                print(e)        
+            pass
+            
+        try:
+            llama_cpp_test = await self.ipfs_accelerate_py.test_llama_cpp()
+        except Exception as e:
+            llama_cpp_test = e
+            try:
+                llama_cpp_install = await self.install_depends.install_llama_cpp()
+                try:
+                    llama_cpp_test = await self.ipfs_accelerate_py.test_llama_cpp()
+                except:
+                    llama_cpp_test = e
+            except Exception as e:
+                print(e)
+                llama_cpp_install = e
+            pass
+        try:
+            ipex_test = await self.ipfs_accelerate_py.test_ipex()
+        except Exception as e:
+            ipex_test = e
+            print(e)
+            try:
+                ipex_install = await self.install_depends.install_ipex()
+                try:
+                    ipex_test = await self.ipfs_accelerate_py.test_ipex()
+                except Exception as e:
+                    ipex_test = e
+                    print(e)
+            except Exception as e:
+                ipex_install = e
+                print(e)
+            pass
+        try:
+            cuda_test = await self.ipfs_accelerate_py.test_cuda()
+        except Exception as e:
+            try:
+                cuda_install = await self.install_depends.install_cuda()
+                try:
+                    cuda_test = await self.ipfs_accelerate_py.test_cuda()
+                except Exception as e:
+                    cuda_test = e
+                    print(e)                    
+            except Exception as e:
+                cuda_install = e
+                print(e)
+            pass
+                
+        print("local_endpoint_test")
+        install_results = {
+            "cuda": cuda_install,
+            "openvino": openvino_install,
+            "llama_cpp": llama_cpp_install,
+            "ipex": ipex_install
+        }
+        print(install_results)
+        test_results = {
+            "cuda": cuda_test,
+            "openvino": openvino_test,
+            "llama_cpp": llama_cpp_test,
+            "ipex": ipex_test
+        }
+        print(test_results)
+        return test_results
         
     def test(self):
         results = {}

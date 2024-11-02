@@ -9,7 +9,9 @@ import aiohttp
 from aiohttp import ClientSession, ClientTimeout
 from transformers import AutoTokenizer
 from transformers import AutoModel
-from test import test
+# from test import test_ipfs_embeddings
+from .test import test_ipfs_embeddings
+from .install_depends import install_depends
 class ipfs_accelerate_py:
     def __init__(self, resources, metadata):
         self.resources = resources
@@ -35,97 +37,9 @@ class ipfs_accelerate_py:
         self.test_tei_https_endpoint = self.test_tei_https_endpoint
         self.test_libp2p_endpoint = self.test_libp2p_endpoint
         self.test_openvino_endpoint = self.test_openvino_endpoint
-        self.test_local_endpoint = self.test_local_endpoint               
+        self.test_local_endpoint = self.test_local_endpoint         
+        self.test_ipfs_embeddings = test_ipfs_embeddings(resources, metadata)
         return None
-    
-    async def test_hardware(self):
-        cuda_test = None
-        openvino_test = None
-        llama_cpp_test = None
-        ipex_test = None
-        cuda_install = None
-        openvino_install = None
-        llama_cpp_install = None
-        ipex_install = None
-        
-        try:
-            openvino_test = await self.test_local_openvino()
-        except Exception as e:
-            openvino_test = e
-            print(e)
-            try:
-                openvino_install = await self.install_openvino()
-                try:
-                    openvino_test = await self.test_local_openvino()
-                except Exception as e:
-                    openvino_test = e
-                    print(e)
-            except Exception as e:
-                openvino_install = e
-                print(e)        
-            pass
-            
-        try:
-            llama_cpp_test = await self.test_llama_cpp()
-        except Exception as e:
-            llama_cpp_test = e
-            try:
-                llama_cpp_install = await self.install_llama_cpp()
-                try:
-                    llama_cpp_test = await self.test_llama_cpp()
-                except:
-                    llama_cpp_test = e
-            except Exception as e:
-                print(e)
-                llama_cpp_install = e
-            pass
-        try:
-            ipex_test = await self.test_ipex()
-        except Exception as e:
-            ipex_test = e
-            print(e)
-            try:
-                ipex_install = await self.install_ipex()
-                try:
-                    ipex_test = await self.test_ipex()
-                except Exception as e:
-                    ipex_test = e
-                    print(e)
-            except Exception as e:
-                ipex_install = e
-                print(e)
-            pass
-        try:
-            cuda_test = await self.test_cuda()
-        except Exception as e:
-            try:
-                cuda_install = await self.install_cuda()
-                try:
-                    cuda_test = await self.test_cuda()
-                except Exception as e:
-                    cuda_test = e
-                    print(e)                    
-            except Exception as e:
-                cuda_install = e
-                print(e)
-            pass
-                
-        print("local_endpoint_test")
-        install_results = {
-            "cuda": cuda_install,
-            "openvino": openvino_install,
-            "llama_cpp": llama_cpp_install,
-            "ipex": ipex_install
-        }
-        print(install_results)
-        test_results = {
-            "cuda": cuda_test,
-            "openvino": openvino_test,
-            "llama_cpp": llama_cpp_test,
-            "ipex": ipex_test
-        }
-        print(test_results)
-        return test_results
 
     async def init_endpoints(self, models=None, endpoint_list=None):
         for endpoint_type in self.endpoint_types:
