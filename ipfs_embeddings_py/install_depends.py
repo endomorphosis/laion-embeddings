@@ -62,26 +62,41 @@ class install_depends_py():
             return None
     
     async def install_ollama(self):
-        install_results = {}    
+        cmd = "curl -fsSL https://ollama.com/install.sh | sh"
+        install_results = {}
         try:
-            install_cmd = ["pip", "install", "ollama", "--break-system-packages"]
-            result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
-            install_results["ollama"] = result.stdout
+            result = subprocess.check_output(cmd, shell=True, text=True)
+            install_results["ollama"] = result
         except subprocess.CalledProcessError as e:
-            install_results["ollama"] = e.stderr
-            print(f"Failed to install Ollama: {e.stderr}")
+            if e.stderr == None:
+                install_results["ollama"] = True
+            else:
+                install_results["ollama"] = e
+            # print(f"Failed to install Ollama: {e.stderr}")
         return install_results
+                
 
     async def install_llama_cpp(self):
         install_results = {}
         try:
-            install_cmd = ["pip", "install", "llama_cpp", "--break-system-packages"]
+            install_cmd = ["pip", "install", "llama-cpp-python", "--break-system-packages"]
+            install_cnd = "pip  install  llama-cpp-python  --break-system-packages"
             result = subprocess.run(install_cmd, check=True, capture_output=True, text=True)
             install_results["llama_cpp"] = result.stdout
         except subprocess.CalledProcessError as e:
-            install_results["llama_cpp"] = e.stderr
-            print(f"Failed to install llama_cpp: {e.stderr}")
-        return install_results
+            install_results["llama_cpp"] = ValueError( f"Failed to install Llama C++: {e.stderr}")
+            print(e)
+            
+        try:
+            install_results["ollama"] = await self.install_ollama()
+        except Exception as e:            
+            install_results["ollama"] = ValueError( f"Failed to install Ollama: {e}")
+            print(e)
+        
+        install_success = False
+        install_success = all(type(install_results[package]) != ValueError for package in install_results.keys())
+        
+        return install_success
     
     async def install_ipfs_kit(self):
         return None    

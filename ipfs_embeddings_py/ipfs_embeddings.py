@@ -489,28 +489,28 @@ class ipfs_embeddings_py:
                         return endpoint
             return None
     
-    def request_openvino_endpoint(self, model, batch_size):
+    async def request_openvino_endpoint(self, model, batch_size):
         if model in self.openvino_endpoints:
             for endpoint in self.openvino_endpoints[model]:
                 if self.endpoint_status[endpoint] >= batch_size:
                     return endpoint
         return None
     
-    def request_llama_cpp_endpoint(self, model, batch_size):
+    async def request_llama_cpp_endpoint(self, model, batch_size):
         if model in self.llama_cpp_endpoints:
             for endpoint in self.llama_cpp_endpoints[model]:
                 if self.endpoint_status[endpoint] >= batch_size:
                     return endpoint
         return None
     
-    def request_libp2p_endpoint(self, model, batch_size):
+    async def request_libp2p_endpoint(self, model, batch_size):
         if model in self.libp2p_endpoints:
             for endpoint in self.libp2p_endpoints[model]:
                 if self.endpoint_status[endpoint] >= batch_size:
                     return endpoint
         return None
     
-    def request_local_endpoint(self, model, batch_size):
+    async def request_local_endpoint(self, model, batch_size):
         if model in self.local_endpoints:
             for endpoint in self.local_endpoints[model]:
                 if self.endpoint_status[endpoint] >= batch_size:
@@ -741,7 +741,7 @@ class ipfs_embeddings_py:
                     embeddings = await self.index_knn(test_batch, model, endpoint)
                 except Exception as e:
                         pass
-            if request_knn_results is not None and parsed_knn_embeddings is None:
+            if request_knn_results != None and parsed_knn_embeddings == None:
                 parsed_knn_embeddings = await self.parse_knn(request_knn_results, model, endpoint, endpoint_type)
             if parsed_knn_embeddings is not None:
                embeddings = parsed_knn_embeddings
@@ -1647,7 +1647,6 @@ class ipfs_embeddings_py:
         }
         print(test_results)
         return test_results
-    
     
     async def init_endpoints(self, models=None, endpoint_list=None):
         for endpoint_type in self.endpoint_types:
