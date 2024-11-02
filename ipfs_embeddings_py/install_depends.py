@@ -165,7 +165,51 @@ class install_depends_py():
             install_results["ipex"] = e.stderr
             print(f"Failed to install IPEX: {e.stderr}")
         return install_results
+    
+    async def install_huggingface_optimum(self):
+        install_results = {}
+        try:
+            install_results["install_huggingface_optimum_cuda"] = await self.install_huggingface_optimum_cuda()
+        except Exception as e:
+            install_results["install_huggingface_optimum_cuda"] = e
+            print(e)
+            
+        try:
+            install_results["install_huggingface_optimum_openvino"] = await self.install_huggingface_optimum_openvino()
+        except Exception as e:
+            install_results["install_huggingface_optimum_openvino"] = e
+            print(e)
+            
+        try:
+            install_results["install_huggingface_optimum_intel"] = await self.install_huggingface_optimum_intel()
+        except Exception as e:
+            install_results["install_huggingface_optimum_intel"] = e
+            print(e)    
+            
+        try:
+            install_results["install_huggingface_optimum_gaudi"] = await self.install_huggingface_optimum_gaudi()
+        except Exception as e:
+            install_results["install_huggingface_optimum_gaudi"] = e
+            print(e)
+        
+        return install_results              
+        
+    
+    async def install_huggingface_optimum_cuda(self):   
+        
+        return None
+    
+    async def install_huggingface_optimum_openvino(self):
+        
+        return None
+    
+    async def install_huggingface_optimum_intel(self):
+            
+            return None 
 
+    async def install_huggingface_optimum_gaudi(self):
+            
+            return None 
     async def install_oneccl_bind_pt_git(self):
         install_results = {}
         commands = [

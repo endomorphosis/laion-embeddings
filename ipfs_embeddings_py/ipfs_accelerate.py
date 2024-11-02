@@ -9,8 +9,6 @@ import aiohttp
 from aiohttp import ClientSession, ClientTimeout
 from transformers import AutoTokenizer
 from transformers import AutoModel
-# from test_ipfs_embeddings import test_ipfs_embeddings_py
-# from install_depends import install_depends_py
 class ipfs_accelerate_py:
     def __init__(self, resources, metadata):
         self.resources = resources
@@ -18,9 +16,15 @@ class ipfs_accelerate_py:
         if "test_ipfs_embeddings_py" not in globals():
             import test_ipfs_embeddings
             from test_ipfs_embeddings import test_ipfs_embeddings_py
+            self.test_ipfs_embeddings = test_ipfs_embeddings_py(resources, metadata)
+        else:
+            self.test_ipfs_embeddings = test_ipfs_embeddings(resources, metadata) 
         if "install_depends_py" not in globals():
             import install_depends
             from install_depends import install_depends_py
+            self.install_depends = install_depends_py(resources, metadata) 
+        else:
+            self.install_depends = install_depends_py(resources, metadata)
         self.tei_endpoints = {}
         self.openvino_endpoints = {}
         self.libp2p_endpoints = {}
@@ -43,10 +47,11 @@ class ipfs_accelerate_py:
         self.test_tei_https_endpoint = self.test_tei_https_endpoint
         self.test_libp2p_endpoint = self.test_libp2p_endpoint
         self.test_openvino_endpoint = self.test_openvino_endpoint
-        self.test_local_endpoint = self.test_local_endpoint         
-        self.test_ipfs_embeddings = test_ipfs_embeddings_py(resources, metadata)
-        self.install_depends = install_depends_py(resources, metadata)
+        self.test_local_endpoint = self.test_local_endpoint
         return None
+    
+    async def test_hardware(self):
+        return await self.test_ipfs_embeddings.test_hardware()
 
     async def init_endpoints(self, models=None, endpoint_list=None):
         for endpoint_type in self.endpoint_types:
@@ -55,7 +60,7 @@ class ipfs_accelerate_py:
                     model, endpoint, context_length = endpoint_info
                     await self.add_endpoint(model, endpoint, context_length, endpoint_type)    
         if "hwtest" not in dir(self):
-            hwtest = await self.test_ipfs_embeddings.test_hardware()
+            hwtest = await self.test_hardware()
             self.hwtest = hwtest
         for model in models:
             if model not in self.queues:
@@ -810,5 +815,5 @@ if __name__ == "__main__":
         ]
     }
     ipfs_accelerate_py = ipfs_accelerate_py(resources, metadata)
-    results = ipfs_accelerate_py.__test__(resources, metadata)
-    asyncio.run(results)
+    asyncio.run(ipfs_accelerate_py.__test__(resources, metadata))
+    print("test complete")

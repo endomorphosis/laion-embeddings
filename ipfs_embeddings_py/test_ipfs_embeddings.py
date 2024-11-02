@@ -15,7 +15,7 @@ class test_ipfs_embeddings_py:
         
     
        
-    def test_dependencencies(self):
+    async def test_dependencencies(self):
         
         return
     
