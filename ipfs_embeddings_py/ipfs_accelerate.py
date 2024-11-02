@@ -9,7 +9,7 @@ import aiohttp
 from aiohttp import ClientSession, ClientTimeout
 from transformers import AutoTokenizer
 from transformers import AutoModel
-
+from test import test
 class ipfs_accelerate_py:
     def __init__(self, resources, metadata):
         self.resources = resources
@@ -21,6 +21,7 @@ class ipfs_accelerate_py:
         self.endpoint_status = {}
         self.endpoint_handler = {}
         self.batch_sizes = {}
+        self.queues = {}
         self.endpoint_types = ["tei_endpoints", "openvino_endpoints", "libp2p_endpoints", "local_endpoints"]
         self.add_endpoint = self.add_endpoint
         self.rm_endpoint = self.rm_endpoint
@@ -720,16 +721,19 @@ class ipfs_accelerate_py:
         if endpoint_type == "cuda":
             endpoint_dict = self.local_endpoints.get(model, {})
             filtered_endpoints = [endpoint for endpoint in endpoint_dict if "cuda" in endpoint and self.endpoint_status.get(endpoint, 0) >= 1]
+        else:
+            all_endpoints_dict = self.tei_endpoints.get(model, {}) + self.libp2p_endpoints.get(model, {}) + self.openvino_endpoints.get(model, {}) + self.local_endpoints.get(model, {})
+            filtered_endpoints = [endpoint for endpoint in all_endpoints_dict if self.endpoint_status.get(endpoint, 0) >= 1]
         return filtered_endpoints
     
     async def async_generator(self, iterable):
         for item in iterable:
             yield item
     
-    def __test__(self):
+    async def __test__(self, resources, metadata):
         results = {}
-        test_ipfs_accelerate = self.__init__()
-        test_ipfs_accelerate_init = self.init_endpoints()
+        test_ipfs_accelerate = self.__init__(resources, metadata)
+        test_ipfs_accelerate_init = await self.init_endpoints( metadata['models'], resources)
         results = {"test_ipfs_accelerate_init": test_ipfs_accelerate_init, "test_ipfs_accelerate": test_ipfs_accelerate}
         return results
 
@@ -806,5 +810,5 @@ if __name__ == "__main__":
         ]
     }
     ipfs_accelerate_py = ipfs_accelerate_py(resources, metadata)
-    results = ipfs_accelerate_py.__test__()
-    
+    results = ipfs_accelerate_py.__test__(resources, metadata)
+    asyncio.run(results)
