@@ -14,6 +14,97 @@ class faiss_kit_py:
         self.metadata = metadata
         return None
     
+    
+    async def search_chunks(self, dataset, split, src_path, model, cids, query, endpoint=None, n=64):
+        chunks = []
+        results = []
+        chunk_cid_list = []
+        chunk_cid_set = set()
+        if endpoint is None:
+            endpoint = self.get_endpoints(model)
+        if endpoint is None:
+            raise ValueError("No endpoint available for model " + model)
+        files = [ x for x in os.listdir(src_path) if model.replace("/","___") in x and dataset in x and cids in x ] 
+        for chunk in files:
+            chunk_cid = chunk.replace(".parquet","")
+            if chunk_cid not in chunk_cid_set:
+                chunk_cid_set.add(chunk_cid)
+                if chunk_cid not in chunk_cid_list:
+                    chunk_cid_list.append(chunk_cid)                
+        for chunk_cid in chunk_cid_list:
+            if chunk_cid not in self.chunk_cache.keys():
+                self.chunk_cache[chunk_cid] = {"items": []}
+        for chunk in chunk_cid_list:
+            chunk_path = os.path.join(src_path, chunk)
+            with multiprocessing.Pool() as pool:
+                args = [[chunk_path]]
+                results = pool.map(self.process_chunk_file, args)
+                for result in results:
+                    chunk_dataset = result
+                    if "cid" in list(chunk_dataset.keys()):
+                        if chunk_cid not in self.chunk_cache.keys():
+                            self.chunk_cache[chunk_cid] = {"items": []}
+                        self.chunk_cache[chunk_cid]["items"] += chunk_dataset["items"]
+                    if "embeddings" in list(chunk_dataset.keys()):
+                        if chunk_cid not in self.chunk_cache.keys():
+                            self.chunk_cache[chunk_cid] = {"items": []}
+                        self.chunk_cache[chunk_cid]["items"] += chunk_dataset["items"]
+                    chunks.append(chunk_dataset)
+            self.chunk_cache[chunk_cid]["items"] += chunk_dataset
+        if "items" in list(chunks.keys()):
+            vectors = [ x["items"]["embeddings"] for x in chunks if "embeddings" in list(x["items"].keys())]
+            cids = [ x["items"]["cid"] for x in chunks if "cid" in list(x["items"].keys())]
+            text = [ x["items"]["text"] for x in chunks if "text" in list(x["items"].keys())]
+        else:
+            vectors = [x["embeddings"] for x in chunks if "embeddings" in list(x.keys())]
+            cids = [ x["cid"] for x in chunks if "cid" in list(x.keys())]
+            text = [ x["text"] for x in chunks if "text" in list(x.keys())]
+        if query is not None:
+            query_vector = self.tokenizer[model][endpoint].encode(query)
+        else:
+            query_test = "the lazy dog jumped over the quick brown fox"
+            query_vector = self.tokenizer[model][endpoint].encode(query_test)
+            
+        faiss.SearchParameters = faiss.SearchParameters()
+        faiss.SearchParameters.init()
+        index = faiss.IndexFlatL2(len(vectors[0]))
+        index.add(np.array(vectors))
+        D, I = index.search(np.array(query_vector), n)
+        for i in I:
+            results_keys = ["cid", "text", "embeddings"]
+            result = {}
+            for key in results_keys:
+                if key == "cid":
+                    result[key] = cids[i]
+                elif key == "text":
+                    result[key] = text[i]
+                elif key == "embeddings":
+                    result[key] = vectors[i]
+            
+            results.append(result)
+
+        return results
+
+            
+    async def search_centroids(self, dataset, split, src_path, model, cids, query, endpoint=None, n=64):
+
+
+        return None
+    
+    async def search_shards(self, dataset, split, src_path, models):
+        
+        
+        return None
+    
+    async def autofaiss_chunks(self, dataset, split, src_path, models):
+        
+        return None
+    
+    async def autofaiss_shards(self, dataset, split, src_path, models):
+        
+        return None
+    
+    
     async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits=None):
         await self.load_clusters(dataset, split, dst_path)
         await self.load_dataset(dataset, split)
