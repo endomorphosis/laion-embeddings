@@ -829,6 +829,6 @@ if __name__ == "__main__":
             ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
         ]
     }
-    test_ipfs_datasets = ipfs_datasets(resources, metadata)
+    test_ipfs_datasets = ipfs_datasets_py(resources, metadata)
     test_ipfs_datasets.test()
     pass
