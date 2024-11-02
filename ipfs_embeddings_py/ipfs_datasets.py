@@ -3,6 +3,15 @@ import datasets
 import multiprocessing
 from datasets import Dataset, load_dataset, concatenate_datasets, load_from_disk
 
+try:
+    from .ipfs_parquet_to_car import ipfs_parquet_to_car_py
+except Exception as e:
+    try: 
+        from ipfs_parquet_to_car import ipfs_parquet_to_car_py
+    except Exception as e:
+        pass
+    pass
+
 class ipfs_datasets_py:
     def __init__(self, resources, metadata):
         self.resources = resources

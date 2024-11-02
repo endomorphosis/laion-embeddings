@@ -92,14 +92,6 @@ except Exception as e:
     pass
 
 
-try:
-    from .ipfs_parquet_to_car import ipfs_parquet_to_car_py
-except Exception as e:
-    try: 
-        from ipfs_parquet_to_car import ipfs_parquet_to_car_py
-    except Exception as e:
-        pass
-    pass
 from multiprocessing import Process
 import concurrent.futures
 import concurrent
