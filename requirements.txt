@@ -18,6 +18,5 @@ rank_bm25
 llama-index-embeddings-huggingface
 llama-index
 torch
-faiss
+haystack
 faiss-cpu
-faiss-gpu
