@@ -17,9 +17,10 @@ from aiohttp import ClientSession, ClientTimeout
 import multiprocessing
 from multiprocessing import Pool
 import transformers
-from transformers import AutoTokenizer
-from transformers import AutoModel
+from transformers import AutoTokenizer, AutoModel
 import datasets
+import ipfs_accelerate_py
+
 from datasets import Dataset, concatenate_datasets, load_dataset
 try:
     from .ipfs_multiformats import ipfs_multiformats_py
@@ -97,10 +98,12 @@ class ipfs_embeddings_py:
         self.qdrant_kit_py = qdrant_kit_py(resources, metadata)
         self.elasticsearch_kit = elasticsearch_kit(resources, metadata)
         self.faiss_kit = faiss_kit_py(resources, metadata)
+        self.ipfs_accelerate = ipfs_accelerate_py.ipfs_accelerate_py(resources, metadata)
         self.process_new_dataset_shard = self.ipfs_datasets.process_new_dataset_shard
         self.process_index_shard = self.ipfs_datasets.process_index_shard
-        self.ipfs_parquet_to_car_test = self.ipfs_parquet_to_car.test
-        self.ipfs_parquet_to_car_install = self.ipfs_parquet_to_car.install
+        self.ipfs_parquet_to_car = self.ipfs_datasets.ipfs_parquet_to_car_py
+        self.ipfs_parquet_to_car_test = self.ipfs_datasets.ipfs_parquet_to_car_py.test
+        self.ipfs_parquet_to_car_install = self.ipfs_datasets.ipfs_parquet_to_car_py.install
         if "ipfs_embeddings" not in dir(self) and "ipfs_embeddings" in self.__dict__.keys():
             self.ipfs_embeddings = self
         self.parquet_to_car = self.ipfs_parquet_to_car
