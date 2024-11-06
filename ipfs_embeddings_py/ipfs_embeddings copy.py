@@ -172,16 +172,12 @@ class ipfs_embeddings_py:
         self.kmeans_cluster_split = self.kmeans_cluster_split
         # Initialize endpoints
         self.endpoint_types = ["tei_endpoints", "openvino_endpoints", "libp2p_endpoints", "local_endpoints"]
+        self.init_endpoints = self.init_endpoints
         self.add_endpoint = self.add_endpoint
         self.rm_endpoint = self.rm_endpoint
         self.init_endpoints = self.init_endpoints       
         return None
     
-    async def process_new_dataset_shard(self, dataset, split=None):
-        return await self.ipfs_datasets.process_new_dataset_shard(dataset, split)
-    
-    async def init_endpoints(self, models, endpoint_list=None):
-        return await self.ipfs_accelerate.init_endpoints(models, endpoint_list)
 
     async def add_endpoint(self, model, endpoint, context_length, endpoint_type):
         if endpoint_type in self.endpoint_types:
@@ -1472,7 +1468,7 @@ class ipfs_embeddings_py:
         print(test_results)
         return test_results
     
-    async def init_endpoints_bak(self, models=None, endpoint_list=None):
+    async def init_endpoints(self, models=None, endpoint_list=None):
         for endpoint_type in self.endpoint_types:
             if endpoint_type in resources.keys():
                 for endpoint_info in resources[endpoint_type]:
@@ -1678,9 +1674,7 @@ class ipfs_embeddings_py:
             if "endpoints" in resource:
                 endpoints[resource] = self.resources[resource]
         await self.load_clusters(dataset, split, dst_path)
-        new_endpoints = await self.init_endpoints(models, endpoints)
-        for endpoint in new_endpoints:
-            print(endpoint)
+        await self.init_endpoints(models, endpoints)
         if split is None:
             if "new_dataset" not in list(self.all_cid_set.keys()):
                 self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
@@ -2073,10 +2067,8 @@ class ipfs_embeddings_py:
                     
         return None
     
-    async def load_checkpoints(self, dataset, split, dst_path, models):
-        return await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)
     
-    async def load_checkpoints_bak(self, dataset, split, dst_path, models):
+    async def load_checkpoints(self, dataset, split, dst_path, models):
         if "new_dataset" not in list(dir(self)):
             self.new_dataset = None
         if "all_cid_list" not in list(dir(self)):
