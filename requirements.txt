@@ -8,6 +8,7 @@ multiformats
 ipfs_kit_py==0.0.8
 ipfs_datasets_py==0.0.6
 ipfs_embeddings_py==0.0.18
+ipfs_accelerate_py==0.0.9
 datasets
 transformers
 aiohttp
