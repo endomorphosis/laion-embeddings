@@ -87,7 +87,7 @@ from multiprocessing import Process
 import concurrent.futures
 import concurrent
 import json
-from ipfs_datasets import ipfs_datasets_py
+from ipfs_embeddings_py.ipfs_datasets_bak import ipfs_datasets_py
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
@@ -98,7 +98,7 @@ class ipfs_embeddings_py:
         self.qdrant_kit_py = qdrant_kit_py(resources, metadata)
         self.elasticsearch_kit = elasticsearch_kit(resources, metadata)
         self.faiss_kit = faiss_kit_py(resources, metadata)
-        self.ipfs_accelerate = ipfs_accelerate_py.ipfs_accelerate_py(resources, metadata)
+        self.ipfs_accelerate_py = ipfs_accelerate_py.ipfs_accelerate_py(resources, metadata)
         self.process_new_dataset_shard = self.ipfs_datasets.process_new_dataset_shard
         self.process_index_shard = self.ipfs_datasets.process_index_shard
         self.ipfs_parquet_to_car = self.ipfs_datasets.ipfs_parquet_to_car_py
@@ -181,7 +181,7 @@ class ipfs_embeddings_py:
         return await self.ipfs_datasets.process_new_dataset_shard(dataset, split)
     
     async def init_endpoints(self, models, endpoint_list=None):
-        return await self.ipfs_accelerate.init_endpoints(models, endpoint_list)
+        return await self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
 
     async def add_endpoint(self, model, endpoint, context_length, endpoint_type):
         if endpoint_type in self.endpoint_types:
@@ -1288,384 +1288,6 @@ class ipfs_embeddings_py:
         self.endpoint_status[endpoint] = status
         return None
     
-    async def test_llama_cpp(self):
-        test_llama_cpp_cmd = "pip show llama-cpp-python"
-        test_results = {}
-        try:
-            test_llama_cpp = subprocess.check_output(test_llama_cpp_cmd, shell=True)
-            test_llama_cpp = test_llama_cpp.decode("utf-8")
-            test_results["llama_cpp"] = test_llama_cpp
-        except Exception as e:
-            print(e)
-            raise ValueError(e)
-        try:
-            test_ollama = subprocess.check_output("ollama", shell=True)
-            test_ollama = test_ollama.decode("utf-8")
-            test_results["ollama"] = test_ollama
-        except Exception as e:
-            print(e)
-            raise ValueError(e)
-        
-        test_pass = False
-        test_pass = all(isinstance(value, str) for value in test_results.values() if not isinstance(value, ValueError))
-        return test_pass
-        
-    
-    async def test_local_openvino(self):
-        test_openvino_cmd = "python3 -c 'import openvino; print(openvino.__version__)'"
-        try:
-            test_openvino = subprocess.check_output(test_openvino_cmd, shell=True).decode("utf-8")              
-            if type(test_openvino) == str and type(test_openvino) != ValueError:
-                return True
-            else:
-                return False
-        except Exception as e:
-            print(e)
-            raise ValueError(e)
-        return None
-    
-    async def test_ipex(self):        
-        test_ipex_cmd = 'python -c "import torch; import intel_extension_for_pytorch as ipex; print(torch.__version__); print(ipex.__version__);"'
-        try:
-            test_ipex = subprocess.check_output(test_ipex_cmd, shell=True)
-            return test_ipex
-        except Exception as e:
-            print(e)
-            raise ValueError(e)
-        return None
-    
-    async def test_cuda(self):
-        try:
-            gpus = torch.cuda.device_count()
-            if type(gpus) == int and type(gpus) != ValueError:
-                return True
-            else:
-                return False
-        except Exception as e:
-            print(e)
-            raise ValueError(e)
-    
-    async def install_openvino(self):
-        from install_depends import install_depends_py
-        this_install_package = install_depends_py(self.resources, self.metadata)
-        try:
-            return await this_install_package.install_package("openvino")
-        except Exception as e:
-            print(e)
-            return ValueError(e)    
-    
-    async def install_ipex(self):
-        from install_depends import install_depends_py
-        this_install_package = install_depends_py(self.resources, self.metadata)
-        try:
-            return await this_install_package.install_package("ipex")
-        except Exception as e:
-            print(e)
-            return ValueError(e)    
-    
-    async def install_cuda(self): 
-        from install_depends import install_depends_py
-        this_install_package = install_depends_py(self.metadata,self.resources)
-        try:
-            results = await this_install_package.install_package("cuda")
-        except Exception as e:
-            print(e)
-            return ValueError(e)    
-        return results
-    
-    async def install_llama_cpp(self):
-        from install_depends import install_depends_py
-        this_install_package = install_depends_py(self.metadata,self.resources)
-        try:
-            results = await this_install_package.install_package("llama_cpp")
-        except Exception as e:
-            print(e)
-            return ValueError(e)    
-        return results
-        
-    async def test_hardware(self):
-        cuda_test = None
-        openvino_test = None
-        llama_cpp_test = None
-        ipex_test = None
-        cuda_install = None
-        openvino_install = None
-        llama_cpp_install = None
-        ipex_install = None
-        
-        try:
-            openvino_test = await self.test_local_openvino()
-        except Exception as e:
-            openvino_test = e
-            print(e)
-            try:
-                openvino_install = await self.install_openvino()
-                try:
-                    openvino_test = await self.test_local_openvino()
-                except Exception as e:
-                    openvino_test = e
-                    print(e)
-            except Exception as e:
-                openvino_install = e
-                print(e)        
-            pass
-            
-        try:
-            llama_cpp_test = await self.test_llama_cpp()
-        except Exception as e:
-            llama_cpp_test = e
-            try:
-                llama_cpp_install = await self.install_llama_cpp()
-                try:
-                    llama_cpp_test = await self.test_llama_cpp()
-                except:
-                    llama_cpp_test = e
-            except Exception as e:
-                print(e)
-                llama_cpp_install = e
-            pass
-        try:
-            ipex_test = await self.test_ipex()
-        except Exception as e:
-            ipex_test = e
-            print(e)
-            try:
-                ipex_install = await self.install_ipex()
-                try:
-                    ipex_test = await self.test_ipex()
-                except Exception as e:
-                    ipex_test = e
-                    print(e)
-            except Exception as e:
-                ipex_install = e
-                print(e)
-            pass
-        try:
-            cuda_test = await self.test_cuda()
-        except Exception as e:
-            try:
-                cuda_install = await self.install_cuda()
-                try:
-                    cuda_test = await self.test_cuda()
-                except Exception as e:
-                    cuda_test = e
-                    print(e)                    
-            except Exception as e:
-                cuda_install = e
-                print(e)
-            pass
-                
-        print("local_endpoint_test")
-        install_results = {
-            "cuda": cuda_install,
-            "openvino": openvino_install,
-            "llama_cpp": llama_cpp_install,
-            "ipex": ipex_install
-        }
-        print(install_results)
-        test_results = {
-            "cuda": cuda_test,
-            "openvino": openvino_test,
-            "llama_cpp": llama_cpp_test,
-            "ipex": ipex_test
-        }
-        print(test_results)
-        return test_results
-    
-    async def init_endpoints_bak(self, models=None, endpoint_list=None):
-        for endpoint_type in self.endpoint_types:
-            if endpoint_type in resources.keys():
-                for endpoint_info in resources[endpoint_type]:
-                    model, endpoint, context_length = endpoint_info
-                    await self.add_endpoint(model, endpoint, context_length, endpoint_type)    
-        if "hwtest" not in dir(self):
-            hwtest = await self.test_hardware()
-            self.hwtest = hwtest
-        for model in models:
-            if model not in self.queues:
-                self.queues[model] = {}
-        if endpoint_list is None:    
-            endpoints = self.get_endpoints(model)
-            local = self.get_endpoints(model, "local")
-            openvino = self.get_endpoints(model, "openvino")
-            libp2p = self.get_endpoints(model, "libp2p")
-            tei = self.get_endpoints(model, "tei")
-            cuda = self.get_endpoints(model, "cuda")
-            endpoints =  { "tei" : tei , "local" : local , "openvino": openvino , "libp2p": libp2p , "cuda": cuda }
-            endpoints_set = set(endpoints["tei"] + endpoints["local"] + endpoints["openvino"] + endpoints["libp2p"] + endpoints["cuda"])
-        else:
-            endpoints = endpoint_list
-            self.endpoints = endpoints
-            endpoints_list = [ k for k in endpoints.keys() ]
-            self.endpoints_list = endpoints_list
-            self.endpoints = { k : v for k, v in enumerate(endpoints_list) }
-            endpoints_set = set(endpoints_list)
-            self.endpoint_set = endpoints_set
-            local = [ endpoint for endpoint in endpoints["local_endpoints"] if "local" in endpoint or "cpu" in endpoint or "cuda" in endpoint or "openvino" in endpoint or "llama_cpp" in endpoint or "ipex" in endpoint]
-            openvino = [endpoint for endpoint in endpoints["openvino_endpoints"] ]
-            libp2p = []
-            tei = [endpoint for endpoint in endpoints["tei_endpoints"]]
-            pass
-        if type(endpoint_list) == list:
-            self.endpoints = { k : v for k, v in enumerate(endpoint_list) }
-            endpoints = endpoint_list
-            self.endpoint_list = endpoint_list
-            endpoints_set = set(endpoints)
-            self.endpoint_set = endpoints_set
-        if type(endpoint_list) == dict:
-            self.endpoints = endpoint_list
-            endpoints_list = list(endpoint_list.keys())
-            endpoints_set = set(endpoints_list)
-            self.endpoint_set = endpoints_set
-        if not endpoints_set:
-            raise ValueError("No endpoints available for model " + model)
-        cuda_test = self.hwtest["cuda"]
-        openvino_test = self.hwtest["openvino"]
-        llama_cpp_test = self.hwtest["llama_cpp"]
-        ipex_test = self.hwtest["ipex"]
-        cpus = os.cpu_count()
-        cuda = torch.cuda.is_available()
-        gpus = torch.cuda.device_count()
-        for model in models:
-            if model not in self.tokenizer:
-                self.tokenizer[model] = {}
-            if model not in self.local_endpoints:
-                self.local_endpoints[model] = {}
-            if model not in self.queues:    
-                self.queues[model] = {}
-            if model not in self.batch_sizes:
-                self.batch_sizes[model] = {}
-            if "cpu" not in self.local_endpoints[model]:
-                self.local_endpoints[model]["cpu"] = ""
-            if "cpu" not in self.queues[model]:
-                self.queues[model]["cpu"] = ""
-            if "cpu" not in self.batch_sizes[model]:
-                self.batch_sizes[model]["cpu"] = 1
-        for model in models:
-            if cuda and gpus > 0:
-                if cuda_test and type(cuda_test) != ValueError:
-                    self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
-                    for gpu in range(gpus):
-                        self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
-                        self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
-                        torch.cuda.empty_cache()
-                        self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(64)
-                        batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
-                        self.local_endpoints[model]["cuda:" + str(gpu)] = batch_size
-                        self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
-                        self.endpoint_handler[(model, "cuda:" + str(gpu))] = ""
-                        # consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.chunk_consumer(batch_size, model, "cuda:" + str(gpu)))
-            if len(local) > 0 and cpus > 0:
-                all_test_types = [ type(openvino_test), type(llama_cpp_test), type(ipex_test)]
-                all_tests_ValueError = all(x is ValueError for x in all_test_types)
-                all_tests_none = all(x is None for x in all_test_types)
-                if all_tests_ValueError or all_tests_none:  
-                    self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
-                    self.queues[model]["cpu"] = asyncio.Queue(4)
-                    self.endpoint_handler[(model, "cpu")] = ""
-                    # consumer_tasks[(model, "cpu")] = asyncio.create_task(self.chunk_consumer( 1, model, "cpu"))
-                elif openvino_test and type(openvino_test) != ValueError:
-                    ov_count = 0
-                    for endpoint in local:
-                        if "openvino" in endpoint[1]:
-                            endpoint_name = "openvino:"+str(ov_count)
-                            batch_size = 0
-                            if model not in self.batch_sizes:
-                                self.batch_sizes[model] = {}
-                            if model not in self.queues:
-                                self.queues[model] = {}
-                            if endpoint not in list(self.batch_sizes[model].keys()):
-                                batch_size = await self.max_batch_size(model, endpoint)
-                                self.batch_sizes[model][endpoint_name] = batch_size
-                            if self.batch_sizes[model][endpoint_name] > 0:
-                                self.queues[model][endpoint_name] = asyncio.Queue(64)
-                                self.endpoint_handler[(model, endpoint_name)] = ""
-                                # consumer_tasks[(model, endpoint_name )] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint_name))
-                            ov_count = ov_count + 1
-                elif llama_cpp_test and type(llama_cpp_test) != ValueError:
-                    llama_count = 0
-                    for endpoint in local:
-                        if "llama_cpp" in endpoint:
-                            endpoint_name = "llama:"+str(ov_count)
-                            batch_size = 0                            
-                            if model not in self.batch_sizes:
-                                self.batch_sizes[model] = {}
-                            if model not in self.queues:
-                                self.queues[model] = {}
-                            if endpoint not in list(self.batch_sizes[model].keys()):
-                                batch_size = await self.max_batch_size(model, endpoint)
-                                self.batch_sizes[model][endpoint] = batch_size
-                            if self.batch_sizes[model][endpoint] > 0:
-                                self.queues[model][endpoint] = asyncio.Queue(64)
-                                self.endpoint_handler[(model, endpoint_name)] = ""
-                                # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint_name))
-                            llama_count = llama_count + 1
-                elif ipex_test and type(ipex_test) != ValueError:
-                    ipex_count = 0
-                    for endpoint in local:
-                        if "ipex" in endpoint:
-                            endpoint_name = "ipex:"+str(ipex_count)
-                            batch_size = 0
-                            if model not in self.batch_sizes:
-                                self.batch_sizes[model] = {}
-                            if model not in self.queues:
-                                self.queues[model] = {}
-                            if endpoint not in list(self.batch_sizes[model].keys()):
-                                batch_size = await self.max_batch_size(model, endpoint)
-                                self.batch_sizes[model][endpoint] = batch_size
-                            if self.batch_sizes[model][endpoint] > 0:
-                                self.queues[model][endpoint] = asyncio.Queue(64)
-                                self.endpoint_handler[(model, endpoint_name)] = ""
-                                # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-                            ipex_count = ipex_count + 1
-            if "openvino_endpoints" in list(self.endpoints.keys()):
-                if len(self.endpoints["openvino_endpoints"]) > 0 :
-                    for endpoint in self.endpoints["openvino_endpoints"]:
-                        batch_size = 0
-                        if model not in self.batch_sizes:
-                            self.batch_sizes[model] = {}
-                        if model not in self.queues:
-                            self.queues[model] = {}
-                        if endpoint not in list(self.batch_sizes[model].keys()):
-                            batch_size = await self.max_batch_size(model, endpoint)
-                            self.batch_sizes[model][endpoint] = batch_size
-                        if self.batch_sizes[model][endpoint] > 0:
-                            self.queues[model][endpoint] = asyncio.Queue(64)  # Unbounded queue
-                            self.endpoint_handler[(model, endpoint)] = ""
-                            # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-            if "tei_endpoints" in list(self.endpoints.keys()):
-                if len(self.endpoints["tei_endpoints"]) > 0:
-                    for endpoint in self.endpoints["tei_endpoints"]:
-                        this_model = endpoint[0]
-                        this_endpoint = endpoint[1]
-                        context_length = endpoint[2]
-                        batch_size = 0
-                        if this_model not in self.batch_sizes:
-                            self.batch_sizes[this_model] = {}
-                        if this_model not in self.queues:
-                            self.queues[model] = {}
-                        if endpoint not in list(self.batch_sizes[model].keys()):
-                            batch_size = await self.max_batch_size(model, endpoint)
-                            self.batch_sizes[model][this_endpoint] = batch_size
-                        if self.batch_sizes[model][this_endpoint] > 0:
-                            self.queues[model][this_endpoint] = asyncio.Queue(64)  # Unbounded queue
-                            self.endpoint_handler[(model, this_endpoint)] = ""
-                            # consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(batch_size, model, endpoint)) 
-            if "libp2p_endpoints" in list(self.endpoints.keys()):
-                if len(self.endpoints["libp2p_endpoints"]) > 0:
-                    for endpoint in self.endpoints["libp2p_endpoints"]:
-                        batch_size = 0
-                        if model not in self.batch_sizes:
-                            self.batch_sizes[model] = {}
-                        if model not in self.queues:
-                            self.queues[model] = {}
-                        if endpoint not in list(self.batch_sizes[model].keys()):
-                            batch_size = await self.max_batch_size(model, endpoint)
-                            self.batch_sizes[model][endpoint] = batch_size
-                        if self.batch_sizes[model][endpoint] > 0:
-                            self.queues[model][endpoint] = asyncio.Queue(64)
-        return None
-
     async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
         self.queues = {}
         self.cid_set = set()
@@ -1678,9 +1300,9 @@ class ipfs_embeddings_py:
             if "endpoints" in resource:
                 endpoints[resource] = self.resources[resource]
         await self.load_clusters(dataset, split, dst_path)
-        new_endpoints = await self.init_endpoints(models, endpoints)
-        for endpoint in new_endpoints:
-            print(endpoint)
+        resources = await self.init_endpoints(models, endpoints)
+        resources_keys = ["queues", "batch_sizes", "endpoints", "models", "worker"]
+
         if split is None:
             if "new_dataset" not in list(self.all_cid_set.keys()):
                 self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
@@ -1945,6 +1567,9 @@ class ipfs_embeddings_py:
         return None 
     
     async def load_combined_checkpoints(self, dataset, split, dst_path, models):
+        return await self.ipfs_datasets.load_combined_checkpoints(dataset, split, dst_path, models)
+    
+    async def load_combined_checkpoints(self, dataset, split, dst_path, models):
         if "new_dataset" not in list(dir(self)):
             self.new_dataset = None
         if "all_cid_list" not in list(dir(self)):
@@ -2048,8 +1673,11 @@ class ipfs_embeddings_py:
                         self.cid_chunk_set.add(this_cid)
                         self.cid_chunk_list.append(this_cid)
         return None
-        
+
     async def load_chunk_checkpoints(self, dataset, split, src_path, models):
+        return await self.ipfs_datasets.load_chunk_checkpoints(dataset, split, src_path, models)
+    
+    async def load_chunk_checkpoints_bak(self, dataset, split, src_path, models):
         files = []
         if "doc_cid" not in list(dir(self)):
             self.chunks = {}
