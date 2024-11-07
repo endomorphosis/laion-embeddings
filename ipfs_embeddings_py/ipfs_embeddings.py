@@ -178,10 +178,12 @@ class ipfs_embeddings_py:
         return None
     
     async def process_new_dataset_shard(self, dataset, split=None):
-        return await self.ipfs_datasets.process_new_dataset_shard(dataset, split)
+        results = await self.ipfs_datasets.process_new_dataset_shard(dataset, split)
+        return results
     
     async def init_endpoints(self, models, endpoint_list=None):
-        return await self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
+        results = await self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
+        return results
 
     async def add_endpoint(self, model, endpoint, context_length, endpoint_type):
         if endpoint_type in self.endpoint_types:
@@ -1711,30 +1713,6 @@ class ipfs_embeddings_py:
 
     async def load_chunk_checkpoints(self, dataset, split, src_path, models):
         return await self.ipfs_datasets.load_chunk_checkpoints(dataset, split, src_path, models)
-    
-    # async def load_chunk_checkpoints_bak(self, dataset, split, src_path, models):
-    #     files = []
-    #     if "doc_cid" not in list(dir(self)):
-    #         self.chunks = {}
-    #     if "doc_cid" not in list(dir(self)):
-    #         self.chunk_cache_set = {}
-    #     if os.path.isdir(src_path):
-    #         files = os.listdir(src_path)
-    #         files_by_models = [ [x for x in files if model.replace("/","___") in x and dataset in x and models in x ] for model in models]
-    #     if len(files_by_models) > 0:
-    #         with multiprocessing.Pool() as pool:
-    #             results = pool.map(self.process_chunk_file, files_by_models)
-    #             for result in results:
-    #                 model, doc_cid, items = result
-    #                 if model not in list(self.chunk_cache.keys()):
-    #                     self.chunk_cache_set[model] = set()
-    #                 if doc_cid not in list(self.chunk_cache[model].keys()):
-    #                     self.chunk_cache[model][doc_cid] = {"items": []}
-    #                 if doc_cid not in self.chunk_cache_set[model]:
-    #                     self.chunk_cache_set[model].add(doc_cid)
-    #                 self.doc_cid[model][doc_cid]["items"] += items
-                    
-    #     return None
     
     async def load_checkpoints(self, dataset, split, dst_path, models):
         return await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)

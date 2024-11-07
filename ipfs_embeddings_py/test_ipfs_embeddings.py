@@ -1,3 +1,7 @@
+import os
+import sys 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+
 class test_ipfs_embeddings_py:
     def __init__(self, resources=None, metadata=None):
         self.resources = resources
@@ -10,8 +14,8 @@ class test_ipfs_embeddings_py:
             import install_depends 
             from install_depends import install_depends_py
         if "ipfs_accelerate_py" not in globals():
-            import ipfs_accelerate
-            from ipfs_accelerate import ipfs_accelerate_py
+            import ipfs_embeddings
+            from .ipfs_embeddings import ipfs_embeddings_py
         
     
     async def test_dependencencies(self):
@@ -206,6 +210,6 @@ if __name__ == "__main__":
             ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
         ]
     }
-    test = test_ipfs_embeddings(resources, metadata)
+    test = test_ipfs_embeddings_py(resources, metadata)
     results = test.test()
     print(results)
