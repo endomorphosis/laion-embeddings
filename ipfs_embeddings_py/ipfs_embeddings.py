@@ -1289,31 +1289,7 @@ class ipfs_embeddings_py:
     def setStatus(self, endpoint, status):
         self.endpoint_status[endpoint] = status
         return None
-    
-    async def test_endpoints(self, models):
-        test_results = {}
-        try: 
-            test_results["local_endpoint"] = await self.ipfs_accelerate_py.test_local_endpoint(models)
-        except Exception as e:
-            test_results["local_endpoint"] = e
-        try:
-            test_results["libp2p_endpoint"] = await self.ipfs_accelerate_py.test_libp2p_endpoint(models)
-        except Exception as e:
-            test_results["libp2p_endpoint"] = e
-        try:
-            test_results["openvino_endpoint"] = await self.ipfs_accelerate_py.test_openvino_endpoint(models)
-        except Exception as e:
-            test_results["openvino_endpoint"] = e
-        try:
-            test_results["tei_endpoint"] = await self.ipfs_accelerate_py.test_tei_endpoint(models)
-        except Exception as e:
-            test_results["tei_endpoint"] = e
-        try:
-            test_results["webnn_endpoint"] = "not implemented"
-        except Exception as e:
-            test_results["webnn_endpoint"] = e
-            
-        return test_results
+
          
     async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
         self.queues = {}
@@ -1338,7 +1314,7 @@ class ipfs_embeddings_py:
                 elif type(this_resource) is object:
                     self.resources[resource] = this_resource
                     
-        test_endpoints = await self.test_endpoints(models)
+        test_endpoints = await self.ipfs_accelerate_py.test_endpoints(models)
         
         if split is None:
             if "new_dataset" not in list(self.all_cid_set.keys()):
