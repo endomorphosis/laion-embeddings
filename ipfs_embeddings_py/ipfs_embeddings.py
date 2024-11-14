@@ -1325,7 +1325,6 @@ class ipfs_embeddings_py:
     async def load_checkpoints(self, dataset, split, dst_path, models):
         return await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)
     
-    
     async def search_chunks(self, dataset, split, src_path, model, cids, query, endpoint=None, n=64):
         chunks = []
         results = []
