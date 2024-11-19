@@ -671,7 +671,8 @@ class ipfs_embeddings_py:
     
     async def init_endpoints(self, models, endpoint_list=None):
         results = None
-        # results = await self.ipfs_accelerate_py.init_endpoints(models)
+        ipfs_accelerate =  self.ipfs_accelerate_py
+        results = await ipfs_accelerate.init_endpoints(models, endpoint_list)
         return results
 
     def load_index(self, index):
