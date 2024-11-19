@@ -88,6 +88,7 @@ import concurrent.futures
 import concurrent
 import json
 from ipfs_datasets import ipfs_datasets_py
+
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
