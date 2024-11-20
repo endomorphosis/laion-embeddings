@@ -415,7 +415,7 @@ class ipfs_embeddings_py:
         resources = await self.init_endpoints(models, endpoints)
         resources_keys = ["queues", "batch_sizes", "endpoints", "models", "worker"]
         for resource in resources_keys:
-            if resource in list(self.resources.keys()) and resources is not None:
+            if resource in list(self.ipfs_accelerate_py.resources.keys()) and resources is not None:
                 this_resource = resources[resource]
                 if type(this_resource) is dict:
                     for key in list(this_resource.keys()):
@@ -670,10 +670,23 @@ class ipfs_embeddings_py:
         return results
     
     async def init_endpoints(self, models, endpoint_list=None):
-        results = None
-        ipfs_accelerate =  self.ipfs_accelerate_py
-        results = await ipfs_accelerate.init_endpoints(models, endpoint_list)
-        return results
+        resources =  await self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
+        resources_keys = list(resources.keys())
+        for resource in resources_keys:
+            this_resource = resources[resource]
+            if type(this_resource) is dict:
+                if resource not in list(self.resources.keys()):
+                    self.resources[resource] = {} 
+                for key in list(this_resource.keys()):
+                    self.resources[resource][key] = this_resource[key]
+            elif type(this_resource) is object:
+                self.resources[resource] = this_resource
+        resources_list = ["queues", "batch_sizes", "endpoints", "models", "worker"]
+        new_resources = {}
+        for resource in resources_list:
+            if resource in list(self.ipfs_accelerate_py.resources.keys()):
+                new_resources[resource] = self.ipfs_accelerate_py.resources[resource]
+        return new_resources
 
     def load_index(self, index):
         self.index = index
