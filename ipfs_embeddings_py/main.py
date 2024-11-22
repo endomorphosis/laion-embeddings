@@ -444,7 +444,7 @@ class ipfs_embeddings_py:
         columns = self.dataset.column_names
         columns.append("cid")
         await self.ipfs_datasets.load_checkpoints( dataset, split, dst_path, models)       
-        for model, endpoint, batch_size in self.ipfs_accelerate_py.resources["endpoints"].items():
+        for model, endpoint in self.ipfs_accelerate_py.resources["endpoints"].items():
             for endpoint in self.ipfs_accelerate_py.resources["endpoints"]:
                 consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, self.batch_sizes[model][endpoint], model, endpoint))
             consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, self.batch_sizes[model][endpoint], model, endpoint))
