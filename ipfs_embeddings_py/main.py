@@ -444,10 +444,10 @@ class ipfs_embeddings_py:
         columns = self.dataset.column_names
         columns.append("cid")
         await self.ipfs_datasets.load_checkpoints( dataset, split, dst_path, models)       
-        for model, endpoint in self.ipfs_accelerate_py.resources["endpoints"].items():
+        for endpoint, model  in self.ipfs_accelerate_py.resources["endpoints"].items():
             for endpoint in self.ipfs_accelerate_py.resources["endpoints"]:
-                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, self.batch_sizes[model][endpoint], model, endpoint))
-            consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.queues[model][endpoint], column, self.batch_sizes[model][endpoint], model, endpoint))
+                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.ipfs_accelerate_py.resources["queues"][model], column, self.ipfs_accelerate_py.resources["batch_sizes"][model], model, endpoint))
+            consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.ipfs_accelerate_py.resources["queues"][model], column, self.ipfs_accelerate_py.resources["batch_sizes"][model], model, endpoint))
         producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, self.queues))        
         save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
         await asyncio.gather(producer_task, *consumer_tasks.values(), save_task)
