@@ -36,3 +36,10 @@ try:
 except:
     from .install_depends import *
     pass
+
+try:
+    import chunker
+    from chunker import *
+except:
+    from .chunker import *
+    pass

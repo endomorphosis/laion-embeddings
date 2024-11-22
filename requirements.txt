@@ -1,6 +1,7 @@
 fastapi
 fastapi[standard]
 uvicorn
+datasets
 pandas
 numpy
 qdrant-client
@@ -8,7 +9,7 @@ multiformats
 ipfs_kit_py==0.0.8
 ipfs_datasets_py==0.0.9
 ipfs_embeddings_py==0.0.19
-ipfs_accelerate_py==0.0.23
+ipfs_accelerate_py==0.0.24
 datasets
 transformers
 aiohttp

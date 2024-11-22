@@ -20,6 +20,9 @@ import transformers
 from transformers import AutoTokenizer, AutoModel
 import datasets
 import ipfs_accelerate_py
+import chunker
+import qdrant_kit
+import elasticsearch_kit
 
 from datasets import Dataset, concatenate_datasets, load_dataset
 try:
@@ -49,6 +52,7 @@ except Exception as e:
         except Exception as e:
             pass
     pass
+
 try:
     from .elasticsearch_kit import elasticsearch_kit
     from .elasticsearch_kit import *
@@ -966,9 +970,9 @@ if __name__ == "__main__":
             ["thenlper/gte-small", "cuda:1", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "cuda:1", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:1", 32768],
-            ["thenlper/gte-small", "openvino", 512],
-            ["Alibaba-NLP/gte-large-en-v1.5", "openvino", 8192],
-            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "openvino", 32768],
+            ["thenlper/gte-small", "openvino:0", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "openvino:0", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "openvino:0", 32768],
             ["thenlper/gte-small", "llama_cpp", 512],
             ["Alibaba-NLP/gte-large-en-v1.5", "llama_cpp", 8192],
             ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "llama_cpp", 32768],
