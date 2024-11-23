@@ -238,6 +238,7 @@ class chunker:
         step_size: Optional[int] = None,
         embedding_model_name: Optional[str] = None,
         device: Optional[str] = None,
+        batch_size: Optional[int] = None,
     ):
         if embedding_model_name is None and self.embedding_model_name is not None:
             embedding_model_name = self.embedding_model_name

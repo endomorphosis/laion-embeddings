@@ -183,18 +183,8 @@ class ipfs_embeddings_py:
             yield item
             
     async def random_cuda_tokenizer(self, model):
-        tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][model].keys())
-        cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
-        random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
-        results = self.ipfs_accelerate_py.resources["tokenizer"][model][random_cuda_tokenizer]
         return results
 
-    async def random_openvino_tokenizer(self, model):
-        tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][model].keys())
-        openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
-        random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
-        results = self.ipfs_accelerate_py.resources["tokenizer"][model][random_openvino_tokenizer]
-        return results
         
     async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
         # Assuming `item` is a dictionary with required data
@@ -228,22 +218,37 @@ class ipfs_embeddings_py:
             if embed_model not in list(self.ipfs_accelerate_py.resources["tokenizer"].keys()):
                 self.tokenizer[embed_model] = {}
             if cuda_test == True:
-                tokenizer = await self.random_cuda_tokenizer(embed_model)
+                tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
+                cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
+                random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
+                tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_cuda_tokenizer]
+                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_cuda_tokenizer]
+                if batch_size == 0 or batch_size is None:
+                    batch_size = 32
             elif openvino_test == True:
-                tokenizer = await self.random_openvino_tokenizer(embed_model)
+                openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
+                random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
+                tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_openvino_tokenizer]  
+                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_openvino_tokenizer]
+                if batch_size == 0 or batch_size is None:
+                    batch_size = 1
             elif "cpu" not in tokenizer_types:
                 tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model]["cpu"]                
+                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model]["cpu"]
+                if batch_size == 0 or batch_size is None:
+                    batch_size = 1
             else:
                 tokenizer =  AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
+                batch_size = 1
         if method is None:
-            fixed_chunk_list = self.chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, self.metadata["models"][0]) 
-            semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0])
-            sentences_chunk_list = self.chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, self.metadata["models"][0] )
-            sliding_window_chunk_list = self.chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, self.metadata["models"][0])
+            fixed_chunk_list = self.chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, self.metadata["models"][0], batch_size)
+            semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0], batch_size)
+            sentences_chunk_list = self.chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, self.metadata["models"][0], batch_size) 
+            sliding_window_chunk_list = self.chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, self.metadata["models"][0], batch_size)
             content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
         else:
             content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
-        parent_cid = item["items"]["cid"]
+        parent_cid = item["cid"]
         content_tokens = tokenizer.encode(content)
         ## sort content_chunks by the firt element of each tuple then the second element
         content_chunks = sorted(content_chunks, key=lambda x: (x[0], x[1]))
@@ -490,6 +495,13 @@ class ipfs_embeddings_py:
     async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
         chunk_tasks = []
         async for item in self.async_generator(dataset_stream):
+            if column is not None:
+                cid = self.multiformats.get_cid(item[column])
+            else:
+                json_item = json.dumps(item)
+                cid = self.multiformats.get_cid(json_item)
+            if cid not in list(item.keys()):
+                item["cid"] = cid
             chunked_item = await self.chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model)
             if chunked_item["parent_cid"] not in self.cid_chunk_set:
                 while self.cid_chunk_queue.full():
