@@ -163,16 +163,50 @@ class ipfs_embeddings_py:
         self.init_endpoints = self.init_endpoints       
         return None
 
-    async def init(self):
-        await self.ipfs_datasets.init()
-        await self.ipfs_accelerate_py.init()
+    async def init(self, models , endpoints ):
+        resources = await self.init_endpoints(models, endpoints)
+        resources_keys = ["queues", "batch_sizes", "endpoints", "models", "worker"]
+        for resource in resources_keys:
+            if resource in list(self.ipfs_accelerate_py.resources.keys()) and resources is not None:
+                this_resource = resources[resource]
+                if type(this_resource) is dict:
+                    for key in list(this_resource.keys()):
+                        self.resources[resource][key] = this_resource[key]
+                elif type(this_resource) is object:
+                    self.resources[resource] = this_resource
+        test_endpoints = None
+        # test_endpoints = await self.ipfs_accelerate_py.test_endpoints(models)
+        return test_endpoints
         
     async def async_generator(self, iterable):
         for item in iterable:
             yield item
-    
+            
+    async def random_cuda_tokenizer(self, model):
+        tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][model].keys())
+        cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
+        random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
+        results = self.ipfs_accelerate_py.resources["tokenizer"][model][random_cuda_tokenizer]
+        return results
+
+    async def random_openvino_tokenizer(self, model):
+        tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][model].keys())
+        openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
+        random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
+        results = self.ipfs_accelerate_py.resources["tokenizer"][model][random_openvino_tokenizer]
+        return results
+        
     async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
         # Assuming `item` is a dictionary with required data
+        cuda_test = False
+        openvino_test = False
+        tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
+        cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
+        openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
+        if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True:
+            cuda_test = True
+        if self.ipfs_accelerate_py.resources["hwtest"]["openvino"] == True:
+            openvino_test = True
         if column is None:
             content = json.dumps(item)
         elif column not in list(item.keys()):
@@ -191,17 +225,21 @@ class ipfs_embeddings_py:
         if step_size is None:
             step_size = 256
         if tokenizer is None:
-            if embed_model not in list(self.tokenizer.keys()):
+            if embed_model not in list(self.ipfs_accelerate_py.resources["tokenizer"].keys()):
                 self.tokenizer[embed_model] = {}
-            if "cpu" not in self.tokenizer[embed_model].keys():                
-                self.tokenizer[embed_model]["cpu"] = AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
+            if cuda_test == True:
+                tokenizer = await self.random_cuda_tokenizer(embed_model)
+            elif openvino_test == True:
+                tokenizer = await self.random_openvino_tokenizer(embed_model)
+            elif "cpu" not in tokenizer_types:
+                tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model]["cpu"]                
             else:
-                tokenizer = self.tokenizer[embed_model]["cpu"]
+                tokenizer =  AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
         if method is None:
-            fixed_chunk_list = self.chunker.chunk(content, self.tokenizer[embed_model]["cpu"], "fixed", 512, 8, 256, self.metadata["models"][0]) 
-            semantic_chunk_list = self.chunker.chunk(content, self.tokenizer[embed_model]["cpu"], "semantic", 512, 8, 256, self.metadata["models"][0])
-            sentences_chunk_list = self.chunker.chunk(content, self.tokenizer[embed_model]["cpu"], "sentences", 512, 8, 256, self.metadata["models"][0] )
-            sliding_window_chunk_list = self.chunker.chunk(content, self.tokenizer[embed_model]["cpu"], "sliding_window", 512, 8, 256, self.metadata["models"][0])
+            fixed_chunk_list = self.chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, self.metadata["models"][0]) 
+            semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0])
+            sentences_chunk_list = self.chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, self.metadata["models"][0] )
+            sliding_window_chunk_list = self.chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, self.metadata["models"][0])
             content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
         else:
             content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
@@ -415,19 +453,9 @@ class ipfs_embeddings_py:
         for resource in resource_keys:
             if "endpoints" in resource:
                 endpoints[resource] = self.resources[resource]
+        
         await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
-        resources = await self.init_endpoints(models, endpoints)
-        resources_keys = ["queues", "batch_sizes", "endpoints", "models", "worker"]
-        for resource in resources_keys:
-            if resource in list(self.ipfs_accelerate_py.resources.keys()) and resources is not None:
-                this_resource = resources[resource]
-                if type(this_resource) is dict:
-                    for key in list(this_resource.keys()):
-                        self.resources[resource][key] = this_resource[key]
-                elif type(this_resource) is object:
-                    self.resources[resource] = this_resource
-                    
-        test_endpoints = await self.ipfs_accelerate_py.test_endpoints(models)
+        init_endpoints = await self.init(models, endpoints)
         
         if split is None:
             if "new_dataset" not in list(self.all_cid_set.keys()):
@@ -443,15 +471,20 @@ class ipfs_embeddings_py:
             self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
         columns = self.dataset.column_names
         columns.append("cid")
-        await self.ipfs_datasets.load_checkpoints( dataset, split, dst_path, models)       
+        cuda_test = False
+        await self.ipfs_datasets.load_checkpoints( dataset, split, dst_path, models)
+        producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0])) 
+        
         for endpoint, model  in self.ipfs_accelerate_py.resources["endpoints"].items():
-            for endpoint in self.ipfs_accelerate_py.resources["endpoints"]:
-                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.ipfs_accelerate_py.resources["queues"][model], column, self.ipfs_accelerate_py.resources["batch_sizes"][model], model, endpoint))
-            consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.ipfs_accelerate_py.resources["queues"][model], column, self.ipfs_accelerate_py.resources["batch_sizes"][model], model, endpoint))
-        producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, self.queues))        
-        save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
-        await asyncio.gather(producer_task, *consumer_tasks.values(), save_task)
-        self.save_chunks_to_disk(dataset, dst_path, models)
+            model_endpoints = model 
+            model = list(model_endpoints.keys())[0]
+        #     for endpoint in self.ipfs_accelerate_py.resources["endpoints"]:
+        #         consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.ipfs_accelerate_py.resources["queues"][model], column, self.ipfs_accelerate_py.resources["batch_sizes"][model], model, endpoint))
+        #     consumer_tasks[(model, endpoint)] = asyncio.create_task(self.chunk_consumer(self.ipfs_accelerate_py.resources["queues"][model], column, self.ipfs_accelerate_py.resources["batch_sizes"][model], model, endpoint))
+        # producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, self.queues))        
+        # save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
+        # await asyncio.gather(producer_task, *consumer_tasks.values(), save_task)
+        # self.save_chunks_to_disk(dataset, dst_path, models)
         return None             
     
     async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
@@ -674,7 +707,7 @@ class ipfs_embeddings_py:
         return results
     
     async def init_endpoints(self, models, endpoint_list=None):
-        resources =  await self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
+        resources = await self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
         resources_keys = list(resources.keys())
         for resource in resources_keys:
             this_resource = resources[resource]
