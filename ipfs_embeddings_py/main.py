@@ -182,9 +182,6 @@ class ipfs_embeddings_py:
         for item in iterable:
             yield item
             
-    async def random_cuda_tokenizer(self, model):
-        return results
-
         
     async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
         # Assuming `item` is a dictionary with required data
@@ -221,6 +218,7 @@ class ipfs_embeddings_py:
                 tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
                 cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
                 random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
+                device = random_cuda_tokenizer
                 tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_cuda_tokenizer]
                 batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_cuda_tokenizer]
                 if batch_size == 0 or batch_size is None:
@@ -228,6 +226,7 @@ class ipfs_embeddings_py:
             elif openvino_test == True:
                 openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
                 random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
+                device = random_openvino_tokenizer
                 tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_openvino_tokenizer]  
                 batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_openvino_tokenizer]
                 if batch_size == 0 or batch_size is None:
@@ -235,16 +234,18 @@ class ipfs_embeddings_py:
             elif "cpu" not in tokenizer_types:
                 tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model]["cpu"]                
                 batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model]["cpu"]
+                device = "cpu"
                 if batch_size == 0 or batch_size is None:
                     batch_size = 1
             else:
+                device = "cpu"
                 tokenizer =  AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
                 batch_size = 1
         if method is None:
-            fixed_chunk_list = self.chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, self.metadata["models"][0], batch_size)
-            semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0], batch_size)
-            sentences_chunk_list = self.chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, self.metadata["models"][0], batch_size) 
-            sliding_window_chunk_list = self.chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, self.metadata["models"][0], batch_size)
+            fixed_chunk_list = self.chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, self.metadata["models"][0], device, batch_size)
+            semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0], device, batch_size)
+            sentences_chunk_list = self.chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, self.metadata["models"][0], device, batch_size) 
+            sliding_window_chunk_list = self.chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, self.metadata["models"][0], device, batch_size)
             content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
         else:
             content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
@@ -451,6 +452,7 @@ class ipfs_embeddings_py:
         self.queues = {}
         self.cid_set = set()
         self.all_cid_list = {}
+        self.cid_chunk_queue = asyncio.Queue()
         consumer_tasks = {}
         batch_sizes = {}
         resource_keys = list(self.resources.keys())

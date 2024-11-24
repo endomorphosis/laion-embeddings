@@ -35,24 +35,35 @@ class chunker:
             self.embed_model = None
             
         self.chunker = self._setup_semantic_chunking(self.embedding_model_name)
+        self.batch_size = 1
+        self.device = None
 
     def _setup_semantic_chunking(self, embedding_model_name, device=None, target_devices=None, embed_batch_size=None):
         if embedding_model_name:
             self.embedding_model_name = embedding_model_name
-
+        
+        if embed_batch_size is not None:
+            self.batch_size = embed_batch_size
+            
+        if device is not None:
+            self.device = device
+            
+        if embed_batch_size is None:
+            embed_batch_size = 1
+            
         if device is None:
             self.embed_model = HuggingFaceEmbedding(
                 model_name=self.embedding_model_name,
                 trust_remote_code=True,
                 # parallel_process=True,
-                embed_batch_size=1,
+                embed_batch_size=embed_batch_size,
                 target_devices=target_devices,
             )            
         else:
             self.embed_model = HuggingFaceEmbedding(
                 model_name=self.embedding_model_name,
                 trust_remote_code=True,
-                embed_batch_size=1,
+                embed_batch_size=embed_batch_size,
                 # parallel_process=True,
                 device=device,
                 target_devices=target_devices,
@@ -69,6 +80,7 @@ class chunker:
         tokenizer: Optional['AutoTokenizer'] = None,
         embedding_model_name: Optional[str] = None,
         device: Optional[str] = None,
+        batch_size: Optional[int] = None,
     ) -> List[Tuple[int, int]]:
         if embedding_model_name is None and self.embedding_model_name is not None:
             embedding_model_name = self.embedding_model_name
@@ -77,11 +89,13 @@ class chunker:
         elif tokenizer is None:
             raise ValueError("Tokenizer must be provided")
 
-        if self.embed_model is not None:
+        
+        
+        if self.embed_model is not None or (self.batch_size != batch_size or self.device != device):
             if embedding_model_name is None:
-                self._setup_semantic_chunking(self.embedding_model_name, device)
+                self._setup_semantic_chunking(self.embedding_model_name, device, None, batch_size)
             else:
-                self._setup_semantic_chunking(embedding_model_name, device)
+                self._setup_semantic_chunking(embedding_model_name, device, None, batch_size)
 
         # Get semantic nodes
         nodes = [
@@ -257,7 +271,7 @@ class chunker:
         
         chunking_strategy = chunking_strategy or self.chunking_strategy
         if chunking_strategy == "semantic":
-            return self.chunk_semantically(text, tokenizer, embedding_model_name, device)
+            return self.chunk_semantically(text, tokenizer, embedding_model_name, device, batch_size)
         elif chunking_strategy == "fixed":
             if chunk_size < 4:
                 chunk_size = 4
