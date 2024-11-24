@@ -34,11 +34,14 @@ class chunker:
             self.embedding_model_name = None
             self.embed_model = None
             
-        self.chunker = self._setup_semantic_chunking(self.embedding_model_name)
+        self.chunkers = {}
+        self.chunkers[self.embedding_model_name] = {}
+        # self.chunker = self._setup_semantic_chunking(self.embedding_model_name)
+        # self.chunkers[self.embedding_model_name]["cpu"] = self.chunker
         self.batch_size = 1
         self.device = None
 
-    def _setup_semantic_chunking(self, embedding_model_name, device=None, target_devices=None, embed_batch_size=None):
+    def _setup_semantic_chunking_bak(self, embedding_model_name, device=None, target_devices=None, embed_batch_size=None):
         if embedding_model_name:
             self.embedding_model_name = embedding_model_name
         
@@ -74,6 +77,48 @@ class chunker:
             show_progress=False,
         )
 
+
+    def _setup_semantic_chunking(self, embedding_model_name, device=None, target_devices=None, embed_batch_size=None):
+        if embedding_model_name:
+            self.embedding_model_name = embedding_model_name
+        
+        if embed_batch_size is not None:
+            self.batch_size = embed_batch_size
+            
+        if device is not None:
+            if self.device is None:
+                self.device = 'cpu'
+            self.device = device
+            
+        if embed_batch_size is None:
+            embed_batch_size = 1
+        
+        if "chunkers" not in self.__dict__.keys():
+            self.chunkers = {}
+        
+        if embedding_model_name not in self.chunkers.keys():
+            self.chunkers[embedding_model_name] = {}
+        
+        if device not in list(self.chunkers[embedding_model_name].keys()):
+                        
+            this_embed_model = HuggingFaceEmbedding(
+                model_name=self.embedding_model_name,
+                trust_remote_code=True,
+                embed_batch_size=embed_batch_size,
+                # parallel_process=True,
+                device=device,
+                target_devices=target_devices,
+            )
+            
+            this_splitter = SemanticSplitterNodeParser(
+                embed_model=this_embed_model,
+                show_progress=False,
+            )
+            
+            self.chunkers[embedding_model_name][device] = this_splitter
+        
+        return None
+
     def chunk_semantically(
         self,
         text: str,
@@ -91,19 +136,33 @@ class chunker:
 
         
         
-        if self.embed_model is not None or (self.batch_size != batch_size or self.device != device):
-            if embedding_model_name is None:
-                self._setup_semantic_chunking(self.embedding_model_name, device, None, batch_size)
-            else:
-                self._setup_semantic_chunking(embedding_model_name, device, None, batch_size)
+        if embedding_model_name is None:
+            self._setup_semantic_chunking(self.embedding_model_name, device, None, batch_size)
+        else:
+            self._setup_semantic_chunking(embedding_model_name, device, None, batch_size)
+
+        
+        # if self.embed_model is not None or (self.batch_size != batch_size or self.device != device):
+        #     if embedding_model_name is None:
+        #         self._setup_semantic_chunking(self.embedding_model_name, device, None, batch_size)
+        #     else:
+        #         self._setup_semantic_chunking(embedding_model_name, device, None, batch_size)
 
         # Get semantic nodes
         nodes = [
             (node.start_char_idx, node.end_char_idx)
-            for node in self.splitter.get_nodes_from_documents(
+            for node in self.chunkers[embedding_model_name][device].get_nodes_from_documents(
                 [Document(text=text)], show_progress=False
             )
         ]
+        
+        # nodes = [
+        #     (node.start_char_idx, node.end_char_idx)
+        #     for node in self.splitter.get_nodes_from_documents(
+        #         [Document(text=text)], show_progress=False
+        #     )
+        # ]
+        
         # Tokenize the entire text
         tokens = tokenizer.encode_plus(
             text,
