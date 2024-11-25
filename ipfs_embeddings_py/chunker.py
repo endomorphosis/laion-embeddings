@@ -77,7 +77,6 @@ class chunker:
             show_progress=False,
         )
 
-
     def _setup_semantic_chunking(self, embedding_model_name, device=None, target_devices=None, embed_batch_size=None):
         if embedding_model_name:
             self.embedding_model_name = embedding_model_name
@@ -133,22 +132,12 @@ class chunker:
             tokenizer = AutoTokenizer.from_pretrained(self.embedding_model_name, device='cpu', use_fast=True)
         elif tokenizer is None:
             raise ValueError("Tokenizer must be provided")
-
-        
         
         if embedding_model_name is None:
             self._setup_semantic_chunking(self.embedding_model_name, device, None, batch_size)
         else:
             self._setup_semantic_chunking(embedding_model_name, device, None, batch_size)
 
-        
-        # if self.embed_model is not None or (self.batch_size != batch_size or self.device != device):
-        #     if embedding_model_name is None:
-        #         self._setup_semantic_chunking(self.embedding_model_name, device, None, batch_size)
-        #     else:
-        #         self._setup_semantic_chunking(embedding_model_name, device, None, batch_size)
-
-        # Get semantic nodes
         nodes = [
             (node.start_char_idx, node.end_char_idx)
             for node in self.chunkers[embedding_model_name][device].get_nodes_from_documents(
@@ -156,14 +145,6 @@ class chunker:
             )
         ]
         
-        # nodes = [
-        #     (node.start_char_idx, node.end_char_idx)
-        #     for node in self.splitter.get_nodes_from_documents(
-        #         [Document(text=text)], show_progress=False
-        #     )
-        # ]
-        
-        # Tokenize the entire text
         tokens = tokenizer.encode_plus(
             text,
             return_offsets_mapping=True,
