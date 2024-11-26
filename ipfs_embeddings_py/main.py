@@ -595,9 +595,15 @@ class ipfs_embeddings_py:
             batch_results = []
             batch = []
             chunk_data = []
+            if endpoint in list(self.chunker.chunkers[model_name].keys()):
+                del self.chunker.chunkers[model_name][endpoint]
+                with torch.no_grad():
+                    torch.cuda.empty_cache()
+                    torch.cuda.list_gpu_processes()
+                
             while not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty():
                 item = await self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].get()
-                batch.append(item["content"])
+                batch.append(item)
                 chunk_data.append(item)
             if len(batch) >= batch_size:
                 results = endpoint_handler(batch)

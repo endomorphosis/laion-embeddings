@@ -7,6 +7,7 @@ from transformers import AutoTokenizer
 from huggingface import HuggingFaceEmbedding
 from node_parser import SemanticSplitterNodeParser
 import pysbd
+import torch
 # from node_parser import *
 # import llama_index
 # from llama_index.core.node_parser import SemanticSplitterNodeParser
@@ -42,41 +43,6 @@ class chunker:
         self.batch_size = 1
         self.device = None
 
-    def _setup_semantic_chunking_bak(self, embedding_model_name, device=None, target_devices=None, embed_batch_size=None):
-        if embedding_model_name:
-            self.embedding_model_name = embedding_model_name
-        
-        if embed_batch_size is not None:
-            self.batch_size = embed_batch_size
-            
-        if device is not None:
-            self.device = device
-            
-        if embed_batch_size is None:
-            embed_batch_size = 1
-            
-        if device is None:
-            self.embed_model = HuggingFaceEmbedding(
-                model_name=self.embedding_model_name,
-                trust_remote_code=True,
-                # parallel_process=True,
-                embed_batch_size=embed_batch_size,
-                target_devices=target_devices,
-            )            
-        else:
-            self.embed_model = HuggingFaceEmbedding(
-                model_name=self.embedding_model_name,
-                trust_remote_code=True,
-                embed_batch_size=embed_batch_size,
-                # parallel_process=True,
-                device=device,
-                target_devices=target_devices,
-            )
-            
-        self.splitter = SemanticSplitterNodeParser(
-            embed_model=self.embed_model,
-            show_progress=False,
-        )
 
     def _setup_semantic_chunking(self, embedding_model_name, device=None, target_devices=None, embed_batch_size=None):
         if embedding_model_name:
@@ -99,24 +65,26 @@ class chunker:
         if embedding_model_name not in self.chunkers.keys():
             self.chunkers[embedding_model_name] = {}
         
-        if device not in list(self.chunkers[embedding_model_name].keys()):
+        if device not in list(self.chunkers[embedding_model_name].keys()): 
                         
-            this_embed_model = HuggingFaceEmbedding(
-                model_name=self.embedding_model_name,
-                trust_remote_code=True,
-                embed_batch_size=embed_batch_size,
-                # parallel_process=True,
-                device=device,
-                target_devices=target_devices,
-            )
-            
-            this_splitter = SemanticSplitterNodeParser(
-                embed_model=this_embed_model,
+            self.chunkers[embedding_model_name][device] = SemanticSplitterNodeParser(
+                embed_model=HuggingFaceEmbedding(
+                    model_name=self.embedding_model_name,
+                    trust_remote_code=True,
+                    embed_batch_size=(int(64)),
+                    # parallel_process=True,
+                    device=device,
+                    target_devices=target_devices,
+                ),
                 show_progress=False,
             )
-            
-            self.chunkers[embedding_model_name][device] = this_splitter
         
+        return None
+    
+    async def delete_endpoint(self, model_name, endpoint):
+        del self.chunkers[model_name][endpoint]
+        with torch.no_grad():
+            torch.cuda.empty_cache()
         return None
 
     def chunk_semantically(
