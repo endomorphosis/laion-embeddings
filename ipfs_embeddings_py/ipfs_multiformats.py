@@ -30,11 +30,16 @@ class ipfs_multiformats_py:
             cid = CID('base32', 'raw', mh)
         else:
             with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
-                filename = f.name
-                with open(filename, 'w') as f_new:
-                    f_new.write(file_data)
-                file_content_hash = self.get_file_sha256(filename)
-                mh = self.get_multihash_sha256(file_content_hash)
-                cid = CID('base32', 1, 'raw', mh)
-                os.remove(filename)
+                try:
+                    filename = f.name
+                    with open(filename, 'w') as f_new:
+                        f_new.write(file_data)
+                    file_content_hash = self.get_file_sha256(filename)
+                    mh = self.get_multihash_sha256(file_content_hash)
+                    cid = CID('base32', 1, 'raw', mh)
+                    os.remove(filename)
+                except Exception as e:
+                    os.remove(filename)
+                    print("Error: ", e)
+                    return e
         return str(cid)

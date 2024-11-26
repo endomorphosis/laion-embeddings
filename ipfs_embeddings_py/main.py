@@ -10,6 +10,7 @@ import requests
 import torch
 import faiss
 import math
+import gc
 import timeit
 import time
 import numpy as np
@@ -299,14 +300,15 @@ class ipfs_embeddings_py:
                         this_chunk = self.chunk_cache[this_cid]
                         if len(this_chunk["children"]) == len(this_chunk["items"]):
                             this_cid_dataset = datasets.Dataset.from_dict({"items":this_chunk["items"]})
-                            this_cid_dataset.to_parquet(os.path.join(dst_path, "checkpoints", "sparse_chunks", this_cid + ".parquet"))
-                            print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + this_cid + " at " + dst_path)
+                            this_cid_path = os.path.join(dst_path, "checkpoints", "sparse_chunks", this_cid + ".parquet")
+                            this_cid_dataset.to_parquet(this_cid_path)
+                            print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + this_cid + " at " + this_cid_path)
                             self.cid_chunk_set.add(this_cid)
                             self.cid_chunk_list.append(this_cid)
                             del self.chunk_cache[this_cid]
                             del this_cid_dataset
                     self.saved = True
-            
+                    await asyncio.sleep(0.01)
         return None
     
     async def queue_size(self, model):
@@ -561,10 +563,10 @@ class ipfs_embeddings_py:
                     while self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full():
                         await asyncio.sleep(0.01)
                     self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].put_nowait(item)
-                self.cid_chunk_queue.task_done()
                 await asyncio.sleep(0.01)
             else:
                 pass
+            self.cid_chunk_queue.task_done()
             await asyncio.sleep(0.01)
         return None
     
@@ -572,15 +574,19 @@ class ipfs_embeddings_py:
         endpoint_queue = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) else False
         empty = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_accelerate_py.resources["queues"][model_name][endpoint]) else False
         queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
-
+        batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]
         test_ready = all([
             endpoint_queue,
             empty,
             queue_not_empty
         ])
         while True:
-            while not test_ready:
+            batch_results = []
+            batch = []
+            chunk_data = []
+            while not test_ready or batch_size == 0:
                 await asyncio.sleep(0.1)
+                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]
                 endpoint_queue = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) else False
                 empty = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_accelerate_py.resources["queues"][model_name][endpoint]) else False
                 queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
@@ -597,14 +603,23 @@ class ipfs_embeddings_py:
             chunk_data = []
             if endpoint in list(self.chunker.chunkers[model_name].keys()):
                 del self.chunker.chunkers[model_name][endpoint]
+            if "cuda" in endpoint:
                 with torch.no_grad():
-                    torch.cuda.empty_cache()
-                    torch.cuda.list_gpu_processes()
-                
+                    if hasattr(torch.cuda, 'empty_cache'):
+                        torch.cuda.empty_cache()
+                    if hasattr(torch.cuda, 'ipc_collect'):
+                        torch.cuda.ipc_collect()
+                gc.collect()
+            
+            while self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty():
+                asyncio.sleep(0.1)
+            
             while not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty():
                 item = await self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].get()
-                batch.append(item)
+                batch.append(item["content"])
                 chunk_data.append(item)
+                self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].task_done()
+
             if len(batch) >= batch_size:
                 results = endpoint_handler(batch)
                 if "hidden_states" in results.keys():
@@ -631,8 +646,7 @@ class ipfs_embeddings_py:
                     this_content = chunk_data[i]["content"]
                     this_parent_cid = chunk_data[i]["parent_cid"]
                     batch_results.append({"cid": this_cid, "index": this_index, "content": this_content , "embedding": this_embeddings, "parent_cid": this_parent_cid})
-                    batch = []
-                    chunk_data = []
+
             if len(batch_results) > 0:
                 batch_parent_cids = list(set([x["parent_cid"] for x in batch_results]))
                 for this_parent_cids in batch_parent_cids:
@@ -644,11 +658,25 @@ class ipfs_embeddings_py:
                     self.chunk_cache[this_parent_cid]["items"].append(result)
                     self.cid_chunk_set.add(result["cid"])
                     self.cid_chunk_list.append(result["cid"])
-                    self.cid_chunk_queue.task_done()
                 self.saved = False
                 batch_results = []
                 batch = []
                 chunk_data = []
+                if "cuda" in endpoint:
+                    with torch.no_grad():
+                        if hasattr(torch.cuda, 'empty_cache'):
+                            torch.cuda.empty_cache()
+                        if hasattr(torch.cuda, 'ipc_collect'):
+                            torch.cuda.ipc_collect()
+                gc.collect()
+                queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
+                queue_not_full = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+                queue_full = self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+                test_ready = all([
+                    endpoint_queue,
+                    empty,
+                    queue_full,
+                ])
                 await asyncio.sleep(0.01)                
 
     
