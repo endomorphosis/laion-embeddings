@@ -556,10 +556,13 @@ class ipfs_embeddings_py:
             self.chunk_cache[chunked_item["parent_cid"]]["parent_cid"] = chunked_item["parent_cid"]
             self.chunk_cache[chunked_item["parent_cid"]]["items"] = []
             if chunked_item is not None:
-                for item in chunked_item["items"]:
+                for i in range(len(chunked_item["items"])):
+                    item = chunked_item["items"][i]
                     while self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full():
                         await asyncio.sleep(0.01)
                     self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].put_nowait(item)
+                self.cid_chunk_queue.task_done()
+                await asyncio.sleep(0.01)
             else:
                 pass
             await asyncio.sleep(0.01)
@@ -590,6 +593,8 @@ class ipfs_embeddings_py:
                 ])
                 pass
             batch_results = []
+            batch = []
+            chunk_data = []
             while not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty():
                 item = await self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].get()
                 batch.append(item["content"])
@@ -635,6 +640,9 @@ class ipfs_embeddings_py:
                     self.cid_chunk_list.append(result["cid"])
                     self.cid_chunk_queue.task_done()
                 self.saved = False
+                batch_results = []
+                batch = []
+                chunk_data = []
                 await asyncio.sleep(0.01)                
 
     
