@@ -6,6 +6,7 @@ from llama_index.core.schema import Document
 from transformers import AutoTokenizer
 from huggingface import HuggingFaceEmbedding
 from node_parser import SemanticSplitterNodeParser
+import pysbd
 # from node_parser import *
 # import llama_index
 # from llama_index.core.node_parser import SemanticSplitterNodeParser
@@ -225,27 +226,26 @@ class chunker:
 
         if n_sentences is None:
             n_sentences = 8
-
-        tokens = tokenizer.encode_plus(
-            text, return_offsets_mapping=True, add_special_tokens=False
-        )
-        token_offsets = tokens.offset_mapping
-
+        seg = pysbd.Segmenter(language="en", clean=False)
+        segments = seg.segment(text)
         chunk_spans = []
-        chunk_start = 0
         count_chunks = 0
-        for i in range(0, len(token_offsets)):
-            if tokens.tokens(0)[i] in ('.', '!', '?') and (
-                (len(tokens.tokens(0)) == i + 1)
-                or (tokens.token_to_chars(i).end != tokens.token_to_chars(i + 1).start)
-            ):
+        count_sentences = 0
+        chunk_start = 0
+        count_tokens = 0
+        for i, segment in enumerate(segments):
+            count_sentences += 1
+            tokens = tokenizer.encode_plus(
+                segment, return_offsets_mapping=True, add_special_tokens=False
+            )
+            count_tokens += len(tokens.offset_mapping)
+            if count_sentences == n_sentences:
+                chunk_spans.append((chunk_start, count_tokens + 1))
+                chunk_start = count_tokens + 1
                 count_chunks += 1
-                if count_chunks == n_sentences:
-                    chunk_spans.append((chunk_start, i + 1))
-                    chunk_start = i + 1
-                    count_chunks = 0
-        if len(tokens.tokens(0)) - chunk_start > 1:
-            chunk_spans.append((chunk_start, len(tokens.tokens(0))))
+                count_sentences = 0
+        if count_tokens - chunk_start > 1:
+            chunk_spans.append((chunk_start, count_tokens))
         return chunk_spans
     
     def chunk_by_sliding_window(

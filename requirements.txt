@@ -9,7 +9,7 @@ multiformats
 ipfs_kit_py==0.0.8
 ipfs_datasets_py==0.0.9
 ipfs_embeddings_py==0.0.19
-ipfs_accelerate_py==0.0.35
+ipfs_accelerate_py==0.0.36
 datasets
 transformers
 aiohttp
@@ -22,3 +22,4 @@ llama-index
 torch
 haystack
 faiss-cpu
+pysbd
