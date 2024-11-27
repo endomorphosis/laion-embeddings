@@ -663,10 +663,15 @@ class ipfs_embeddings_py:
                 for this_parent_cids in batch_parent_cids:
                     if this_parent_cids not in list(self.chunk_cache.keys()):
                         self.chunk_cache[this_parent_cids] = {}
+                    self.chunk_cache[this_parent_cids]["items"] = []
+                    self.chunk_cache[this_parent_cids]["children"] = []
+                    self.chunk_cache[this_parent_cids]["parent_cid"] = this_parent_cids                    
                 for result in batch_results:
-                    this_cid = result["cid"]
                     this_parent_cid = result["parent_cid"]
+                    this_cid = result["cid"]
                     self.chunk_cache[this_parent_cid]["items"].append(result)
+                    if this_cid not in set(self.chunk_cache[this_parent_cid]["children"]):  
+                        self.chunk_cache[this_parent_cid]["children"].append(this_cid)
                     self.cid_chunk_set.add(result["cid"])
                     self.cid_chunk_list.append(result["cid"])
                 self.saved = False
