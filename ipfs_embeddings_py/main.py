@@ -498,7 +498,7 @@ class ipfs_embeddings_py:
         save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
         all_tasks.append(save_task)
         for _ in range(num_workers):
-            producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0]))
+            producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0], dst_path))
             producer_tasks.append(producer_task)
             all_tasks.append(producer_task)
                 
@@ -685,7 +685,7 @@ class ipfs_embeddings_py:
                 await asyncio.sleep(0.01)                
 
     
-    async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
+    async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None):
         async for item in self.async_generator(dataset_stream):
             while self.cid_chunk_queue.full():
                 await asyncio.sleep(1)
@@ -700,7 +700,13 @@ class ipfs_embeddings_py:
                 chunked_item = await self.chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model)
             else:
                 pass
-            await asyncio.sleep(0.01)                
+            await asyncio.sleep(0.01)
+            chunk_dir_path = os.path.join(dst_path, "checkpoints", "sparse_chunks")
+            chunk_files = os.listdir(chunk_dir_path)
+            chunk_files = [x for x in chunk_files if ".parquet" in x]
+            saved_chunk_cids = [x.split(".")[0] for x in chunk_files]
+            self.cid_chunk_list = saved_chunk_cids
+            self.cid_chunk_set = set(saved_chunk_cids)                
         return None
 
     async def index_dataset(self, dataset, split, column, dst_path, models = None):
