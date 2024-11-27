@@ -307,9 +307,11 @@ class ipfs_embeddings_py:
                             self.cid_chunk_list.append(this_cid)
                             del self.chunk_cache[this_cid]
                             del this_cid_dataset
-                    self.saved = True            
+                    self.saved = True
+                    await asyncio.sleep(0.01)            
                     chunk_dir_path = os.path.join(dst_path, "checkpoints", "sparse_chunks")
                     chunk_files = os.listdir(chunk_dir_path)
+                    await asyncio.sleep(0.01)
                     chunk_files = [x for x in chunk_files if ".parquet" in x]
                     saved_chunk_cids = [x.split(".")[0] for x in chunk_files]
                     self.cid_chunk_list += saved_chunk_cids
