@@ -468,7 +468,12 @@ class ipfs_embeddings_py:
         await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)
         queue_size = await self.queue_size(models[0])
         self.cid_chunk_queue = asyncio.Queue(queue_size)
-
+        chunk_dir_path = os.path.join(dst_path, "checkpoints", "sparse_chunks")
+        chunk_files = os.listdir(chunk_dir_path)
+        chunk_files = [x for x in chunk_files if ".parquet" in x]
+        saved_chunk_cids = [x.split(".")[0] for x in chunk_files]
+        self.cid_chunk_list = saved_chunk_cids
+        self.cid_chunk_set = set(saved_chunk_cids)
         # Setup parallel processing
         num_workers = min(multiprocessing.cpu_count(), 1)  # Use up to 1 CPU cores
         # num_workers = min(multiprocessing.cpu_count(), 8)  # Use up to 8 CPU cores

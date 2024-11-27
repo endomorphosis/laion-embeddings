@@ -23,3 +23,5 @@ torch
 haystack
 faiss-cpu
 pysbd
+optimum
+optimum[openvino]
