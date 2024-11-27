@@ -504,7 +504,7 @@ class ipfs_embeddings_py:
         save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
         all_tasks.append(save_task)
         for _ in range(num_workers):
-            producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0], dst))
+            producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0], dst_path))
             producer_tasks.append(producer_task)
             all_tasks.append(producer_task)
                 
