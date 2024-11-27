@@ -25,3 +25,4 @@ faiss-cpu
 pysbd
 optimum
 optimum[openvino]
+ipfs_transformers_py
