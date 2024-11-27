@@ -307,7 +307,13 @@ class ipfs_embeddings_py:
                             self.cid_chunk_list.append(this_cid)
                             del self.chunk_cache[this_cid]
                             del this_cid_dataset
-                    self.saved = True
+                    self.saved = True            
+                    chunk_dir_path = os.path.join(dst_path, "checkpoints", "sparse_chunks")
+                    chunk_files = os.listdir(chunk_dir_path)
+                    chunk_files = [x for x in chunk_files if ".parquet" in x]
+                    saved_chunk_cids = [x.split(".")[0] for x in chunk_files]
+                    self.cid_chunk_list += saved_chunk_cids
+                    self.cid_chunk_set = set(saved_chunk_cids)     
                     await asyncio.sleep(0.01)
         return None
     
@@ -498,7 +504,7 @@ class ipfs_embeddings_py:
         save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
         all_tasks.append(save_task)
         for _ in range(num_workers):
-            producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0], dst_path))
+            producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0], dst))
             producer_tasks.append(producer_task)
             all_tasks.append(producer_task)
                 
@@ -701,12 +707,7 @@ class ipfs_embeddings_py:
             else:
                 pass
             await asyncio.sleep(0.01)
-            chunk_dir_path = os.path.join(dst_path, "checkpoints", "sparse_chunks")
-            chunk_files = os.listdir(chunk_dir_path)
-            chunk_files = [x for x in chunk_files if ".parquet" in x]
-            saved_chunk_cids = [x.split(".")[0] for x in chunk_files]
-            self.cid_chunk_list = saved_chunk_cids
-            self.cid_chunk_set = set(saved_chunk_cids)                
+           
         return None
 
     async def index_dataset(self, dataset, split, column, dst_path, models = None):
