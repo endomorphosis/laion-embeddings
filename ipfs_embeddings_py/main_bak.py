@@ -499,7 +499,7 @@ class ipfs_embeddings_py:
             chunk_consumer = asyncio.create_task(self.chunk_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
             consumer_tasks.append(chunk_consumer)
             all_tasks.append(chunk_consumer)
-            endpoint_consumer = asyncio.create_task(self.endpoint_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
+            endpoint_consumer = asyncio.create_task(self.chunk_endpoint_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
             consumer_tasks.append(endpoint_consumer)
             all_tasks.append(endpoint_consumer)
         
@@ -511,7 +511,6 @@ class ipfs_embeddings_py:
             all_tasks.append(producer_task)
                 
         # Wait for all tasks to complete
-        
         # await asyncio.gather(*consumer_tasks, *producer_tasks, save_task)
         # await asyncio.gather(*all_tasks, save_task)
         await asyncio.gather(*all_tasks)
@@ -583,6 +582,228 @@ class ipfs_embeddings_py:
             await asyncio.sleep(0.01)
         return None
     
+    async def chunk_endpoint_consumer(self, batch_size, model_name, endpoint, endpoint_handler):                
+        endpoint_queue = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) else False
+        empty = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_accelerate_py.resources["queues"][model_name][endpoint]) else False
+        queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
+        batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]
+        test_ready = all([
+            endpoint_queue,
+            empty,
+            queue_not_empty
+        ])
+        while True:
+            batch_results = []
+            batch = []
+            chunk_data = []
+            while not test_ready or batch_size == 0:
+                await asyncio.sleep(0.1)
+                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]
+                endpoint_queue = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) else False
+                empty = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_accelerate_py.resources["queues"][model_name][endpoint]) else False
+                queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
+                queue_not_full = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+                queue_full = self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+                test_ready = all([
+                    endpoint_queue,
+                    empty,
+                    queue_full,
+                ])
+                pass
+            batch_results = []
+            batch = []
+            chunk_data = []
+            if endpoint in list(self.chunker.chunkers[model_name].keys()):
+                del self.chunker.chunkers[model_name][endpoint]
+            if "cuda" in endpoint:
+                with torch.no_grad():
+                    if hasattr(torch.cuda, 'empty_cache'):
+                        torch.cuda.empty_cache()
+                    if hasattr(torch.cuda, 'ipc_collect'):
+                        torch.cuda.ipc_collect()
+                gc.collect()
+            
+            while self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty():
+                asyncio.sleep(0.1)
+            
+            while not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty():
+                item = await self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].get()
+                batch.append(item["content"])
+                chunk_data.append(item)
+                self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].task_done()
+
+            if len(batch) >= batch_size:
+                results = endpoint_handler(batch)
+                if "hidden_states" in results.keys():
+                    hidden_states = results["hidden_states"]
+                    embeddings = []
+                    if isinstance(hidden_states, torch.Tensor):
+                        embeddings = torch.mean(hidden_states, dim=1).detach().cpu().numpy()
+                    else:
+                        for state in hidden_states:
+                            if isinstance(state, torch.Tensor):
+                                embedding = torch.mean(state, dim=0).detach().cpu().numpy()
+                                embeddings.append(embedding)
+                            else:
+                                embedding = np.mean(state, axis=0)
+                                embedding = embedding.tolist()
+                                embeddings.append(embedding)
+                else:
+                    print("this might be the wrong endpoint handler")
+
+                for i in range(len(embeddings)):
+                    this_embeddings = embeddings[i]
+                    this_cid = chunk_data[i]["cid"]
+                    this_index = chunk_data[i]["index"]
+                    this_content = chunk_data[i]["content"]
+                    this_parent_cid = chunk_data[i]["parent_cid"]
+                    batch_results.append({"cid": this_cid, "index": this_index, "content": this_content , "embedding": this_embeddings, "parent_cid": this_parent_cid})
+
+            if len(batch_results) > 0:
+                batch_parent_cids = list(set([x["parent_cid"] for x in batch_results]))
+                for this_parent_cids in batch_parent_cids:
+                    if this_parent_cids not in list(self.chunk_cache.keys()):
+                        self.chunk_cache[this_parent_cids] = {}
+                    self.chunk_cache[this_parent_cids]["items"] = []
+                    self.chunk_cache[this_parent_cids]["children"] = []
+                    self.chunk_cache[this_parent_cids]["parent_cid"] = this_parent_cids                    
+                for result in batch_results:
+                    this_parent_cid = result["parent_cid"]
+                    this_cid = result["cid"]
+                    self.chunk_cache[this_parent_cid]["items"].append(result)
+                    if this_cid not in set(self.chunk_cache[this_parent_cid]["children"]):  
+                        self.chunk_cache[this_parent_cid]["children"].append(this_cid)
+                    self.cid_chunk_set.add(result["cid"])
+                    self.cid_chunk_list.append(result["cid"])
+                self.saved = False
+                batch_results = []
+                batch = []
+                chunk_data = []
+                if "cuda" in endpoint:
+                    with torch.no_grad():
+                        if hasattr(torch.cuda, 'empty_cache'):
+                            torch.cuda.empty_cache()
+                        if hasattr(torch.cuda, 'ipc_collect'):
+                            torch.cuda.ipc_collect()
+                gc.collect()
+                queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
+                queue_not_full = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+                queue_full = self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+                test_ready = all([
+                    endpoint_queue,
+                    empty,
+                    queue_full,
+                ])
+                await asyncio.sleep(0.01)                
+
+    async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None):
+        async for item in self.async_generator(dataset_stream):
+            while self.cid_chunk_queue.full():
+                await asyncio.sleep(1)
+            if column is not None:
+                cid = self.multiformats.get_cid(item[column])
+            else:
+                json_item = json.dumps(item)
+                cid = self.multiformats.get_cid(json_item)
+            if cid not in list(item.keys()):
+                item["cid"] = cid
+            if cid not in self.cid_chunk_set:
+                chunked_item = await self.chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model)
+            else:
+                pass
+            await asyncio.sleep(0.01)
+           
+        return None
+
+    async def index_dataset(self, dataset, split, column, dst_path, models = None):
+        if not os.path.exists(dst_path):
+            os.makedirs(dst_path)
+        batch_sizes = {}
+        consumer_tasks = {}
+        self.queues = {}
+        self.cid_set = set()
+        self.all_cid_list = {}
+        self.cid_chunk_queue = asyncio.Queue()
+        # Initialize resources and endpoints
+        resource_keys = list(self.resources.keys())
+        endpoints = {resource: self.resources[resource] 
+                    for resource in resource_keys if "endpoints" in resource}
+        endpoint_types = list(endpoints.keys())
+    
+        # Load required resources
+        self.resources = await self.init(models, endpoints)
+
+        await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
+        
+        # Load dataset
+        if split is None:
+            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+        else:
+            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+        
+        columns = self.dataset.column_names
+        columns.append("cid")
+        await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)
+        queue_size = await self.queue_size(models[0])
+        self.cid_queue = asyncio.Queue(queue_size)
+        num_workers = min(multiprocessing.cpu_count(), 1)  # Use up to 1 CPU cores
+        # num_workers = min(multiprocessing.cpu_count(), 8)  # Use up to 8 CPU cores
+        # num_workers = multiprocessing.cpu_count()
+        consumer_tasks = []
+        producer_tasks = []
+        all_tasks = []
+        
+        # Create producer and consumer tasks
+        for endpoint in list(self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]].keys()):
+            if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True and "openvino:" in endpoint:
+                continue
+            this_batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][models[0]][endpoint]
+            this_endpoint_handler = self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]][endpoint]
+            chunk_consumer = asyncio.create_task(self.consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
+            consumer_tasks.append(chunk_consumer)
+            all_tasks.append(chunk_consumer)
+            endpoint_consumer = asyncio.create_task(self.endpoint_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
+            consumer_tasks.append(endpoint_consumer)
+            all_tasks.append(endpoint_consumer)
+        
+        save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
+        all_tasks.append(save_task)
+        for _ in range(num_workers):
+            producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
+            producer_tasks.append(producer_task)
+            all_tasks.append(producer_task)
+                
+        # Wait for all tasks to complete
+        # await asyncio.gather(*consumer_tasks, *producer_tasks, save_task)
+        # await asyncio.gather(*all_tasks, save_task)
+        await asyncio.gather(*all_tasks)
+        return None        
+
+    async def consumer(self, queue, column, batch_size, model_name, endpoint):
+        print("consumer started for model " + model_name + " at endpoint " + endpoint)
+        self.consumer_task_done[(model_name, endpoint)] = False
+        batch = []
+        if model_name not in self.caches.keys():
+            self.caches[model_name] = {"items" : []}
+        if model_name not in self.index.keys():
+            self.index[model_name] = datasets.Dataset.from_dict({"cid": [], "embedding": []})
+        while True:
+            item = await queue.get()  # Wait for item
+            batch.append(item)
+            if len(batch) >= batch_size:
+                # Process batch
+                results = await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
+                for i in range(len(results)):
+                    self.caches[model_name]["items"].append({"cid": batch[i]["cid"], "embedding": results[i]})
+                batch = []  # Clear batch after sending
+                self.saved = False
+            queue.task_done()
+            if self.producer_task_done and queue.empty():
+                self.consumer_task_done[(model_name, endpoint)] = True
+                break
+        return None
+
+
     async def endpoint_consumer(self, batch_size, model_name, endpoint, endpoint_handler):                
         endpoint_queue = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) else False
         empty = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_accelerate_py.resources["queues"][model_name][endpoint]) else False
@@ -697,199 +918,6 @@ class ipfs_embeddings_py:
                 ])
                 await asyncio.sleep(0.01)                
 
-    
-    async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None):
-        async for item in self.async_generator(dataset_stream):
-            while self.cid_chunk_queue.full():
-                await asyncio.sleep(1)
-            if column is not None:
-                cid = self.multiformats.get_cid(item[column])
-            else:
-                json_item = json.dumps(item)
-                cid = self.multiformats.get_cid(json_item)
-            if cid not in list(item.keys()):
-                item["cid"] = cid
-            if cid not in self.cid_chunk_set:
-                chunked_item = await self.chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model)
-            else:
-                pass
-            await asyncio.sleep(0.01)
-           
-        return None
-
-    async def index_dataset(self, dataset, split, column, dst_path, models = None):
-        if not os.path.exists(dst_path):
-            os.makedirs(dst_path)
-        self.queues = {}
-        self.cid_set = set()
-        self.all_cid_list = {}
-        consumer_tasks = {}
-        batch_sizes = {}
-        if models is None:
-            models = list(self.tei_endpoints.keys())
-        for model in models:
-            if model not in self.queues:
-                self.queues[model] = {}
-        if split is None:
-            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
-        else:
-            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
-        columns = self.dataset.column_names
-        columns.append("cid")
-        await self.load_checkpoints( dataset, split, dst_path, models)
-        consumer_tasks = {}
-        try:
-            gpus = torch.cuda.device_count()            
-        except:
-            gpus = 0
-        try:
-            cpus = torch.get_num_threads()
-        except:
-            cpus = 0
-        for model in models:
-            endpoints = self.get_endpoints(model)
-            local = self.get_endpoints(model, "local")
-            openvino = self.get_endpoints(model, "openvino")
-            libp2p = self.get_endpoints(model, "libp2p")
-            tei = self.get_endpoints(model, "tei")
-            cuda = self.get_endpoints(model, "cuda")
-            if model not in self.batch_sizes:
-                self.batch_sizes[model] = {}
-            if model not in self.tokenizer.keys():
-                self.tokenizer[model] = {}                    
-            if len(cuda) > 0 and len(gpus) > 0:
-                self.local_endpoints[model] = {"cuda:" + str(gpu) : None for gpu in range(gpus) } if gpus > 0 else {"cpu": None}
-                for gpu in range(gpus):
-                    self.tokenizer[model]["cuda:" + str(gpu)] = AutoTokenizer.from_pretrained(model, device='cuda:' + str(gpu), use_fast=True)
-                    self.local_endpoints[model]["cuda:" + str(gpu)] = AutoModel.from_pretrained(model).to("cuda:" + str(gpu))
-                    torch.cuda.empty_cache()  # Free up unused memory
-                    self.queues[model]["cuda:" + str(gpu)] = asyncio.Queue(4)
-                    batch_size = await self.max_batch_size(model, "cuda:" + str(gpu))
-                    self.batch_sizes[model]["cuda:" + str(gpu)] = batch_size
-                    consumer_tasks[(model, "cuda:" + str(gpu))] = asyncio.create_task(self.consumer(self.queues[model]["cuda:" + str(gpu)], column, batch_size, model, "cuda:" + str(gpu)))
-            elif len(local) > 0 and len(cpus) > 0:
-                #detect openvino locally
-                openvino_test = None
-                llama_cpp_test = None
-                ipex_test = None
-                try:
-                    openvino_test = self.test_local_openvino()
-                except Exception as e:
-                    print(e)
-                    pass
-                try:
-                    llama_cpp_test = self.test_llama_cpp()
-                except Exception as e:
-                    print(e)
-                    pass
-                try:
-                    ipex_test = self.test_ipex()
-                except Exception as e:
-                    print(e)
-                    pass
-                
-                print("local_endpoint_test")
-                results = {
-                    "openvino": openvino_test,
-                    "llama_cpp": llama_cpp_test,
-                    "ipex": ipex_test
-                }
-                print(results)
-                if not openvino_test and not llama_cpp_test and not ipex_test:                
-                    self.local_endpoints[model]["cpu"] = AutoModel.from_pretrained(model).to("cpu")
-                    self.queues[model]["cpu"] = asyncio.Queue()
-                    consumer_tasks[(model, "cpu")] = asyncio.create_task(self.consumer(self.queues[model]["cpu"], column, 1, model, "cpu"))
-                elif openvino_test:
-                    ov_count = 0
-                    for endpoint in local:
-                        if "openvino" in endpoint:
-                            endpoint_name = "openvino:"+str(ov_count)
-                            batch_size = 0
-                            if model not in self.batch_sizes:
-                                self.batch_sizes[model] = {}
-                            if model not in self.queues:
-                                self.queues[model] = {}
-                            if endpoint not in list(self.batch_sizes[model].keys()):
-                                batch_size = await self.max_batch_size(model, endpoint)
-                                self.batch_sizes[model][endpoint_name] = batch_size
-                            if self.batch_sizes[model][endpoint_name] > 0:
-                                self.queues[model][endpoint_name] = asyncio.Queue()
-                                consumer_tasks[(model, endpoint_name )] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-                            openvino_count = openvino_count + 1
-                elif llama_cpp_test:
-                    llama_count = 0
-                    for endpoint in local:
-                        if "llama_cpp" in endpoint:
-                            endpoint_name = "llama:"+str(ov_count)
-                            batch_size = 0                            
-                            if model not in self.batch_sizes:
-                                self.batch_sizes[model] = {}
-                            if model not in self.queues:
-                                self.queues[model] = {}
-                            if endpoint not in list(self.batch_sizes[model].keys()):
-                                batch_size = await self.max_batch_size(model, endpoint)
-                                self.batch_sizes[model][endpoint] = batch_size
-                            if self.batch_sizes[model][endpoint] > 0:
-                                self.queues[model][endpoint] = asyncio.Queue()
-                                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-                            llama_count = llama_count + 1
-                elif ipex_test:
-                    ipex_count = 0
-                    for endpoint in local:
-                        if "ipex" in endpoint:
-                            endpoint_name = "ipex:"+str(ov_count)
-                            batch_size = 0
-                            if model not in self.batch_sizes:
-                                self.batch_sizes[model] = {}
-                            if model not in self.queues:
-                                self.queues[model] = {}
-                            if endpoint not in list(self.batch_sizes[model].keys()):
-                                batch_size = await self.max_batch_size(model, endpoint)
-                                self.batch_sizes[model][endpoint] = batch_size
-                            if self.batch_sizes[model][endpoint] > 0:
-                                self.queues[model][endpoint] = asyncio.Queue()
-                                consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-                            ipex_count = ipex_count + 1
-            if len(openvino) > 0:
-                for endpoint in openvino:
-                    batch_size = 0
-                    if model not in self.batch_sizes:
-                        self.batch_sizes[model] = {}
-                    if model not in self.queues:
-                        self.queues[model] = {}
-                    if endpoint not in list(self.batch_sizes[model].keys()):
-                        batch_size = await self.max_batch_size(model, endpoint)
-                        self.batch_sizes[model][endpoint] = batch_size
-                    if self.batch_sizes[model][endpoint] > 0:
-                        self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
-                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-            if not endpoints:
-                raise ValueError("No endpoints available for model " + model)
-                  
-            if len(tei) > 0:
-                for endpoint in tei:
-                    batch_size = 0
-                    if model not in self.batch_sizes:
-                        self.batch_sizes[model] = {}
-                    if model not in self.queues:
-                        self.queues[model] = {}
-                    if endpoint not in list(self.batch_sizes[model].keys()):
-                        batch_size = await self.max_batch_size(model, endpoint)
-                        self.batch_sizes[model][endpoint] = batch_size
-                    if self.batch_sizes[model][endpoint] > 0:
-                        self.queues[model][endpoint] = asyncio.Queue()  # Unbounded queue
-                        consumer_tasks[(model, endpoint)] = asyncio.create_task(self.consumer(self.queues[model][endpoint], column, batch_size, model, endpoint))
-            if not endpoints:
-                raise ValueError("No endpoints available for model " + model)
-        
-        # Compute commonn
-        self.cid_set = set.intersection(*self.all_cid_set.values())
-        producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
-        save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
-        await asyncio.gather(producer_task, *consumer_tasks.values(), save_task)
-        self.save_checkpoints_to_disk(dataset, dst_path, models)
-        return None 
-    
 
     async def producer(self, dataset_stream, column, queues):
         tasks = []
