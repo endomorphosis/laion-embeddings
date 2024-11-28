@@ -759,9 +759,9 @@ class ipfs_embeddings_py:
                 continue
             this_batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][models[0]][endpoint]
             this_endpoint_handler = self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]][endpoint]
-            model_consumer = asyncio.create_task(self.item_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
+            model_consumer = asyncio.create_task(self.model_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
             consumer_tasks.append(model_consumer)
-            all_tasks.append(model_consumer)
+            all_tasks.append(model_consumer)               
             endpoint_consumer = asyncio.create_task(self.endpoint_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
             consumer_tasks.append(endpoint_consumer)
             all_tasks.append(endpoint_consumer)
@@ -769,6 +769,9 @@ class ipfs_embeddings_py:
         # save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
         # all_tasks.append(save_task)
         for _ in range(num_workers):
+            item_consumer = asyncio.create_task(self.item_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
+            consumer_tasks.append(item_consumer)
+            all_tasks.append(item_consumer)
             producer_task = asyncio.create_task(self.item_producer(self.dataset, column, self.queues))        
             producer_tasks.append(producer_task)
             all_tasks.append(producer_task)
@@ -778,9 +781,53 @@ class ipfs_embeddings_py:
         # await asyncio.gather(*all_tasks, save_task)
         await asyncio.gather(*all_tasks)
         return None        
+    
+    
+    async def model_consumer(self, batch_size, model_name, endpoint, endpoint_handler):
+        print("model consumer started for model " + model_name + " at endpoint " + endpoint)
+        while True:           
+            model_queue = True if "cid_queue" in dir(self) else False
+            empty = True if "cid_queue" in dir(self) and "empty" in dir(self.cid_chunk_queue) else False
+            queue_not_empty = not self.cid_queue.empty()
 
+            test_ready = all([
+                model_queue,
+                empty,
+                queue_not_empty
+            ])
+            while not test_ready:
+                await asyncio.sleep(0.1)
+                model_queue = True if "cid_queue" in dir(self) else False
+                empty = True if "cid_queue" in dir(self) and "empty" in dir(self.cid_chunk_queue) else False
+                queue_empty = self.cid_queue.empty()
+                queue_not_empty = not self.cid_queue.empty()
+                test_ready = all([
+                    model_queue,
+                    empty,
+                    queue_not_empty
+                ])
+                pass
+        
+            processed_item = await self.cid_queue.get()
+            batch_results = []
+            batch = []
+            chunk_data = []
+            
+            if processed_item["cid"] not in list(self.item_cache.keys()):
+               self.item_cache[processed_item["cid"]] = {}
+            if processed_item is not None:
+                while self.ipfs_accelerate_py.resources["queue"][model_name].full():
+                    await asyncio.sleep(0.01)
+                self.ipfs_accelerate_py.resources["queue"][model_name].put_nowait(processed_item)
+                await asyncio.sleep(0.01)
+            else:
+                pass
+            self.cid_queue.task_done()
+            await asyncio.sleep(0.01)
+        return None
+        
     async def item_consumer(self, batch_size, model_name, endpoint, endpoint_handler):
-        print("consumer started for model " + model_name + " at endpoint " + endpoint)
+        print("item consumer started for model " + model_name + " at endpoint " + endpoint)
         try:
             batch_size = await self.max_batch_size(model_name, endpoint, endpoint_handler)
             queue_size = await self.queue_size(model_name)
