@@ -152,7 +152,7 @@ class ipfs_embeddings_py:
         self.metadata = metadata
         self.index_dataset = self.index_dataset
         self.max_batch_size = self.ipfs_accelerate_py.max_batch_size
-        self.producer = self.producer
+        self.item_producer = self.item_producer
         self.save_checkpoints_to_disk = self.save_checkpoints_to_disk
         self.save_chunks_to_disk = self.save_chunks_to_disk
         self.index_cid = self.index_cid
@@ -769,7 +769,7 @@ class ipfs_embeddings_py:
         # save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
         # all_tasks.append(save_task)
         for _ in range(num_workers):
-            producer_task = asyncio.create_task(self.producer(self.dataset, column, self.queues))        
+            producer_task = asyncio.create_task(self.item_producer(self.dataset, column, self.queues))        
             producer_tasks.append(producer_task)
             all_tasks.append(producer_task)
                 
@@ -839,7 +839,7 @@ class ipfs_embeddings_py:
                 await asyncio.sleep(0.01)
             else:
                 pass
-            self.cid_chunk_queue.task_done()
+            self.cid_queue.task_done()
             await asyncio.sleep(0.01)
         return None
         
@@ -1013,41 +1013,41 @@ class ipfs_embeddings_py:
                 self.saved = False
                 
                                 
-    async def process_item2(self, item, column=None, queues=None, embed_model=None, dst_path=None):
-            models = list(self.queues.keys())
-            for model, model_queues in queues.items():
-                if model not in list(self.all_cid_set.keys()):
-                    self.all_cid_set[model] = set()
-                if len(model_queues) > 0:
-                    if this_cid not in self.all_cid_set[model]:
-                        model_queue_lengths = {k: v.qsize() for k, v in model_queues.items()}
-                        ## if all model queues are empty, choose 
-                        if all(value == 0 for value in model_queue_lengths.values()):
-                            chosen_queue = random.choice(list(model_queues.keys()))
-                        else:
-                            chosen_queue = min(model_queue_lengths, key=model_queue_lengths.get)
-                        queue = model_queues[chosen_queue]          
-                        # endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
-                        while queue.full():
-                            await asyncio.sleep(0.1)
-                        queue.put_nowait(item)  # Non-blocking put
-            return item
+    # async def process_item2(self, item, column=None, queues=None, embed_model=None, dst_path=None):
+    #         models = list(self.queues.keys())
+    #         for model, model_queues in queues.items():
+    #             if model not in list(self.all_cid_set.keys()):
+    #                 self.all_cid_set[model] = set()
+    #             if len(model_queues) > 0:
+    #                 if this_cid not in self.all_cid_set[model]:
+    #                     model_queue_lengths = {k: v.qsize() for k, v in model_queues.items()}
+    #                     ## if all model queues are empty, choose 
+    #                     if all(value == 0 for value in model_queue_lengths.values()):
+    #                         chosen_queue = random.choice(list(model_queues.keys()))
+    #                     else:
+    #                         chosen_queue = min(model_queue_lengths, key=model_queue_lengths.get)
+    #                     queue = model_queues[chosen_queue]          
+    #                     # endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
+    #                     while queue.full():
+    #                         await asyncio.sleep(0.1)
+    #                     queue.put_nowait(item)  # Non-blocking put
+    #         return item
     
-    async def producer_bak(self, dataset_stream, column, queues, embed_model=None, dst_path=None):
-        tasks = []
-        self.producer_task_done = False
-        async for item in self.async_generator(dataset_stream):
-            task = self.process_item(item, column, queues)
-            tasks.append(task)
-            if len(tasks) >= 1:
-                await asyncio.gather(*tasks)
-                tasks = []
-        if tasks:
-            await asyncio.gather(*tasks)
-        self.producer_task_done = True
-        return None
+    # async def producer_bak(self, dataset_stream, column, queues, embed_model=None, dst_path=None):
+    #     tasks = []
+    #     self.producer_task_done = False
+    #     async for item in self.async_generator(dataset_stream):
+    #         task = self.process_item(item, column, queues)
+    #         tasks.append(task)
+    #         if len(tasks) >= 1:
+    #             await asyncio.gather(*tasks)
+    #             tasks = []
+    #     if tasks:
+    #         await asyncio.gather(*tasks)
+    #     self.producer_task_done = True
+    #     return None
     
-    async def producer(self, dataset_stream, column, embed_model=None, dst_path=None):
+    async def item_producer(self, dataset_stream, column, embed_model=None, dst_path=None):
         tasks = []
         self.producer_task_done = False
         async for item in self.async_generator(dataset_stream):
