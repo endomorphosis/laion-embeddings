@@ -133,7 +133,7 @@ class ipfs_embeddings_py:
         self.cid_chunk_list = []
         self.cid_chunk_set = set()
         self.batch_sizes = {}
-        self.cid_list = set()
+        self.cid_list = []
         self.cid_set = set()
         self.new_dataset = None
         self.all_cid_list = {}
@@ -1026,13 +1026,14 @@ class ipfs_embeddings_py:
                         batch_results.append({"cid": this_cid, "data": data , "embedding": this_embeddings})
             
             if len(batch_results) > 0:
-                batch_parent_cids = list(set([x["parent_cid"] for x in batch_results]))
-                for this_parent_cids in batch_parent_cids:
-                    if this_parent_cids not in list(self.chunk_cache.keys()):
-                        self.chunk_cache[this_parent_cids] = {}
-                    self.chunk_cache[this_parent_cids]["items"] = []
-                    self.chunk_cache[this_parent_cids]["children"] = []
-                    self.chunk_cache[this_parent_cids]["parent_cid"] = this_parent_cids                    
+                if "parent_cid" in list(batch_results[0].keys()):
+                    batch_parent_cids = list(set([x["parent_cid"] for x in batch_results]))
+                    for this_parent_cids in batch_parent_cids:
+                        if this_parent_cids not in list(self.chunk_cache.keys()):
+                            self.chunk_cache[this_parent_cids] = {}
+                        self.chunk_cache[this_parent_cids]["items"] = []
+                        self.chunk_cache[this_parent_cids]["children"] = []
+                        self.chunk_cache[this_parent_cids]["parent_cid"] = this_parent_cids                    
                 for result in batch_results:
                     if "parent_cid" in list(result.keys()):
                         this_parent_cid = result["parent_cid"]
