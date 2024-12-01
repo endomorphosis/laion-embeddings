@@ -375,30 +375,35 @@ class ipfs_embeddings_py:
                                 self.caches["new_dataset"][this_cid] = this_data                            
                             if this_embedding is not None:
                                 if this_cid not in list(self.caches[model].keys()):
+                                    this_embedding = np.array(this_embedding)
                                     self.caches[model][this_cid] = this_embedding
-
+                    self.item_cache[model] = {}
                 for model in models:
                     if model in list(self.caches.keys()) and model != "new_dataset":
                         if "items" in list(self.caches[model].keys()) and len(self.caches[model]["items"]) == 0:
                             del self.caches[model]["items"]
                         if self.caches[model] and len(list(self.caches[model].keys())) > 0:                           
                             this_dataset = datasets.Dataset.from_dict(self.caches[model])
-                            this_cid_dataset = this_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
-                            this_cid_list = list(this_cid_dataset)
-                            new_dataset_shards = [x for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x]
-                            next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_shard_{len(new_dataset_shards)}"
-                            this_dataset.to_parquet(os.path.join(dst_path, "checkpoints", model, next_filename_shard + ".parquet"))
-                            print("Saved " + str(len(this_cid_dataset)) + " embeddings to disk for CID " + this_cid + " at " + dst_path)
+                            this_cid_list = list(self.caches[model].keys())
+                            this_cids_dataset = datasets.Dataset.from_dict({"cids": this_cid_list})
+                            ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints", model.replace('/', '___')))
+                            new_dataset_shards = [x for x in ls_checkpoints if f"ipfs_{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard" in x and "_cids" not in x]
+                            next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard_{len(new_dataset_shards)}"
+                            this_dataset.to_parquet(os.path.join(dst_path, "checkpoints", model.replace('/', '___'), next_filename_shard + ".parquet"))
+                            this_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", model.replace('/', '___'), next_filename_shard + "_cids.parquet"))
+                            print("Saved " + str(len(this_cid_list)) + " embeddings to disk at " + dst_path)
                             self.all_cid_list[model] += this_cid_list
                             self.all_cid_set[model] = set(self.all_cid_set[model].union(set(this_cid_list)))
-                            del self.chunk_cache[this_cid]
-                            del this_cid_dataset                                              
-                        for this_cid in list(self.caches[model].keys()):
-                            this_chunk = self.caches[model][this_cid]
-                            if "children" not in list(this_chunk.keys()) and "parent" not in list(this_chunk.keys()):
-                            else:
-                                pass
-                        self.saved = True
+                            self.caches[model] = {}
+                        if model in list(self.chunk_cache.keys()) and len(self.chunk_cache[model]) > 0:                                              
+                            for this_cid in list(self.chunk_cache[model].keys()):
+                                this_chunk = self.chunk_cache[model][this_cid]
+                                if "children" not in list(this_chunk.keys()) and "parent" not in list(this_chunk.keys()):
+                                    pass
+                                else:
+                                    pass
+                            pass
+                self.saved = True
                 # if self.producer_task_done and all(self.consumer_task_done.values()):
             #     self.save_to_disk_task_done = True
             #     break
