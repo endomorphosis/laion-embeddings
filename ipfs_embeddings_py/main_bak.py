@@ -530,7 +530,8 @@ class ipfs_embeddings_py:
         return None
 
     async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
-
+        if not os.path.exists(dst_path):
+            os.makedirs(dst_path)
         # Initialize resources and endpoints
         resource_keys = list(self.resources.keys())
         endpoints = {resource: self.resources[resource] 
@@ -540,8 +541,7 @@ class ipfs_embeddings_py:
         self.resources = await self.init_endpoints(models, endpoints)
         await self.init_datasets(models, dataset, split, column, dst_path)
         await self.init_queues(models, endpoints, dst_path)
-
-        # Setup parallel processing
+        
         num_workers = min(multiprocessing.cpu_count(), 1)  # Use up to 1 CPU cores
         # num_workers = min(multiprocessing.cpu_count(), 8)  # Use up to 8 CPU cores
         # num_workers = multiprocessing.cpu_count()
@@ -549,26 +549,16 @@ class ipfs_embeddings_py:
         producer_tasks = []
         all_tasks = []
         
-        # Create producer and consumer tasks
-        for endpoint in list(self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]].keys()):
-            if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True and "openvino:" in endpoint:
-                continue
-            this_batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][models[0]][endpoint]
-            this_endpoint_handler = self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]][endpoint]
-            chunk_consumer = asyncio.create_task(self.chunk_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
-            consumer_tasks.append(chunk_consumer)
-            all_tasks.append(chunk_consumer)
-            endpoint_consumer = asyncio.create_task(self.chunk_endpoint_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
-            consumer_tasks.append(endpoint_consumer)
-            all_tasks.append(endpoint_consumer)
-        
-        save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
-        all_tasks.append(save_task)
+        consumer_tasks = await self.config_queues(models, column, endpoints, dst_path)
+        all_tasks = consumer_tasks
+    
         for _ in range(num_workers):
             producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0], dst_path))
             producer_tasks.append(producer_task)
             all_tasks.append(producer_task)
-                
+        
+        save_task = asyncio.create_task(self.save_chunks_to_disk(dataset, dst_path, models))
+        all_tasks.append(save_task)
         # Wait for all tasks to complete
         # await asyncio.gather(*consumer_tasks, *producer_tasks, save_task)
         # await asyncio.gather(*all_tasks, save_task)
