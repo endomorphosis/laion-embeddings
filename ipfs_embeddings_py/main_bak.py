@@ -165,7 +165,7 @@ class ipfs_embeddings_py:
         self.init_endpoints = self.init_endpoints       
         return None
 
-    async def init(self, models , endpoints ):
+    async def init_endpoints(self, models , endpoints ):
         resources = await self.init_endpoints(models, endpoints)
         resources_keys = ["queues", "batch_sizes", "endpoints", "models", "worker"]
         for resource in resources_keys:
@@ -178,6 +178,7 @@ class ipfs_embeddings_py:
                     self.resources[resource] = this_resource
         test_endpoints = None
         test_endpoints = await self.ipfs_accelerate_py.test_endpoints(models)
+        
         return test_endpoints
         
     async def async_generator(self, iterable):
@@ -498,21 +499,8 @@ class ipfs_embeddings_py:
             #     self.save_to_disk_task_done = True
             #     break
         return None 
-
-    async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
-        self.queues = {}
-        self.cid_set = set()
-        self.all_cid_list = {}
-        self.cid_chunk_queue = asyncio.Queue()
-        # Initialize resources and endpoints
-        resource_keys = list(self.resources.keys())
-        endpoints = {resource: self.resources[resource] 
-                    for resource in resource_keys if "endpoints" in resource}
-        endpoint_types = list(endpoints.keys())
     
-        # Load required data
-        self.resources = await self.init(models, endpoints)
-
+    async def init_datasets(self, models, dataset, split, column, dst_path):
         await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
         
         # Load dataset
@@ -524,6 +512,13 @@ class ipfs_embeddings_py:
         columns = self.dataset.column_names
         columns.append("cid")
         await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)
+        return None
+
+    async def init_queues(self, models, endpoints, dst_path):
+        self.queues = {}
+        self.cid_set = set()
+        self.all_cid_list = {}
+        self.cid_chunk_queue = asyncio.Queue()
         queue_size = await self.queue_size(models[0])
         self.cid_chunk_queue = asyncio.Queue(queue_size)
         chunk_dir_path = os.path.join(dst_path, "checkpoints", "sparse_chunks")
@@ -532,6 +527,20 @@ class ipfs_embeddings_py:
         saved_chunk_cids = [x.split(".")[0] for x in chunk_files]
         self.cid_chunk_list = saved_chunk_cids
         self.cid_chunk_set = set(saved_chunk_cids)
+        return None
+
+    async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
+
+        # Initialize resources and endpoints
+        resource_keys = list(self.resources.keys())
+        endpoints = {resource: self.resources[resource] 
+                    for resource in resource_keys if "endpoints" in resource}
+    
+        # Load required data
+        self.resources = await self.init_endpoints(models, endpoints)
+        await self.init_datasets(models, dataset, split, column, dst_path)
+        await self.init_queues(models, endpoints, dst_path)
+
         # Setup parallel processing
         num_workers = min(multiprocessing.cpu_count(), 1)  # Use up to 1 CPU cores
         # num_workers = min(multiprocessing.cpu_count(), 8)  # Use up to 8 CPU cores
@@ -764,40 +773,39 @@ class ipfs_embeddings_py:
             await asyncio.sleep(0.001)
            
         return None
-
+    
+    async def config_queues(self, models, column, endpoint, endpoint_handler):
+        consumer_tasks = []
+        all_tasks = []
+        for endpoint in list(self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]].keys()):
+            if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True and "openvino:" in endpoint:
+                continue
+            this_endpoint_handler = self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]][endpoint]
+            item_consumer = asyncio.create_task(self.item_consumer(models[0], endpoint, this_endpoint_handler))
+            consumer_tasks.append(item_consumer)
+            # all_tasks.append(item_consumer)
+            model_consumer = asyncio.create_task(self.model_consumer(models[0], endpoint, this_endpoint_handler))
+            consumer_tasks.append(model_consumer)
+            # all_tasks.append(model_consumer)               
+            endpoint_consumer = asyncio.create_task(self.endpoint_consumer( models[0], endpoint, this_endpoint_handler, column))
+            consumer_tasks.append(endpoint_consumer)
+            # all_tasks.append(endpoint_consumer)
+            
+        return consumer_tasks 
+        
     async def index_dataset(self, dataset, split, column, dst_path, models = None):
         if not os.path.exists(dst_path):
             os.makedirs(dst_path)
-        batch_sizes = {}
-        consumer_tasks = {}
-        self.queues = {}
-        self.cid_set = set()
-        self.all_cid_list = {}
-        self.cid_chunk_queue = asyncio.Queue()
         # Initialize resources and endpoints
-        for model in models:
-            if model not in list(self.index.keys()):
-                self.index[model] = []        
         resource_keys = list(self.resources.keys())
         endpoints = {resource: self.resources[resource] 
                     for resource in resource_keys if "endpoints" in resource}
-        endpoint_types = list(endpoints.keys())
+    
+        # Load required data
+        self.resources = await self.init_endpoints(models, endpoints)
+        await self.init_datasets(models, dataset, split, column, dst_path)
+        await self.init_queues(models, endpoints, dst_path)
         
-        # Load required resources
-        self.resources = await self.init(models, endpoints)
-        await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
-
-        # Load dataset
-        if split is None:
-            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
-        else:
-            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
-        
-        columns = self.dataset.column_names
-        columns.append("cid")
-        await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)
-        queue_size = await self.queue_size(models[0])
-        self.cid_queue = asyncio.Queue(queue_size)
         num_workers = min(multiprocessing.cpu_count(), 1)  # Use up to 1 CPU cores
         # num_workers = min(multiprocessing.cpu_count(), 8)  # Use up to 8 CPU cores
         # num_workers = multiprocessing.cpu_count()
@@ -805,21 +813,9 @@ class ipfs_embeddings_py:
         producer_tasks = []
         all_tasks = []
         
-        # Create producer and consumer tasks
-        for endpoint in list(self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]].keys()):
-            if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True and "openvino:" in endpoint:
-                continue
-            this_endpoint_handler = self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]][endpoint]
-            item_consumer = asyncio.create_task(self.item_consumer(models[0], endpoint, this_endpoint_handler))
-            consumer_tasks.append(item_consumer)
-            all_tasks.append(item_consumer)
-            model_consumer = asyncio.create_task(self.model_consumer(models[0], endpoint, this_endpoint_handler))
-            consumer_tasks.append(model_consumer)
-            all_tasks.append(model_consumer)               
-            endpoint_consumer = asyncio.create_task(self.endpoint_consumer( models[0], endpoint, this_endpoint_handler, column))
-            consumer_tasks.append(endpoint_consumer)
-            all_tasks.append(endpoint_consumer)
-        
+        consumer_tasks = await self.config_queues(models, column, endpoints, dst_path)
+        all_tasks = consumer_tasks
+    
         for _ in range(num_workers):
             producer_task = asyncio.create_task(self.item_producer(self.dataset, column, self.queues))        
             producer_tasks.append(producer_task)
@@ -828,7 +824,6 @@ class ipfs_embeddings_py:
         save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
         all_tasks.append(save_task)
 
-                
         # Wait for all tasks to complete
         # await asyncio.gather(*consumer_tasks, *producer_tasks, save_task)
         # await asyncio.gather(*all_tasks, save_task)
@@ -1586,4 +1581,4 @@ if __name__ == "__main__":
     asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
     # asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))
-    # asyncio.run(create_embeddings_batch.index_sparse_chunks(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
+    asyncio.run(create_embeddings_batch.index_sparse_chunks(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
