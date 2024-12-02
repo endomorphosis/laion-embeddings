@@ -530,6 +530,11 @@ class ipfs_embeddings_py:
         saved_chunk_cids = [x.split(".")[0] for x in chunk_files]
         self.cid_chunk_list = saved_chunk_cids
         self.cid_chunk_set = set(saved_chunk_cids)
+        for model_name in models:
+            if model_name not in list(self.item_cache.keys()):
+                self.item_cache[model_name] = {}
+            if model_name not in list(self.chunk_cache.keys()):
+                self.chunk_cache[model_name] = {}
         return None
 
     async def index_sparse_chunks(self, dataset, split, column, dst_path, models = None):
@@ -623,9 +628,12 @@ class ipfs_embeddings_py:
                         if this_cid not in list(self.item_cache[model_name].keys()):
                             self.item_cache[model_name][this_cid] = {}
                         self.item_cache[model_name][this_cid] = processed_item
+                        while self.ipfs_accelerate_py.resources["queue"][model_name].full():
+                            await asyncio.sleep(0.1)
                         self.ipfs_accelerate_py.resources["queue"][model_name].put_nowait(processed_item)
                         self.cid_queue.task_done()
-                        
+                        await asyncio.sleep(0.001)
+
             chunked_item = await self.cid_chunk_queue.get()
             batch_results = []
             batch = []
@@ -639,7 +647,7 @@ class ipfs_embeddings_py:
                 for i in range(len(chunked_item["items"])):
                     item = chunked_item["items"][i]
                     while self.ipfs_accelerate_py.resources["queue"][model_name].full():
-                        await asyncio.sleep(0.001)
+                        await asyncio.sleep(0.1)
                     self.ipfs_accelerate_py.resources["queue"][model_name].put_nowait(item)
                 await asyncio.sleep(0.001)
             else:
@@ -901,7 +909,6 @@ class ipfs_embeddings_py:
                 batch_ready
             ])
             while not test_ready:
-                await asyncio.sleep(0.1)
                 batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]           
                 if batch_size == 0:
                     await asyncio.sleep(300)
@@ -921,6 +928,7 @@ class ipfs_embeddings_py:
                     batch_ready,
                     endpoint_queue_not_full
                 ])
+                await asyncio.sleep(0.1)
                 pass
             processed_item = await self.ipfs_accelerate_py.resources["queue"][model_name].get()
             batch_results = []
@@ -941,6 +949,11 @@ class ipfs_embeddings_py:
                     self.chunk_cache[model_name] = {}
                 if processed_item["parent_cid"] not in list(self.chunk_cache[model_name].keys()):
                     self.chunk_cache[model_name][processed_item["parent_cid"]] = {}
+            else:
+                if model_name not in list(self.item_cache.keys()):
+                    self.item_cache[model_name] = {}
+                if processed_item["cid"] not in list(self.item_cache[model_name].keys()):
+                    self.item_cache[model_name][processed_item["cid"]] = {}
             queue_sizes = {}
             max_sizes = {}
             queue_remaining = {}
@@ -1225,7 +1238,6 @@ class ipfs_embeddings_py:
             batch = []
             chunk_data = []
             while not test_ready or batch_size == 0:
-                await asyncio.sleep(0.1)
                 if batch_size == 0:
                     await asyncio.sleep(300)
                     batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]
@@ -1242,6 +1254,9 @@ class ipfs_embeddings_py:
                     queue_full,
                 ])
                 pass
+                while not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+                    await asyncio.sleep(0.1)
+            
             batch_results = []
             batch = []
             chunk_data = []
