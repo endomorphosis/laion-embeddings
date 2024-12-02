@@ -1241,6 +1241,8 @@ class ipfs_embeddings_py:
                 if batch_size == 0:
                     await asyncio.sleep(300)
                     batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]
+                while not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full():
+                    await asyncio.sleep(0.1)
                 batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]
                 endpoint_queue = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) else False
                 empty = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_accelerate_py.resources["queues"][model_name][endpoint]) else False
@@ -1254,8 +1256,7 @@ class ipfs_embeddings_py:
                     queue_full,
                 ])
                 pass
-                while not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
-                    await asyncio.sleep(0.1)
+
             
             batch_results = []
             batch = []
