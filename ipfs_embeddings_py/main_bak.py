@@ -811,6 +811,11 @@ class ipfs_embeddings_py:
             producer_tasks.append(producer_task)
             all_tasks.append(producer_task)
         
+        for _ in range(num_workers):
+            producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0], dst_path))
+            producer_tasks.append(producer_task)
+            all_tasks.append(producer_task)
+        
         save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
         all_tasks.append(save_task)
 
@@ -819,6 +824,44 @@ class ipfs_embeddings_py:
         # await asyncio.gather(*all_tasks, save_task)
         await asyncio.gather(*all_tasks)
         return None        
+    
+    async def index_dataset_bak(self, dataset, split, column, dst_path, models = None):
+        if not os.path.exists(dst_path):
+            os.makedirs(dst_path)
+        # Initialize resources and endpoints
+        resource_keys = list(self.resources.keys())
+        endpoints = {resource: self.resources[resource] 
+                    for resource in resource_keys if "endpoints" in resource}
+    
+        # Load required data
+        self.resources = await self.init_endpoints(models, endpoints)
+        await self.init_datasets(models, dataset, split, column, dst_path)
+        await self.init_queues(models, endpoints, dst_path)
+        
+        num_workers = min(multiprocessing.cpu_count(), 1)  # Use up to 1 CPU cores
+        # num_workers = min(multiprocessing.cpu_count(), 8)  # Use up to 8 CPU cores
+        # num_workers = multiprocessing.cpu_count()
+        consumer_tasks = []
+        producer_tasks = []
+        all_tasks = []
+        
+        consumer_tasks = await self.config_queues(models, column, endpoints, dst_path)
+        all_tasks = consumer_tasks
+    
+        for _ in range(num_workers):
+            producer_task = asyncio.create_task(self.item_producer(self.dataset, column, self.queues))        
+            producer_tasks.append(producer_task)
+            all_tasks.append(producer_task)
+        
+        save_task = asyncio.create_task(self.save_checkpoints_to_disk(dataset, dst_path, models))
+        all_tasks.append(save_task)
+
+        # Wait for all tasks to complete
+        # await asyncio.gather(*consumer_tasks, *producer_tasks, save_task)
+        # await asyncio.gather(*all_tasks, save_task)
+        await asyncio.gather(*all_tasks)
+        return None        
+    
     
     async def model_consumer(self, model_name, endpoint, endpoint_handler):
         print("model consumer started for model " + model_name + " at endpoint " + endpoint)
@@ -964,28 +1007,6 @@ class ipfs_embeddings_py:
             self.cid_queue.task_done()
             await asyncio.sleep(0.001)
         return None
-        
-        # batch = []
-        # if model_name not in self.caches.keys():
-        #     self.caches[model_name] = {"items" : []}
-        # if model_name not in self.index.keys():
-        #     self.index[model_name] = datasets.Dataset.from_dict({"cid": [], "embedding": []})
-        # while True:
-        #     item = await queue.get()  # Wait for item
-        #     batch.append(item)
-        #     if len(batch) >= batch_size:
-        #         # Process batch
-        #         results = await self.send_batch_to_endpoint(batch, column, model_name, endpoint)
-        #         for i in range(len(results)):
-        #             self.caches[model_name]["items"].append({"cid": batch[i]["cid"], "embedding": results[i]})
-        #         batch = []  # Clear batch after sending
-        #         self.saved = False
-        #     queue.task_done()
-        #     if self.producer_task_done and queue.empty():
-        #         self.consumer_task_done[(model_name, endpoint)] = True
-        #         break
-        # return None
-
 
     async def endpoint_consumer(self, model_name, endpoint, endpoint_handler, column = None):                
         endpoint_queue = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) else False
@@ -1158,40 +1179,6 @@ class ipfs_embeddings_py:
                 self.cid_queue.put_nowait(item)
                 self.saved = False
                 
-    # async def process_item2(self, item, column=None, queues=None, embed_model=None, dst_path=None):
-    #         models = list(self.queues.keys())
-    #         for model, model_queues in queues.items():
-    #             if model not in list(self.all_cid_set.keys()):
-    #                 self.all_cid_set[model] = set()
-    #             if len(model_queues) > 0:
-    #                 if this_cid not in self.all_cid_set[model]:
-    #                     model_queue_lengths = {k: v.qsize() for k, v in model_queues.items()}
-    #                     ## if all model queues are empty, choose 
-    #                     if all(value == 0 for value in model_queue_lengths.values()):
-    #                         chosen_queue = random.choice(list(model_queues.keys()))
-    #                     else:
-    #                         chosen_queue = min(model_queue_lengths, key=model_queue_lengths.get)
-    #                     queue = model_queues[chosen_queue]          
-    #                     # endpoint, queue = min(model_queues.items(), key=lambda x: x[1].qsize())
-    #                     while queue.full():
-    #                         await asyncio.sleep(0.1)
-    #                     queue.put_nowait(item)  # Non-blocking put
-    #         return item
-    
-    # async def producer_bak(self, dataset_stream, column, queues, embed_model=None, dst_path=None):
-    #     tasks = []
-    #     self.producer_task_done = False
-    #     async for item in self.async_generator(dataset_stream):
-    #         task = self.process_item(item, column, queues)
-    #         tasks.append(task)
-    #         if len(tasks) >= 1:
-    #             await asyncio.gather(*tasks)
-    #             tasks = []
-    #     if tasks:
-    #         await asyncio.gather(*tasks)
-    #     self.producer_task_done = True
-    #     return None
-    
     async def item_producer(self, dataset_stream, column, embed_model=None, dst_path=None):
         tasks = []
         self.producer_task_done = False
@@ -1571,4 +1558,4 @@ if __name__ == "__main__":
     asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
     # asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))
-    asyncio.run(create_embeddings_batch.index_sparse_chunks(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
+    # asyncio.run(create_embeddings_batch.index_sparse_chunks(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
