@@ -771,8 +771,8 @@ class ipfs_embeddings_py:
             if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True and "openvino:" in endpoint:
                 continue
             this_endpoint_handler = self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]][endpoint]
-            item_consumer = asyncio.create_task(self.item_consumer(models[0], endpoint, this_endpoint_handler))
-            consumer_tasks.append(item_consumer)
+            chunk_consumer = asyncio.create_task(self.chunk_consumer(models[0], endpoint, this_endpoint_handler))
+            consumer_tasks.append(chunk_consumer)
             # all_tasks.append(item_consumer)
             model_consumer = asyncio.create_task(self.model_consumer(models[0], endpoint, this_endpoint_handler))
             consumer_tasks.append(model_consumer)
@@ -1163,6 +1163,30 @@ class ipfs_embeddings_py:
             self.cid_queue.task_done()
             
             await asyncio.sleep(0.001)
+            
+            processed_chunk = await self.cid_chunk_queue.get()
+            batch_results = []
+            batch = []
+            chunk_data = []
+            if model_name not in list(self.chunk_cache.keys()):
+                self.chunk_cache[model_name] = {}
+            if model_name not in list(self.all_cid_list.keys()):
+                self.all_cid_list[model_name] = []
+            if model_name not in list(self.all_cid_set.keys()):
+                self.all_cid_set[model_name] = set()
+            if model_name not in list(self.caches.keys()):
+                self.caches[model_name] = {"items" : []}
+            if processed_chunk["parent_cid"] not in list(self.chunk_cache[model_name].keys()):
+                self.chunk_cache[model_name][processed_chunk["parent_cid"]] = {}
+            if processed_chunk is not None:
+                while self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full():
+                    await asyncio.sleep(0.001)
+                self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].put_nowait(processed_chunk)
+                await asyncio.sleep(0.001)
+            else:
+                pass
+            self.cid_chunk_queue.task_done()
+
         return None
 
     async def endpoint_consumer(self, model_name, endpoint, endpoint_handler, column = None):                
