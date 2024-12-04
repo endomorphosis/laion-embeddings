@@ -847,27 +847,27 @@ class ipfs_embeddings_py:
                     if batch_result["cid"] not in self.cid_list:
                         self.cid_list.append(batch_result["cid"])
                         self.cid_set.add(batch_result["cid"])
-                        
-                self.saved = False
-                batch_results = []
-                batch = []
-                chunk_data = []
-                if "cuda" in endpoint:
-                    with torch.no_grad():
-                        if hasattr(torch.cuda, 'empty_cache'):
-                            torch.cuda.empty_cache()
-                        if hasattr(torch.cuda, 'ipc_collect'):
-                            torch.cuda.ipc_collect()
-                gc.collect()
-                queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
-                queue_not_full = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
-                queue_full = self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
-                test_ready = all([
-                    endpoint_queue,
-                    empty,
-                    queue_full,
-                ])
-                await asyncio.sleep(0.001)                
+                    
+            self.saved = False
+            batch_results = []
+            batch = []
+            chunk_data = []
+            if "cuda" in endpoint:
+                with torch.no_grad():
+                    if hasattr(torch.cuda, 'empty_cache'):
+                        torch.cuda.empty_cache()
+                    if hasattr(torch.cuda, 'ipc_collect'):
+                        torch.cuda.ipc_collect()
+            gc.collect()
+            queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
+            queue_not_full = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+            queue_full = self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+            test_ready = all([
+                endpoint_queue,
+                empty,
+                queue_full,
+            ])
+            await asyncio.sleep(0.001)                
 
     async def process_item(self, item, column=None, queues=None, dst_path=None, embed_model=None, ):
         # Assuming `item` is a dictionary with required data
