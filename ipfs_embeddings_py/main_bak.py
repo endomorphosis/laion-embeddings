@@ -94,7 +94,236 @@ import concurrent
 import json
 from ipfs_datasets import ipfs_datasets_py
 from ipfs_accelerate_py import ipfs_accelerate_py
+import multiformats
 
+cid_queue = asyncio.Queue()
+
+cid_set = set()
+
+cid_chunk_set = set()
+
+cid_chunk_queue = asyncio.Queue()
+
+# def process_shard(shard, column, dst_path, model, ):
+#     loop = asyncio.new_event_loop()
+#     asyncio.set_event_loop(loop)
+#     try:
+#         loop.run_until_complete(chunk_producer(shard, column, None, None, None, None, None, model, dst_path, chunk_item, process_item, cid_queue, cid_chunk_set))
+#     finally:
+#         loop.close()
+
+# async def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None):
+#     tasks = []
+#     # self.producer_task_done = False
+    
+#     async for item in async_generator(dataset_stream):
+#         while cid_queue.full():
+#             await asyncio.sleep(0.1)
+#         if column is not None:
+#             cid = multiformats.get_cid(item[column])
+#         else:
+#             json_item = json.dumps(item)
+#             cid = multiformats.get_cid(json_item)
+#         if cid not in list(item.keys()):
+#             item["cid"] = cid
+#         if cid not in cid_chunk_set:
+#             processed_item = await process_item(item, column, None, embed_model, dst_path)
+#             chunked_item = await chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model)
+#         else:
+#             pass
+#         await asyncio.sleep(0.001)
+        
+#     return None
+
+
+def index_cid(self, samples):
+    results = []
+    if samples is None:
+        raise ValueError("samples must be a list")
+    if isinstance(samples, str):
+        samples = [samples]
+    if isinstance(samples, list):
+        for this_sample in samples:
+            this_sample_cid = multiformats.get_cid(this_sample)
+            results.append(this_sample_cid)
+    else:
+        raise ValueError("samples must be a list or string")
+    return results
+
+
+def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None, ipfs_accelerate_py=None, chunker=None, metadata=None):
+    tasks = []
+    # self.producer_task_done = False
+    
+    for item in generator(dataset_stream):
+        while cid_queue.full():
+            time.sleep(0.1)
+        if column is not None:
+            cid = multiformats.get_cid(item[column])
+        else:
+            json_item = json.dumps(item)
+            cid = multiformats.get_cid(json_item)
+        if cid not in list(item.keys()):
+            item["cid"] = cid
+        if cid not in cid_chunk_set:
+            processed_item = process_item(item, column, None, embed_model, dst_path)
+            chunked_item = chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, ipfs_accelerate_py, chunker, metadata)
+        else:
+            pass
+        
+    return None
+
+def chunk_item(item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, ipfs_accelerate_py=None, chunker=None, metadata=None):
+    # Assuming `item` is a dictionary with required data
+    cuda_test = False
+    openvino_test = False
+    tokenizer_types = list(ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
+    cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
+    openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
+    if ipfs_accelerate_py.resources["hwtest"]["cuda"] == True:
+        cuda_test = True
+    if ipfs_accelerate_py.resources["hwtest"]["openvino"] == True:
+        openvino_test = True
+    if column is None:
+        content = json.dumps(item)
+    elif column not in list(item.keys()):
+        content = json.dumps(item)
+    else:
+        content = item[column]
+    if embed_model is None:
+        if len(metadata["models"]) == 0:
+            embed_model = "thenlper/gte-small"
+        else:
+            embed_model = metadata["models"][0]
+    if chunk_size is None:
+        chunk_size = 512
+    if n_sentences is None:
+        n_sentences = 8
+    if step_size is None:
+        step_size = 256
+    if tokenizer is None:
+        if embed_model not in list(ipfs_accelerate_py.resources["tokenizer"].keys()):
+            tokenizer[embed_model] = {}
+        if cuda_test == True:
+            tokenizer_types = list(ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
+            cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
+            random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
+            device = random_cuda_tokenizer
+            tokenizer = ipfs_accelerate_py.resources["tokenizer"][embed_model][random_cuda_tokenizer]
+            batch_size = ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_cuda_tokenizer]
+            if batch_size == 0 or batch_size is None:
+                batch_size = 32
+        elif openvino_test == True:
+            openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
+            random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
+            device = random_openvino_tokenizer
+            tokenizer = ipfs_accelerate_py.resources["tokenizer"][embed_model][random_openvino_tokenizer]  
+            batch_size = ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_openvino_tokenizer]
+            if batch_size == 0 or batch_size is None:
+                batch_size = 1
+        elif "cpu" not in tokenizer_types:
+            tokenizer = ipfs_accelerate_py.resources["tokenizer"][embed_model]["cpu"]                
+            batch_size = ipfs_accelerate_py.resources["batch_sizes"][embed_model]["cpu"]
+            device = "cpu"
+            if batch_size == 0 or batch_size is None:
+                batch_size = 1
+        else:
+            device = "cpu"
+            tokenizer =  AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
+            batch_size = 1
+    if method is None:
+        fixed_chunk_list = chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, metadata["models"][0], device, batch_size)
+        # semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0], device, batch_size)
+        sentences_chunk_list = chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, metadata["models"][0], device, batch_size) 
+        sliding_window_chunk_list = chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, metadata["models"][0], device, batch_size)
+        # content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
+        content_chunks = fixed_chunk_list + sentences_chunk_list + sliding_window_chunk_list
+    else:
+        content_chunks = chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
+    parent_cid = item["cid"]
+    content_tokens = tokenizer.encode(content)
+    ## sort content_chunks by the firt element of each tuple then the second element
+    content_chunks = sorted(content_chunks, key=lambda x: (x[0], x[1]))
+    ## filter out chunks that are larger than the chunk_size
+    content_chunks = [chunk for chunk in content_chunks if chunk[1] - chunk[0] <= chunk_size]
+    ## filter content_chunks to remove duplicates
+    seen_chunks = set()
+    unique_content_chunks = []
+    for chunk in content_chunks:
+        if chunk not in seen_chunks:
+            unique_content_chunks.append(chunk)
+            seen_chunks.add(chunk)
+    content_chunks = unique_content_chunks
+    if parent_cid in cid_chunk_set:
+        pass
+    else:
+        cid_chunks = {"parent_cid": parent_cid, "items" : [], "children": []}
+        for chunk in content_chunks:
+            chunk_index = chunk
+            chunk_content = content_tokens[chunk[0]:chunk[1]]
+            chunk_text = tokenizer.decode(chunk_content)
+            child_cid = multiformats.get_cid(chunk_text)
+            child_content = {"cid": child_cid, "index": chunk_index, "content": chunk_text, "parent_cid": parent_cid}
+            cid_chunks["children"].append(child_cid)
+            cid_chunks["items"].append(child_content)
+
+        if type(cid_chunks["parent_cid"]) is not str:
+            print("Parent CID is not a string")
+    
+        if parent_cid not in cid_chunk_set and type(cid_chunks["parent_cid"]) is str:
+            while cid_chunk_queue.full():
+                time.sleep(0.1)
+            if not cid_chunk_queue.full():
+                cid_chunk_set.add(parent_cid)
+                cid_chunk_queue.put_nowait(cid_chunks)
+                print("Added chunked item to queue for CID " + cid_chunks["parent_cid"])
+        else:
+            print("CID " + cid_chunks["parent_cid"] + " already in chunk set")
+    return cid_chunks
+
+def process_item(item, column=None, queues=None, dst_path=None, embed_model=None, chunker=None, metadata=None, caches=None, all_cid_set=None, ipfs_accelerate_py=None):
+    # Assuming `item` is a dictionary with required data
+    if "new_dataset" not in list(caches.keys()):
+        caches["new_dataset"] = {}
+    if "new_dataset" not in list(all_cid_set.keys()):
+        all_cid_set["new_dataset"] = set()
+    # print(f"Processing item with CID {index_cid(item[column])[0]}")
+    if queues is None:
+        queues = ipfs_accelerate_py.resources["queues"]
+    column_names = list(item.keys())
+    if column is None:
+        this_cid = index_cid(json.dumps(item))[0]
+    elif column not in column_names:
+        this_cid =  index_cid(json.dumps(item))[0]
+    else:
+        this_cid = ipfs_multiformats_py.get_cid(item[column])
+        index_cid(item[column])[0]
+    if "cid" not in column_names:
+        item["cid"] = this_cid
+    elif item["cid"] is None:
+        item["cid"] = this_cid
+    # Check if cid is in index
+    if this_cid in cid_set:
+        # print(f"CID {this_cid} already in index, skipping item.")
+        return None
+    else:
+        while cid_queue.full():
+            time.sleep(0.1)    
+        if this_cid not in cid_set:
+            cid_set.add(this_cid)
+            caches["new_dataset"][this_cid] = item
+            cid_queue.put_nowait(item)
+            print("Added item to queue for CID " + str(this_cid))
+            # self.saved = False
+    return item
+                        
+async def async_generator(iterable):
+    for item in iterable:
+        yield item
+
+def generator(iterable):
+    for item in iterable:
+        yield item
 
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
@@ -146,6 +375,8 @@ class ipfs_embeddings_py:
         self.endpoint_status = {}
         self.endpoint_handler = {}
         self.new_dataset = {}
+        self.chunk_item = chunk_item
+        self.process_item = process_item
         self.new_dataset_children = {}
         self.saved = False
         self.resources = resources
@@ -189,113 +420,113 @@ class ipfs_embeddings_py:
         print("max batch size")
         return await self.ipfs_accelerate_py.max_batch_size(model, endpoint, endpoit_handler)
         
-    async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
-        # Assuming `item` is a dictionary with required data
-        cuda_test = False
-        openvino_test = False
-        tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
-        cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
-        openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
-        if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True:
-            cuda_test = True
-        if self.ipfs_accelerate_py.resources["hwtest"]["openvino"] == True:
-            openvino_test = True
-        if column is None:
-            content = json.dumps(item)
-        elif column not in list(item.keys()):
-            content = json.dumps(item)
-        else:
-            content = item[column]
-        if embed_model is None:
-            if len(self.metadata["models"]) == 0:
-                embed_model = "thenlper/gte-small"
-            else:
-                embed_model = self.metadata["models"][0]
-        if chunk_size is None:
-            chunk_size = 512
-        if n_sentences is None:
-            n_sentences = 8
-        if step_size is None:
-            step_size = 256
-        if tokenizer is None:
-            if embed_model not in list(self.ipfs_accelerate_py.resources["tokenizer"].keys()):
-                self.tokenizer[embed_model] = {}
-            if cuda_test == True:
-                tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
-                cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
-                random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
-                device = random_cuda_tokenizer
-                tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_cuda_tokenizer]
-                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_cuda_tokenizer]
-                if batch_size == 0 or batch_size is None:
-                    batch_size = 32
-            elif openvino_test == True:
-                openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
-                random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
-                device = random_openvino_tokenizer
-                tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_openvino_tokenizer]  
-                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_openvino_tokenizer]
-                if batch_size == 0 or batch_size is None:
-                    batch_size = 1
-            elif "cpu" not in tokenizer_types:
-                tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model]["cpu"]                
-                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model]["cpu"]
-                device = "cpu"
-                if batch_size == 0 or batch_size is None:
-                    batch_size = 1
-            else:
-                device = "cpu"
-                tokenizer =  AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
-                batch_size = 1
-        if method is None:
-            fixed_chunk_list = self.chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, self.metadata["models"][0], device, batch_size)
-            # semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0], device, batch_size)
-            sentences_chunk_list = self.chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, self.metadata["models"][0], device, batch_size) 
-            sliding_window_chunk_list = self.chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, self.metadata["models"][0], device, batch_size)
-            # content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
-            content_chunks = fixed_chunk_list + sentences_chunk_list + sliding_window_chunk_list
-        else:
-            content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
-        parent_cid = item["cid"]
-        content_tokens = tokenizer.encode(content)
-        ## sort content_chunks by the firt element of each tuple then the second element
-        content_chunks = sorted(content_chunks, key=lambda x: (x[0], x[1]))
-        ## filter out chunks that are larger than the chunk_size
-        content_chunks = [chunk for chunk in content_chunks if chunk[1] - chunk[0] <= chunk_size]
-        ## filter content_chunks to remove duplicates
-        seen_chunks = set()
-        unique_content_chunks = []
-        for chunk in content_chunks:
-            if chunk not in seen_chunks:
-                unique_content_chunks.append(chunk)
-                seen_chunks.add(chunk)
-        content_chunks = unique_content_chunks
-        if parent_cid in list(self.caches.keys()):
-            pass
-        else:
-            cid_chunks = {"parent_cid": parent_cid, "items" : [], "children": []}
-            for chunk in content_chunks:
-                chunk_index = chunk
-                chunk_content = content_tokens[chunk[0]:chunk[1]]
-                chunk_text = tokenizer.decode(chunk_content)
-                child_cid = self.multiformats.get_cid(chunk_text)
-                child_content = {"cid": child_cid, "index": chunk_index, "content": chunk_text, "parent_cid": parent_cid}
-                cid_chunks["children"].append(child_cid)
-                cid_chunks["items"].append(child_content)
+    # async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
+    #     # Assuming `item` is a dictionary with required data
+    #     cuda_test = False
+    #     openvino_test = False
+    #     tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
+    #     cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
+    #     openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
+    #     if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True:
+    #         cuda_test = True
+    #     if self.ipfs_accelerate_py.resources["hwtest"]["openvino"] == True:
+    #         openvino_test = True
+    #     if column is None:
+    #         content = json.dumps(item)
+    #     elif column not in list(item.keys()):
+    #         content = json.dumps(item)
+    #     else:
+    #         content = item[column]
+    #     if embed_model is None:
+    #         if len(self.metadata["models"]) == 0:
+    #             embed_model = "thenlper/gte-small"
+    #         else:
+    #             embed_model = self.metadata["models"][0]
+    #     if chunk_size is None:
+    #         chunk_size = 512
+    #     if n_sentences is None:
+    #         n_sentences = 8
+    #     if step_size is None:
+    #         step_size = 256
+    #     if tokenizer is None:
+    #         if embed_model not in list(self.ipfs_accelerate_py.resources["tokenizer"].keys()):
+    #             self.tokenizer[embed_model] = {}
+    #         if cuda_test == True:
+    #             tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
+    #             cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
+    #             random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
+    #             device = random_cuda_tokenizer
+    #             tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_cuda_tokenizer]
+    #             batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_cuda_tokenizer]
+    #             if batch_size == 0 or batch_size is None:
+    #                 batch_size = 32
+    #         elif openvino_test == True:
+    #             openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
+    #             random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
+    #             device = random_openvino_tokenizer
+    #             tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_openvino_tokenizer]  
+    #             batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_openvino_tokenizer]
+    #             if batch_size == 0 or batch_size is None:
+    #                 batch_size = 1
+    #         elif "cpu" not in tokenizer_types:
+    #             tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model]["cpu"]                
+    #             batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model]["cpu"]
+    #             device = "cpu"
+    #             if batch_size == 0 or batch_size is None:
+    #                 batch_size = 1
+    #         else:
+    #             device = "cpu"
+    #             tokenizer =  AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
+    #             batch_size = 1
+    #     if method is None:
+    #         fixed_chunk_list = self.chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, self.metadata["models"][0], device, batch_size)
+    #         # semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0], device, batch_size)
+    #         sentences_chunk_list = self.chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, self.metadata["models"][0], device, batch_size) 
+    #         sliding_window_chunk_list = self.chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, self.metadata["models"][0], device, batch_size)
+    #         # content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
+    #         content_chunks = fixed_chunk_list + sentences_chunk_list + sliding_window_chunk_list
+    #     else:
+    #         content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
+    #     parent_cid = item["cid"]
+    #     content_tokens = tokenizer.encode(content)
+    #     ## sort content_chunks by the firt element of each tuple then the second element
+    #     content_chunks = sorted(content_chunks, key=lambda x: (x[0], x[1]))
+    #     ## filter out chunks that are larger than the chunk_size
+    #     content_chunks = [chunk for chunk in content_chunks if chunk[1] - chunk[0] <= chunk_size]
+    #     ## filter content_chunks to remove duplicates
+    #     seen_chunks = set()
+    #     unique_content_chunks = []
+    #     for chunk in content_chunks:
+    #         if chunk not in seen_chunks:
+    #             unique_content_chunks.append(chunk)
+    #             seen_chunks.add(chunk)
+    #     content_chunks = unique_content_chunks
+    #     if parent_cid in list(self.caches.keys()):
+    #         pass
+    #     else:
+    #         cid_chunks = {"parent_cid": parent_cid, "items" : [], "children": []}
+    #         for chunk in content_chunks:
+    #             chunk_index = chunk
+    #             chunk_content = content_tokens[chunk[0]:chunk[1]]
+    #             chunk_text = tokenizer.decode(chunk_content)
+    #             child_cid = self.multiformats.get_cid(chunk_text)
+    #             child_content = {"cid": child_cid, "index": chunk_index, "content": chunk_text, "parent_cid": parent_cid}
+    #             cid_chunks["children"].append(child_cid)
+    #             cid_chunks["items"].append(child_content)
     
-            if type(cid_chunks["parent_cid"]) is not str:
-                print("Parent CID is not a string")
+    #         if type(cid_chunks["parent_cid"]) is not str:
+    #             print("Parent CID is not a string")
         
-            if parent_cid not in self.cid_chunk_set and type(cid_chunks["parent_cid"]) is str:
-                while self.cid_chunk_queue.full():
-                    await asyncio.sleep(0.1)
-                if not self.cid_chunk_queue.full():
-                    self.cid_chunk_set.add(parent_cid)
-                    self.cid_chunk_queue.put_nowait(cid_chunks)
-                    print("Added chunked item to queue for CID " + cid_chunks["parent_cid"])
-            else:
-                print("CID " + cid_chunks["parent_cid"] + " already in chunk set")
-        return cid_chunks
+    #         if parent_cid not in self.cid_chunk_set and type(cid_chunks["parent_cid"]) is str:
+    #             while self.cid_chunk_queue.full():
+    #                 await asyncio.sleep(0.1)
+    #             if not self.cid_chunk_queue.full():
+    #                 self.cid_chunk_set.add(parent_cid)
+    #                 self.cid_chunk_queue.put_nowait(cid_chunks)
+    #                 print("Added chunked item to queue for CID " + cid_chunks["parent_cid"])
+    #         else:
+    #             print("CID " + cid_chunks["parent_cid"] + " already in chunk set")
+    #     return cid_chunks
 
     async def queue_size(self, model):
         print("Checking queue size")
@@ -494,7 +725,6 @@ class ipfs_embeddings_py:
             # return None
         while True:
             while batch_size == 0:
-                await asyncio.sleep(0.1)
                 try:
                     batch_size = await self.max_batch_size(model_name, endpoint, endpoint_handler)
                     queue_size = await self.queue_size(model_name)
@@ -502,8 +732,13 @@ class ipfs_embeddings_py:
                     self.cid_queue = asyncio.Queue(queue_size) 
                     self.ipfs_accelerate_py.resources["queue"][model_name] = asyncio.Queue(queue_size)
                     self.ipfs_accelerate_py.resources["queues"][model_name][endpoint] = asyncio.Queue(batch_size)
+                    if batch_size == 0:
+                        await asyncio.sleep(300)
+                    else:
+                        await asyncio.sleep(0.1)
                 except Exception as e:
                     batch_size = 0
+                    await asyncio.sleep(300)
             
             cid_chunk_queue = True if "cid_chunk_queue" in dir(self) else False
             empty = True if "cid_chunk_queue" in dir(self) and "empty" in dir(self.cid_chunk_queue) else False
@@ -573,6 +808,7 @@ class ipfs_embeddings_py:
     async def config_queues(self, models, column, endpoint, endpoint_handler):
         consumer_tasks = []
         all_tasks = []
+        self.cid_queue = asyncio.Queue() 
         for endpoint in list(self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]].keys()):
             if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True and "openvino:" in endpoint:
                 continue
@@ -596,28 +832,54 @@ class ipfs_embeddings_py:
         resource_keys = list(self.resources.keys())
         endpoints = {resource: self.resources[resource] 
                     for resource in resource_keys if "endpoints" in resource}
-    
+        self.cid_queue = asyncio.Queue() 
         # Load required data
         self.resources = await self.init_endpoints(models, endpoints)
         await self.init_datasets(models, dataset, split, column, dst_path)
         await self.init_queues(models, endpoints, dst_path)
         
-        num_workers = min(multiprocessing.cpu_count(), 1)  # Use up to 1 CPU cores
+        # num_workers = min(multiprocessing.cpu_count(), 1)  # Use up to 1 CPU cores
         # num_workers = min(multiprocessing.cpu_count(), 8)  # Use up to 8 CPU cores
+        num_workers = round(multiprocessing.cpu_count() / 2)
+        # num_workers = round(multiprocessing.cpu_count())
         # num_workers = multiprocessing.cpu_count()
         consumer_tasks = []
         producer_tasks = []
         all_tasks = []
         
+
+        with multiprocessing.Pool() as pool:
+            args = [
+                (self.dataset.shard(num_shards=num_workers, index=worker_id), column, dst_path, models[0])
+                for worker_id in range(num_workers)
+            ]
+            pool.starmap(chunk_producer, args)
+            
+
+        # Create producer tasks directly as asyncio tasks
+        # for worker_id in range(num_workers):
+        #     producer_task = asyncio.create_task(
+        #         chunk_producer(
+        #             self.dataset.shard(num_shards=num_workers, index=worker_id),
+        #             column,
+        #             None,  # method
+        #             None,  # tokenizer
+        #             None,  # chunk_size
+        #             None,  # n_sentences
+        #             None,  # step_size
+        #             models[0],  # embed_model
+        #             dst_path,
+        #             chunk_item,  # chunk_item
+        #             process_item,  # process_item
+        #             self.cid_queue,
+        #             self.cid_chunk_set
+        #         )
+        #     )
+        #     producer_tasks.append(producer_task)
+        #     all_tasks.append(producer_task)
+            
         consumer_tasks = await self.config_queues(models, column, endpoints, dst_path)
-        all_tasks = consumer_tasks
-    
-        for _ in range(num_workers):
-            producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, None, None, None, None, None, models[0], dst_path))
-            # producer_task = asyncio.create_task(self.item_producer(self.dataset, column, self.queues, None, None, None, None, None, models[0], dst_path))        
-            producer_tasks.append(producer_task)
-            all_tasks.append(producer_task)
-        
+        all_tasks.extend(consumer_tasks)
         # for _ in range(num_workers):
         #     producer_task = asyncio.create_task(self.chunk_producer(self.dataset, column, self.queues, None, None, None, None, None, models[0], dst_path))
         #     producer_tasks.append(producer_task)
@@ -878,63 +1140,63 @@ class ipfs_embeddings_py:
             ])
             await asyncio.sleep(0.001)                
 
-    async def process_item(self, item, column=None, queues=None, dst_path=None, embed_model=None, ):
-        # Assuming `item` is a dictionary with required data
-        if "new_dataset" not in list(self.caches.keys()):
-            self.caches["new_dataset"] = {}
-        if "new_dataset" not in list(self.all_cid_set.keys()):
-            self.all_cid_set["new_dataset"] = set()
-        # print(f"Processing item with CID {index_cid(item[column])[0]}")
-        if queues is None:
-            queues = self.ipfs_accelerate_py.resources["queues"]
-        column_names = list(item.keys())
-        if column is None:
-            this_cid = self.index_cid(json.dumps(item))[0]
-        elif column not in column_names:
-            this_cid = self.index_cid(json.dumps(item))[0]
-        else:
-            this_cid = self.index_cid(item[column])[0]
-        if "cid" not in column_names:
-            item["cid"] = this_cid
-        elif item["cid"] is None:
-            item["cid"] = this_cid
-        # Check if cid is in index
-        if this_cid in self.cid_set:
-            # print(f"CID {this_cid} already in index, skipping item.")
-            return None
-        else:
-            while self.cid_queue.full():
-                await asyncio.sleep(0.1)    
-            self.cid_set.add(this_cid)
-            if this_cid not in self.all_cid_set["new_dataset"]:
-                self.caches["new_dataset"][this_cid] = item
-                self.cid_queue.put_nowait(item)
-                print("Added item to queue for CID " + str(this_cid))
-                # self.saved = False
-        return item
+    # async def process_item(self, item, column=None, queues=None, dst_path=None, embed_model=None, ):
+    #     # Assuming `item` is a dictionary with required data
+    #     if "new_dataset" not in list(self.caches.keys()):
+    #         self.caches["new_dataset"] = {}
+    #     if "new_dataset" not in list(self.all_cid_set.keys()):
+    #         self.all_cid_set["new_dataset"] = set()
+    #     # print(f"Processing item with CID {index_cid(item[column])[0]}")
+    #     if queues is None:
+    #         queues = self.ipfs_accelerate_py.resources["queues"]
+    #     column_names = list(item.keys())
+    #     if column is None:
+    #         this_cid = self.index_cid(json.dumps(item))[0]
+    #     elif column not in column_names:
+    #         this_cid = self.index_cid(json.dumps(item))[0]
+    #     else:
+    #         this_cid = self.index_cid(item[column])[0]
+    #     if "cid" not in column_names:
+    #         item["cid"] = this_cid
+    #     elif item["cid"] is None:
+    #         item["cid"] = this_cid
+    #     # Check if cid is in index
+    #     if this_cid in self.cid_set:
+    #         # print(f"CID {this_cid} already in index, skipping item.")
+    #         return None
+    #     else:
+    #         while self.cid_queue.full():
+    #             await asyncio.sleep(0.1)    
+    #         self.cid_set.add(this_cid)
+    #         if this_cid not in self.all_cid_set["new_dataset"]:
+    #             self.caches["new_dataset"][this_cid] = item
+    #             self.cid_queue.put_nowait(item)
+    #             print("Added item to queue for CID " + str(this_cid))
+    #             # self.saved = False
+    #     return item
                 
-    async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None):
-        tasks = []
-        self.producer_task_done = False
+    # async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None):
+    #     tasks = []
+    #     self.producer_task_done = False
         
-        async for item in self.async_generator(dataset_stream):
-            while self.cid_queue.full():
-                await asyncio.sleep(0.1)
-            if column is not None:
-                cid = self.multiformats.get_cid(item[column])
-            else:
-                json_item = json.dumps(item)
-                cid = self.multiformats.get_cid(json_item)
-            if cid not in list(item.keys()):
-                item["cid"] = cid
-            if cid not in self.cid_chunk_set:
-                processed_item = await self.process_item(item, column, None, embed_model, dst_path)
-                chunked_item = await self.chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model)
-            else:
-                pass
-            await asyncio.sleep(0.001)
+    #     async for item in self.async_generator(dataset_stream):
+    #         while self.cid_queue.full():
+    #             await asyncio.sleep(0.1)
+    #         if column is not None:
+    #             cid = self.multiformats.get_cid(item[column])
+    #         else:
+    #             json_item = json.dumps(item)
+    #             cid = self.multiformats.get_cid(json_item)
+    #         if cid not in list(item.keys()):
+    #             item["cid"] = cid
+    #         if cid not in self.cid_chunk_set:
+    #             processed_item = await self.process_item(item, column, None, embed_model, dst_path)
+    #             chunked_item = await self.chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model)
+    #         else:
+    #             pass
+    #         await asyncio.sleep(0.001)
            
-        return None
+    #     return None
         
     async def process_new_dataset_shard(self, dataset, split=None):
         results = await self.ipfs_datasets.process_new_dataset_shard(dataset, split)
