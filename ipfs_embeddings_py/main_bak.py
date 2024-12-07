@@ -321,52 +321,110 @@ class ipfs_embeddings_py:
                 if "new_dataset" not in list(self.all_cid_list.keys()):
                     self.all_cid_list["new_dataset"] = []
                 if "new_dataset" not in list(self.all_cid_set.keys()):
-                    self.all_cid_set["new_dataset"] = set()                
-                # if self.caches["new_dataset"] and len(self.caches["new_dataset"]["items"]) > 0:
-                #     tmp_dataset = datasets.Dataset.from_dict(self.caches["new_dataset"])
-                #     tmp_dataset_cids = tmp_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
-                #     self.all_cid_list["new_dataset"] += tmp_dataset_cids
-                #     self.all_cid_set["new_dataset"] = set(self.all_cid_set["new_dataset"].union(set(tmp_dataset_cids)))
-                #     tmp_dataset_cids_dataset = datasets.Dataset.from_dict({"cids": tmp_dataset_cids})
-                #     new_dataset_shards = [x for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x]
-                #     next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_shard_{len(new_dataset_shards)}"
-                #     tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
-                #     tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + ".parquet"))
-                #     del tmp_dataset
-                #     del tmp_dataset_cids
-                #     del tmp_dataset_cids_dataset
-                #     del self.caches["new_dataset"]
-                #     self.caches["new_dataset"] = {}
+                    self.all_cid_set["new_dataset"] = set()
+                if "new_dataset" in list(self.caches.keys()):
+                    for cid in list(self.caches["new_dataset"].keys()):
+                        if "embedding" in list(self.caches["new_dataset"][cid].keys()):
+                            self.caches[model][cid] = self.caches["new_dataset"][cid]["embedding"]
+                            self.all_cid_list[model].append(cid)
+                            self.all_cid_set[model].add(cid)
+                            del self.caches["new_dataset"][cid]["embedding"]
+                    if self.caches["new_dataset"] and len(self.caches["new_dataset"]) > 0:
+                        tmp_dataset = datasets.Dataset.from_dict(self.caches["new_dataset"])
+                        tmp_dataset_cids = list(self.caches["new_dataset"].keys())
+                        self.all_cid_list["new_dataset"] += tmp_dataset_cids
+                        self.all_cid_set["new_dataset"] = set(self.all_cid_set["new_dataset"].union(set(tmp_dataset_cids)))
+                        tmp_dataset_cids_dataset = datasets.Dataset.from_dict({"cids": tmp_dataset_cids})
+                        new_dataset_shards = [x for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x]
+                        next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_shard_{len(new_dataset_shards)}"
+                        tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
+                        tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + ".parquet"))
+                        del tmp_dataset
+                        del tmp_dataset_cids
+                        del tmp_dataset_cids_dataset
+                        del self.caches["new_dataset"]
+                        self.caches["new_dataset"] = {}
+                        pass
                 for model in models:
                     if model in list(self.item_cache.keys()):
                         if "items" in list(self.item_cache[model].keys()):
                             del self.item_cache[model]["items"]
                         for result in list(self.item_cache[model].keys()):
+                            if len(list(self.item_cache[model][result].keys())) == 0:
+                                del self.item_cache[model][result]
                             this_result = self.item_cache[model][result]
                             this_cid = None if "cid" not in list(this_result.keys()) else this_result["cid"]
                             this_embedding = None if "embedding" not in list(this_result.keys()) else this_result["embedding"]
                             this_data = None if "data" not in list(this_result.keys()) else this_result["data"]                            
                             parent_cid = None if "parent_cid" not in list(this_result.keys()) else this_result["parent_cid"]
                             children = None if "children" not in list(this_result.keys()) else this_result["children"]
+                            self.all_cid_list[model].append(this_cid)
+                            self.all_cid_set[model].add(this_cid)
                             if "embedding" in list(this_result.keys()):
-                                self.all_cid_list[model].append(this_cid)
-                                self.all_cid_set[model].add(this_cid)
-                                if "children" not in list(this_result.keys()) and "parent_cid" not in list(this_result.keys()):
-                                    if this_embedding is None:
-                                        if this_cid not in list(self.caches["new_dataset"].keys()):
-                                            self.caches["new_dataset"][this_cid] = this_embedding
+                                self.caches[model][this_cid] = np.array(this_embedding)
+                                del self.item_cache[model][result]["embedding"]
+                            if "children" not in list(this_result.keys()) and "parent_cid" not in list(this_result.keys()):
+                                if this_embedding is None:
+                                    if this_cid not in list(self.caches["new_dataset"].keys()):
+                                        # self.caches["new_dataset"][this_cid] = this_embedding
                                         pass
-                                    else:
-                                        if this_cid not in list(self.caches[model].keys()):
-                                            self.caches[model][this_cid] = np.array(this_embedding)
-                                            del self.item_cache[model][result]
-                                else:
                                     pass
-                            else:
-                                pass
+                                else:
+                                    if this_cid not in list(self.caches[model].keys()):
+                                        self.caches[model][this_cid] = np.array(this_embedding)
+                                        del self.item_cache[model][result]
+                            pass
                         pass
                     else:
                         pass
+                for model in models:
+                    if model in list(self.chunk_cache.keys()) and model != "new_dataset":
+                        if "items" in list(self.chunk_cache[model].keys()):
+                            del self.chunk_cache[model]["items"]
+                        if len(list(self.chunk_cache[model].keys())) > 0:
+                            for this_cid in list(self.chunk_cache[model].keys()):
+                                this_chunk = self.chunk_cache[model][this_cid]
+                                if "children" in list(this_chunk.keys()) and "items" in list(this_chunk.keys()):
+                                    parent_cid = this_chunk["parent_cid"]
+                                    for this_child in this_chunk["children"]:
+                                        if this_child in list(self.item_cache[model].keys()):
+                                            this_child_index = this_chunk["children"].index(this_child)
+                                            this_child_item = self.item_cache[model][this_child]
+                                            if  len(list(this_child_item.keys())) > 0 and "embedding" in list(this_chunk["items"][this_child_index].keys()):
+                                                self.caches[model][this_child] = this_chunk["items"][this_child_index]["embedding"]
+                                                pass
+                                            if type(this_child_item) == list and len(this_child_item) > 0:
+                                                self.chunk_cache[model][parent_cid]["items"].append(this_child_item)
+                                                del self.item_cache[model][this_child]
+                                            if type(this_child_item) == dict and len(list(this_child_item.keys())) > 0:
+                                                self.chunk_cache[model][parent_cid]["items"].append(this_child_item)
+                                                del self.item_cache[model][this_child]
+                                        pass
+                                    pass
+                                else:
+                                    print("Chunk is not ready for CID " + this_cid)
+                                    pass
+                for model in models:
+                    if len( list(self.chunk_cache[model].keys())) > 0 and model != "new_dataset":           
+                        chunk_cids = list(self.chunk_cache[model].keys())
+                        for cid in chunk_cids:
+                            len_children = len(self.chunk_cache[model][cid]["children"])
+                            len_items = len(self.chunk_cache[model][cid]["items"])
+                            children_cids = self.chunk_cache[model][cid]["children"]
+                            if len_items == len_children:
+                                this_chunk = self.chunk_cache[model][cid]
+                                this_chunk_items = this_chunk["items"]
+                                this_children_cid_dataset = datasets.Dataset.from_dict({"cids": children_cids})
+                                this_children_cid_path = os.path.join(dst_path, "checkpoints", "sparse_chunks", cid + "_cids.parquet")
+                                this_children_cid_dataset.to_parquet(this_children_cid_path)
+                                this_cid_dataset = datasets.Dataset.from_dict(this_chunk["items"])
+                                this_cid_path = os.path.join(dst_path, "checkpoints", "sparse_chunks", cid + ".parquet")
+                                this_cid_dataset.to_parquet(this_cid_path)
+                                print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + cid + " at " + this_cid_path)
+                                self.cid_chunk_set.add(cid)
+                                self.cid_chunk_list.append(cid)
+                                del self.chunk_cache[model][cid]
+                                del this_cid_dataset
                 for model in models:
                     if model in list(self.caches.keys()) and len(self.caches[model]) > 0:
                         if "items" in list(self.caches[model].keys()):
@@ -382,62 +440,6 @@ class ipfs_embeddings_py:
                             cache_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", model.replace('/', '___'), next_filename_shard + "_cids.parquet"))
                             print("Saved " + str(len(cache_cid_list)) + " embeddings to disk at " + dst_path)
                             self.caches[model] = {}
-                for model in models:
-                    if model in list(self.chunk_cache.keys()) and model != "new_dataset":
-                        if "items" in list(self.chunk_cache[model].keys()):
-                            del self.chunk_cache[model]["items"]
-                        if len(list(self.chunk_cache[model].keys())) > 0:
-                            for this_cid in list(self.chunk_cache[model].keys()):
-                                this_chunk = self.chunk_cache[model][this_cid]
-                                if "children" in list(this_chunk.keys()) and "items" in list(this_chunk.keys()):
-                                    parent_cid = this_chunk["parent_cid"]
-                                    for this_child in this_chunk["children"]:
-                                        if this_child in list(self.item_cache[model].keys()):
-                                            if "embeddings" in list(self.item_cache[model][this_child].keys()):
-                                                self.chunk_cache[model][parent_cid]["items"].append(self.item_cache[model][this_child])
-                                                del self.item_cache[model][this_child]
-                                                pass
-                                            pass
-                                        pass
-                                    pass
-                                else:
-                                    print("Chunk is not ready for CID " + this_cid)
-                                    pass
-                for model in models:
-                    if len( list(self.chunk_cache[model].keys())) > 0 and model != "new_dataset":           
-                        chunk_cids = list(self.chunk_cache[model].keys())
-                        for cid in chunk_cids:
-                            len_children = len(self.chunk_cache[model][cid]["children"])
-                            len_items = len(self.chunk_cache[model][cid]["items"])
-                            if len_items == len_children:
-                                this_cid_dataset = datasets.Dataset.from_dict(self.chunk_cache[model][cid])
-                                this_cid_path = os.path.join(dst_path, "checkpoints", "sparse_chunks", cid + ".parquet")
-                                this_cid_dataset.to_parquet(this_cid_path)
-                                print("Saved " + str(len(this_cid_dataset)) + " chunks to disk for CID " + cid + " at " + this_cid_path)
-                                self.cid_chunk_set.add(cid)
-                                self.cid_chunk_list.append(cid)
-                                del self.chunk_cache[model][cid]
-                                del this_cid_dataset
-                            # this_dataset = datasets.Dataset.from_dict(self.chunk_cache[model])
-                            # this_cid_list = list(self.chunk_cache[model].keys())
-                            # this_cids_dataset = datasets.Dataset.from_dict({"cids": this_cid_list})
-                            # ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints", model.replace('/', '___')))
-                            # new_dataset_shards = [x for x in ls_checkpoints if f"ipfs_{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard" in x and "_cids" not in x]
-                            # next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard_{len(new_dataset_shards)}"
-                            # this_dataset.to_parquet(os.path.join(dst_path, "checkpoints", model.replace('/', '___'), next_filename_shard + ".parquet"))
-                            # this_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", model.replace('/', '___'), next_filename_shard + "_cids.parquet"))
-                            # print("Saved " + str(len(this_cid_list)) + " embeddings to disk at " + dst_path)
-                            # self.all_cid_list[model] += this_cid_list
-                            # self.all_cid_set[model] = set(self.all_cid_set[model].union(set(this_cid_list)))
-                            # self.chunk_cache[model] = {}
-                    if model in list(self.chunk_cache.keys()) and len(self.chunk_cache[model]) > 0:                                              
-                        for this_cid in list(self.chunk_cache[model].keys()):
-                            this_chunk = self.chunk_cache[model][this_cid]
-                            if "children" not in list(this_chunk.keys()) and "parent" not in list(this_chunk.keys()):
-                                pass
-                            else:
-                                pass
-                        pass
                 self.saved = True
                 # if self.producer_task_done and all(self.consumer_task_done.values()):
             #     self.save_to_disk_task_done = True
@@ -529,7 +531,7 @@ class ipfs_embeddings_py:
                     await asyncio.sleep(0.1)
                 while not self.cid_queue.empty():
                     processed_item = await self.cid_queue.get()
-                    if processed_item is not None:
+                    if processed_item is not None and (type(processed_item) == dict and len(list(processed_item.keys())) > 0):
                         if "parent_cid" not in list(processed_item.keys()):
                             if "cid" in list(processed_item.keys()):
                                 this_cid = processed_item["cid"]
@@ -553,7 +555,7 @@ class ipfs_embeddings_py:
                         self.chunk_cache[model_name][chunked_item["parent_cid"]] = {}
                         self.chunk_cache[model_name][chunked_item["parent_cid"]]["children"] = chunked_item["children"]
                         self.chunk_cache[model_name][chunked_item["parent_cid"]]["parent_cid"] = chunked_item["parent_cid"]
-                        self.chunk_cache[model_name][chunked_item["parent_cid"]]["items"] = []
+                        self.chunk_cache[model_name][chunked_item["parent_cid"]]["items"] = {}
                     if chunked_item is not None:
                         for i in range(len(chunked_item["items"])):
                             item = chunked_item["items"][i]
@@ -689,9 +691,7 @@ class ipfs_embeddings_py:
                 if model_name not in list(self.all_cid_set.keys()):
                     self.all_cid_set[model_name] = set()
                 if model_name not in list(self.caches.keys()):
-                    self.caches[model_name] = {"items" : []}
-                if processed_item["cid"] not in list(self.item_cache[model_name].keys()):
-                    self.item_cache[model_name][processed_item["cid"]] = {}
+                    self.caches[model_name] = {}
                 if "parent_cid" in list(processed_item.keys()):
                     if model_name not in list(self.chunk_cache.keys()):
                         self.chunk_cache[model_name] = {}
@@ -701,7 +701,7 @@ class ipfs_embeddings_py:
                     if model_name not in list(self.item_cache.keys()):
                         self.item_cache[model_name] = {}
                     if processed_item["cid"] not in list(self.item_cache[model_name].keys()):
-                        self.item_cache[model_name][processed_item["cid"]] = {}
+                        self.item_cache[model_name][processed_item["cid"]] = processed_item
                 queue_sizes = {}
                 max_sizes = {}
                 queue_remaining = {}
@@ -777,6 +777,13 @@ class ipfs_embeddings_py:
                 self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].task_done()
 
             if len(batch) >= batch_size:
+                if "cuda" in endpoint:
+                    with torch.no_grad():
+                        if hasattr(torch.cuda, 'empty_cache'):
+                            torch.cuda.empty_cache()
+                        if hasattr(torch.cuda, 'ipc_collect'):
+                            torch.cuda.ipc_collect()
+                gc.collect()
                 results = endpoint_handler(batch)
                 if "hidden_states" in results.keys():
                     hidden_states = results["hidden_states"]
@@ -819,7 +826,7 @@ class ipfs_embeddings_py:
                         self.chunk_cache[model_name][batch_result["parent_cid"]] = {}
                         pass
                     if "items" not in list(self.chunk_cache[model_name][batch_result["parent_cid"]].keys()):
-                        self.chunk_cache[model_name][batch_result["parent_cid"]]["items"] = []
+                        self.chunk_cache[model_name][batch_result["parent_cid"]]["items"] = {}
                     if "children" not in list(self.chunk_cache[model_name][batch_result["parent_cid"]].keys()):
                         self.chunk_cache[model_name][batch_result["parent_cid"]]["children"] = []
                     if "parent_cid" not in list(self.chunk_cache[model_name][batch_result["parent_cid"]].keys()):
@@ -827,9 +834,9 @@ class ipfs_embeddings_py:
   
                     if batch_result["cid"] not in self.chunk_cache[model_name][batch_result["parent_cid"]]["children"]:
                         self.chunk_cache[model_name][batch_result["parent_cid"]]["children"].append(batch_result["cid"])
-                    child_cid_list = [ x["cid"] for x in self.chunk_cache[model_name][batch_result["parent_cid"]]["items"]]
+                    child_cid_list = list(self.chunk_cache[model_name][batch_result["parent_cid"]]["items"].keys())
                     if batch_result["cid"] not in child_cid_list:
-                        self.chunk_cache[model_name][batch_result["parent_cid"]]["items"].append(batch_result)
+                        self.chunk_cache[model_name][batch_result["parent_cid"]]["items"][batch_result["cid"]] = batch_result
                     if "embedding" in list(batch_result.keys()):
                         self.caches[model_name][this_cid] = batch_result["embedding"]                  
                     if batch_result["parent_cid"] not in self.cid_chunk_list:
@@ -839,11 +846,15 @@ class ipfs_embeddings_py:
                     this_cid = batch_result["cid"]
                     if this_cid not in list(self.item_cache[model_name].keys()):
                         self.item_cache[model_name][this_cid] = {}
-                    self.item_cache[model_name][this_cid] = batch_result
                     if "embedding" in list(batch_result.keys()):
                         self.caches[model_name][this_cid] = batch_result["embedding"]
-                    self.all_cid_list[model_name].append(this_cid)
-                    self.all_cid_set[model_name].add(this_cid)
+                    if this_cid not in list(self.caches["new_dataset"].keys()):
+                        if "embedding" in list(batch_result.keys()):
+                            self.caches[model_name][this_cid] = batch_result["embedding"]
+                            del batch_result["embedding"]
+                    if this_cid not in self.all_cid_set[model_name]:
+                        self.all_cid_list[model_name].append(this_cid)
+                        self.all_cid_set[model_name].add(this_cid)
                     if batch_result["cid"] not in self.cid_list:
                         self.cid_list.append(batch_result["cid"])
                         self.cid_set.add(batch_result["cid"])
@@ -859,8 +870,6 @@ class ipfs_embeddings_py:
                     if hasattr(torch.cuda, 'ipc_collect'):
                         torch.cuda.ipc_collect()
             gc.collect()
-            queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
-            queue_not_full = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
             queue_full = self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
             test_ready = all([
                 endpoint_queue,
@@ -905,7 +914,6 @@ class ipfs_embeddings_py:
         return item
                 
     async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None):
-    # async def item_producer(self, dataset_stream, column, embed_model=None, dst_path=None):
         tasks = []
         self.producer_task_done = False
         
