@@ -441,7 +441,7 @@ class ipfs_embeddings_py:
                             print("Saved " + str(len(cache_cid_list)) + " embeddings to disk at " + dst_path)
                             self.caches[model] = {}
                 self.saved = True
-                # if self.producer_task_done and all(self.consumer_task_done.values()):
+            #     if self.producer_task_done and all(self.consumer_task_done.values()):
             #     self.save_to_disk_task_done = True
             #     break
         return None 
