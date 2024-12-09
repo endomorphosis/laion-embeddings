@@ -162,6 +162,7 @@ class ipfs_datasets_py:
         self.load_clusters = self.load_clusters
         self.process_hashed_dataset_shard = process_hashed_dataset_shard
         self.process_index_shard = process_index_shard
+        self.process_new_dataset_shard = process_hashed_dataset_shard
         self.cid_chunk_list = []
         self.cid_chunk_set = set()
         self.cid_list = []
@@ -569,11 +570,11 @@ class ipfs_datasets_py:
                 ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
                 hashed_dataset_shards = [os.path.join(dst_path, "checkpoints", x) for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x ]
                 if "hashed_dataset" not in list(self.all_cid_list.keys()):
-                    self.all_cid_list["hashed_checkpoints"] = []
+                    self.all_cid_list["hashed_dataset"] = []
                 if "hashed_dataset" not in list(self.all_cid_set.keys()):
-                    self.all_cid_set["hashed_checkpoints"] = set()
+                    self.all_cid_set["hashed_dataset"] = set()
                 if "hashed_dataset" not in list(self.caches.keys()):
-                    self.caches["hashed_checkpoints"] = {"items" : []}
+                    self.caches["hashed_dataset"] = {"items" : []}
                 with multiprocessing.Pool() as pool:
                     args = [[hashed_dataset_shards[i], method] for i in range(len(hashed_dataset_shards))]
                     results = pool.map(process_hashed_dataset_shard, args)
@@ -591,7 +592,9 @@ class ipfs_datasets_py:
                                 self.schemas["hashed_dataset"] = schemas  # Assuming schemas won't conflict
                         # Update the shared variables in bulk
                         self.all_cid_list["hashed_dataset"] += total_cids
-                        self.all_cid_set["hashed_dataset"].update(set(total_cids))
+                        self.all_cid_set["hashed_dataset"].update(set(total_cids))    
+                        if "hashed_dataset" not in list(self.caches.keys()):
+                            self.caches["hashed_dataset"] = {"items" : []}
                         self.caches["hashed_dataset"]["items"] += total_items
                                             
                 if self.hashed_dataset is None or isinstance(self.hashed_dataset, dict):

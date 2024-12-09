@@ -211,15 +211,21 @@ def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_si
     with Pool(processes=32) as pool:
         args = [(shards[i], column, caches, all_cid_set) for i in range(len(shards))]
         processed_dataset = pool.starmap(process_dataset, args)
-        hashed_dataset = Dataset.from_dict(shard_id, processed_dataset[shard_id])
-
-        if processed_dataset == None:
+        for shard in processed_dataset:
+            dataset.update(shard)
+        hashed_dataset = datasets.Dataset.from_dict(dataset)
+        ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+        this_model_shards = [os.path.join(dst_path, "checkpoints", x)  for x in ls_checkpoints if embed_model.replace("/", "___") + "_shard" in x and "_cids" not in x]
+        next_model_shard = os.path.join(dst_path, "checkpoints", embed_model.replace("/", "___") + "_shard_" + str(len(this_model_shards)))
+        hashed_dataset.to_parquet(next_model_shard)
+        
+        if hashed_dataset == None:
             return None
         else:        
-            print(len(processed_dataset))
+            print(len(hashed_dataset))
             
         # for item in generator(dataset_stream):
-        for item in generator(processed_dataset):
+        for item in generator(hashed_dataset):
             current_items.append(item)
             if column is not None:
                 cid = ipfs_multiformats.get_cid(item[column])
@@ -1059,6 +1065,7 @@ class ipfs_embeddings_py:
         self.cid_set = cid_set
         all_cid_list = self.ipfs_datasets.all_cid_list
         all_cid_set = self.ipfs_datasets.all_cid_set
+            
         # num_workers = min(multiprocessing.cpu_count(), 1)  # Use up to 1 CPU cores
         # num_workers = min(multiprocessing.cpu_count(), 8)  # Use up to 8 CPU cores
         num_workers = round(multiprocessing.cpu_count() / 2)
@@ -1078,7 +1085,7 @@ class ipfs_embeddings_py:
         #     ]
         #     pool.starmap(chunk_producer, args)
             
-        args = [self.dataset, column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:0"], None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, all_cid_set["hashed_dataset"]]        
+        args = [self.dataset, column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:0"], None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, cid_list]        
         chunk_producer_results = chunk_producer(*args)
         # Create producer tasks directly as asyncio tasks
         # for worker_id in range(num_workers):
