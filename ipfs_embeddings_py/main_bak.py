@@ -224,55 +224,32 @@ def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_si
         else:        
             print(len(hashed_dataset))
             
-        # for item in generator(dataset_stream):
         for item in generator(hashed_dataset):
-            current_items.append(item)
-            if column is not None:
-                cid = ipfs_multiformats.get_cid(item[column])
-                text = item[column]
-            else:
-                json_item = json.dumps(item)
-                cid = ipfs_multiformats.get_cid(json_item)
-                text = json_item
-                
-            if cid not in list(item.keys()):
-                item["cid"] = cid
-                
-            if cid not in cid_chunk_set:
-                processed_item = process_item(item, column, queues=None, caches=caches, all_cid_set=all_cid_set)
-                current_processed_items.append(processed_item)
-                cid_cache[cid] = processed_item
-                cid_set.append(cid)
-                if processed_item:
-                    if column is not None:
-                        current_batch.append(processed_item[column])
-                    else:
-                        current_batch.append(json.dumps(processed_item))
-                    if len(current_batch) >= batch_size:
-                        # Process batch in parallel
-                        tokenized_texts = pool.starmap(tokenize_batch, [(batch, tokenizer) for batch in chunks(current_batch, len(pool._pool))])
-                        if "processed_items"  not in list(tokenized_texts[0].keys()):
-                            tokenized_texts[0]["processed_items"] = []
-                        for i in range(len(tokenized_texts[0]["text_list"])):
-                            if i >= len(tokenized_texts[0]["processed_items"]):
-                                tokenized_texts[0]["processed_items"].append(current_processed_items[i])
-                            
-                        tokenized_texts_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
-                        args = [(tokenized_texts_datasets[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_texts_datasets))]    
-                        tokenized_chunks = pool.starmap(chunk_items, args)
-                        if "parent_cid" not in list(chunk_cache.keys()):
-                            chunk_cache[cid] = manager.dict()
-                        for chunk in tokenized_chunks:
-                            if chunk is not None:
-                                chunk_cache[chunk["parent_cid"]] = chunk
-                                current_results.append(chunk)
-                                cid_chunk_set.append(chunk["parent_cid"])
-                        current_batch = []
-                        current_items = []
-                        current_processed_items = []
-                        pass
-                    pass
-                
+            current_batch.append(item)
+            if len(current_batch) >= batch_size:
+                # Process batch in parallel
+                tokenized_texts = pool.starmap(tokenize_batch, [(batch, tokenizer) for batch in chunks(current_batch, len(pool._pool))])
+                if "processed_items"  not in list(tokenized_texts[0].keys()):
+                    tokenized_texts[0]["processed_items"] = []
+                for i in range(len(tokenized_texts[0]["text_list"])):
+                    if i >= len(tokenized_texts[0]["processed_items"]):
+                        tokenized_texts[0]["processed_items"].append(current_processed_items[i])
+                    
+                tokenized_texts_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
+                args = [(tokenized_texts_datasets[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_texts_datasets))]    
+                tokenized_chunks = pool.starmap(chunk_items, args)
+                if "parent_cid" not in list(chunk_cache.keys()):
+                    chunk_cache[cid] = manager.dict()
+                for chunk in tokenized_chunks:
+                    if chunk is not None:
+                        chunk_cache[chunk["parent_cid"]] = chunk
+                        current_results.append(chunk)
+                        cid_chunk_set.append(chunk["parent_cid"])
+                current_batch = []
+                current_processed_items = []
+                pass
+            pass
+        
         # Process remaining items
         if current_batch:
             tokenized_texts = pool.starmap(tokenize_batch, [(batch, tokenizer) for batch in chunks(current_batch, len(pool._pool))])
