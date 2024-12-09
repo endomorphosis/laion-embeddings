@@ -18,7 +18,11 @@ logging.getLogger('sentence_transformers').setLevel(logging.WARNING)
 CHUNKING_STRATEGIES = ['semantic', 'fixed', 'sentences', 'sliding_window']
 
 class chunker:
-    def __init__(self, resources, metadata):
+    def __init__(self, resources=None, metadata=None):
+        if resources is None:
+            resources = {}
+        if metadata is None:  
+            metadata = {}
         self.resources = resources
         self.metadata = metadata
         if "chunking_strategy" in metadata.keys():
@@ -28,16 +32,19 @@ class chunker:
         if chunking_strategy not in CHUNKING_STRATEGIES:
             raise ValueError("Unsupported chunking strategy: ", chunking_strategy)
         self.chunking_strategy = chunking_strategy
-        
-        if len(list(metadata["models"])) > 0:
-            self.embedding_model_name = metadata["models"][0]
-            self.embed_model = metadata["models"][0]
+        if "models" in metadata.keys():
+            if len(list(metadata["models"])) > 0:
+                self.embedding_model_name = metadata["models"][0]
+                self.embed_model = metadata["models"][0]
+            else:
+                self.embedding_model_name = None
+                self.embed_model = None
         else:
             self.embedding_model_name = None
             self.embed_model = None
-            
         self.chunkers = {}
-        self.chunkers[self.embedding_model_name] = {}
+        if self.embedding_model_name is not None:
+            self.chunkers[self.embedding_model_name] = {}
         # self.chunker = self._setup_semantic_chunking(self.embedding_model_name)
         # self.chunkers[self.embedding_model_name]["cpu"] = self.chunker
         self.batch_size = 1

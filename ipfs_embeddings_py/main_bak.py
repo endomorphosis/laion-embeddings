@@ -87,7 +87,8 @@ except Exception as e:
         pass
     pass
 
-
+from multiprocessing import Manager
+from multiprocessing import Pool
 from multiprocessing import Process
 import concurrent.futures
 import concurrent
@@ -95,48 +96,24 @@ import json
 from ipfs_datasets import ipfs_datasets_py
 from ipfs_accelerate_py import ipfs_accelerate_py
 import multiformats
+from queue import Queue
 
-cid_queue = asyncio.Queue()
+manager = Manager()
+caches = manager.dict()
+chunk_cache = manager.dict()
+cid_cache = manager.dict()
+cid_chunk_queue = manager.Queue()
+cid_queue = manager.Queue()
+cid_set = manager.list()
+cid_chunk_set = manager.list()
+all_cid_set = manager.dict()
+batch_sizes = manager.dict()
+metadata = manager.dict()
+caches["hashed_dataset"] = manager.dict()
 
-cid_set = set()
-
-cid_chunk_set = set()
-
-cid_chunk_queue = asyncio.Queue()
-
-# def process_shard(shard, column, dst_path, model, ):
-#     loop = asyncio.new_event_loop()
-#     asyncio.set_event_loop(loop)
-#     try:
-#         loop.run_until_complete(chunk_producer(shard, column, None, None, None, None, None, model, dst_path, chunk_item, process_item, cid_queue, cid_chunk_set))
-#     finally:
-#         loop.close()
-
-# async def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None):
-#     tasks = []
-#     # self.producer_task_done = False
-    
-#     async for item in async_generator(dataset_stream):
-#         while cid_queue.full():
-#             await asyncio.sleep(0.1)
-#         if column is not None:
-#             cid = multiformats.get_cid(item[column])
-#         else:
-#             json_item = json.dumps(item)
-#             cid = multiformats.get_cid(json_item)
-#         if cid not in list(item.keys()):
-#             item["cid"] = cid
-#         if cid not in cid_chunk_set:
-#             processed_item = await process_item(item, column, None, embed_model, dst_path)
-#             chunked_item = await chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model)
-#         else:
-#             pass
-#         await asyncio.sleep(0.001)
-        
-#     return None
-
-
-def index_cid(self, samples):
+ipfs_multiformats = ipfs_multiformats_py()
+this_chunker = chunker()
+def index_cid(samples):
     results = []
     if samples is None:
         raise ValueError("samples must be a list")
@@ -144,52 +121,179 @@ def index_cid(self, samples):
         samples = [samples]
     if isinstance(samples, list):
         for this_sample in samples:
-            this_sample_cid = multiformats.get_cid(this_sample)
+            this_sample_cid = ipfs_multiformats.get_cid(this_sample)
             results.append(this_sample_cid)
     else:
         raise ValueError("samples must be a list or string")
     return results
 
+def tokenize_batch(batch, tokenizer):
+    new_token_data = {}
+    try:
+        results = tokenizer(batch, padding=True, return_tensors="pt")
+        new_token_data["tokens_list"] = [ results["input_ids"][i].tolist() for i in range(len(results["input_ids"])) ]
+        new_token_data["tokens_text"] = [ tokenizer.decode(tokens) for tokens in new_token_data["tokens_list"]]
+        new_token_data["text_list"] = [ tokenizer.decode(tokens) for tokens in new_token_data["tokens_list"]]
+        new_token_data["token_lengths"] = [new_token_data["tokens_list"][i].count(0) for i in range(len(new_token_data["tokens_list"])) ]
+        return new_token_data
+    except Exception as e:
+        print("Error tokenizing batch: ", e)
+        return e
 
-def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None, ipfs_accelerate_py=None, chunker=None, metadata=None):
-    tasks = []
-    # self.producer_task_done = False
-    
+def process_dataset(dataset_stream, column=None, caches=None):
+    dataset = {}
     for item in generator(dataset_stream):
-        while cid_queue.full():
-            time.sleep(0.1)
-        if column is not None:
-            cid = multiformats.get_cid(item[column])
+        column_names = list(item.keys())
+        if column is None:
+            payload = str(json.dumps(item))
+        elif column not in column_names:
+            payload = str(json.dumps(item))
         else:
-            json_item = json.dumps(item)
-            cid = multiformats.get_cid(json_item)
-        if cid not in list(item.keys()):
-            item["cid"] = cid
-        if cid not in cid_chunk_set:
-            processed_item = process_item(item, column, None, embed_model, dst_path)
-            chunked_item = chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, ipfs_accelerate_py, chunker, metadata)
+            payload = str(item[column])
+        try:
+            ## convert payload to a bytes like object 
+            payload = payload.encode()
+            payload = payload.decode('utf-8')
+            this_cid = ipfs_multiformats.get_cid(payload)
+        except Exception as e:
+            # print("Error getting CID: ", e)
+            try:
+                this_cid = ipfs_multiformats.get_cid(payload)
+            except Exception as e:
+                print("Error getting CID: ", e)
+                try:
+                    this_cid = ipfs_multiformats.get_cid(payload)
+                except Exception as e:
+                    print("Error getting CID: ", e)
+                    print(payload)
+                    this_cid = ipfs_multiformats.get_cid(json.dumps(item))            
+            
+        if "cid" not in column_names:
+            item["cid"] = this_cid
+        elif item["cid"] is None:
+            item["cid"] = this_cid
+        # Check if cid is in index
+        if this_cid in cid_set:
+            print(f"CID {this_cid} already in index, skipping item.")
         else:
-            pass
-        
-    return None
+            while cid_queue.full():
+                 time.sleep(0.1)    
+            if this_cid not in cid_set:
+                cid_set.append(this_cid)
+                # caches["hashed_dataset"][this_cid] = item
+                dataset[item["cid"]] = item
+                cid_queue.put_nowait
+                print("Added item to queue for CID " + str(this_cid))
+    return dataset
+                        
 
-def chunk_item(item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, ipfs_accelerate_py=None, chunker=None, metadata=None):
-    # Assuming `item` is a dictionary with required data
-    cuda_test = False
-    openvino_test = False
-    tokenizer_types = list(ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
-    cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
-    openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
-    if ipfs_accelerate_py.resources["hwtest"]["cuda"] == True:
-        cuda_test = True
-    if ipfs_accelerate_py.resources["hwtest"]["openvino"] == True:
-        openvino_test = True
-    if column is None:
+def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None, chunker=None, metadata=None, caches=None, all_cid_set=None):
+    batch_size = 2048  # Adjust batch size based on your needs
+    current_batch = []
+    current_processed_items = []
+    current_items = []
+    current_results = []
+    num_shards = 32
+    shard_id = 0
+    dataset = {}
+    shards = []
+    for i in range(num_shards):
+        shards.append(dataset_stream.shard(num_shards=num_shards, index=i))
+    
+    with Pool(processes=32) as pool:
+        args = [(shards[i], column, caches) for i in range(len(shards))]
+        processed_dataset = pool.starmap(process_dataset, args)
+        hashed_dataset = Dataset.from_dict(shard_id, processed_dataset[shard_id])
+
+        if processed_dataset == None:
+            return None
+        else:        
+            print(len(processed_dataset))
+            
+        # for item in generator(dataset_stream):
+        for item in generator(processed_dataset):
+            current_items.append(item)
+            if column is not None:
+                cid = ipfs_multiformats.get_cid(item[column])
+                text = item[column]
+            else:
+                json_item = json.dumps(item)
+                cid = ipfs_multiformats.get_cid(json_item)
+                text = json_item
+                
+            if cid not in list(item.keys()):
+                item["cid"] = cid
+                
+            if cid not in cid_chunk_set:
+                processed_item = process_item(item, column, queues=None, caches=caches, all_cid_set=all_cid_set)
+                current_processed_items.append(processed_item)
+                cid_cache[cid] = processed_item
+                cid_set.append(cid)
+                if processed_item:
+                    if column is not None:
+                        current_batch.append(processed_item[column])
+                    else:
+                        current_batch.append(json.dumps(processed_item))
+                    if len(current_batch) >= batch_size:
+                        # Process batch in parallel
+                        tokenized_texts = pool.starmap(tokenize_batch, [(batch, tokenizer) for batch in chunks(current_batch, len(pool._pool))])
+                        if "processed_items"  not in list(tokenized_texts[0].keys()):
+                            tokenized_texts[0]["processed_items"] = []
+                        for i in range(len(tokenized_texts[0]["text_list"])):
+                            if i >= len(tokenized_texts[0]["processed_items"]):
+                                tokenized_texts[0]["processed_items"].append(current_processed_items[i])
+                            
+                        tokenized_texts_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
+                        args = [(tokenized_texts_datasets[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_texts_datasets))]    
+                        tokenized_chunks = pool.starmap(chunk_items, args)
+                        if "parent_cid" not in list(chunk_cache.keys()):
+                            chunk_cache[cid] = manager.dict()
+                        for chunk in tokenized_chunks:
+                            if chunk is not None:
+                                chunk_cache[chunk["parent_cid"]] = chunk
+                                current_results.append(chunk)
+                                cid_chunk_set.append(chunk["parent_cid"])
+                        current_batch = []
+                        current_items = []
+                        current_processed_items = []
+                        pass
+                    pass
+                
+        # Process remaining items
+        if current_batch:
+            tokenized_texts = pool.starmap(tokenize_batch, [(batch, tokenizer) for batch in chunks(current_batch, len(pool._pool))])
+            if "processed_items"  not in list(tokenized_texts[0].keys()):
+                tokenized_texts[0]["processed_items"] = []
+            for i in range (len(tokenized_texts[0]["text_list"])):
+                tokenized_texts[0]["processed_items"].append(current_processed_items[i])
+                
+            tokenized_texts_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
+            args = [(tokenized_texts_datasets[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_texts_datasets))]    
+            tokenized_chunks = pool.starmap(chunk_items, args)
+            if "parent_cid" not in list(chunk_cache.keys()):
+                chunk_cache[cid] = manager.dict()
+            for chunk in tokenized_chunks:
+                chunk_cache[chunk["parent_cid"]] = chunk
+                current_results.append(chunk)
+                cid_chunk_set.append(chunk["parent_cid"])
+                
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+
+def chunk_items(item_data, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, chunker=None, metadata=None):
+    item = item_data["processed_items"]
+    batch_size = 1
+    device = 'cpu'
+    cid_chunks = None
+    if type(item) == dict and column not in list(item.keys()):
         content = json.dumps(item)
-    elif column not in list(item.keys()):
-        content = json.dumps(item)
-    else:
+    if type(item) == dict and column in list(item.keys()):
         content = item[column]
+    else:
+        content = json.dumps(item)
     if embed_model is None:
         if len(metadata["models"]) == 0:
             embed_model = "thenlper/gte-small"
@@ -200,46 +304,99 @@ def chunk_item(item, column=None, method=None, tokenizer=None, chunk_size=None, 
     if n_sentences is None:
         n_sentences = 8
     if step_size is None:
-        step_size = 256
-    if tokenizer is None:
-        if embed_model not in list(ipfs_accelerate_py.resources["tokenizer"].keys()):
-            tokenizer[embed_model] = {}
-        if cuda_test == True:
-            tokenizer_types = list(ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
-            cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
-            random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
-            device = random_cuda_tokenizer
-            tokenizer = ipfs_accelerate_py.resources["tokenizer"][embed_model][random_cuda_tokenizer]
-            batch_size = ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_cuda_tokenizer]
-            if batch_size == 0 or batch_size is None:
-                batch_size = 32
-        elif openvino_test == True:
-            openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
-            random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
-            device = random_openvino_tokenizer
-            tokenizer = ipfs_accelerate_py.resources["tokenizer"][embed_model][random_openvino_tokenizer]  
-            batch_size = ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_openvino_tokenizer]
-            if batch_size == 0 or batch_size is None:
-                batch_size = 1
-        elif "cpu" not in tokenizer_types:
-            tokenizer = ipfs_accelerate_py.resources["tokenizer"][embed_model]["cpu"]                
-            batch_size = ipfs_accelerate_py.resources["batch_sizes"][embed_model]["cpu"]
-            device = "cpu"
-            if batch_size == 0 or batch_size is None:
-                batch_size = 1
-        else:
-            device = "cpu"
-            tokenizer =  AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
-            batch_size = 1
+        step_size = 256    
     if method is None:
-        fixed_chunk_list = chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, metadata["models"][0], device, batch_size)
+        fixed_chunk_list = this_chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, metadata["models"][0], device, batch_size)
         # semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0], device, batch_size)
-        sentences_chunk_list = chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, metadata["models"][0], device, batch_size) 
-        sliding_window_chunk_list = chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, metadata["models"][0], device, batch_size)
+        sentences_chunk_list = this_chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, metadata["models"][0], device, batch_size) 
+        sliding_window_chunk_list = this_chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, metadata["models"][0], device, batch_size)
         # content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
         content_chunks = fixed_chunk_list + sentences_chunk_list + sliding_window_chunk_list
     else:
-        content_chunks = chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
+        content_chunks = this_chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
+        
+    if item is not None and type(item) is dict and "cid" in list(item.keys()):
+        parent_cid = item["cid"]
+    else:
+        if item is not None and "colmuns" in list(item.keys()):
+            parent_cid = ipfs_multiformats.get_cid(item[column])
+        elif item is not None and "columns" not in list(item.keys()):
+            parent_cid = ipfs_multiformats.get_cid(json.dumps(item))
+        else:
+            parent_cid = ipfs_multiformats.get_cid(json.dumps(item))
+
+    content_tokens = tokenizer.encode(content)
+    ## sort content_chunks by the firt element of each tuple then the second element
+    content_chunks = sorted(content_chunks, key=lambda x: (x[0], x[1]))
+    ## filter out chunks that are larger than the chunk_size
+    content_chunks = [chunk for chunk in content_chunks if chunk[1] - chunk[0] <= chunk_size]
+    ## filter content_chunks to remove duplicates
+    seen_chunks = set()
+    unique_content_chunks = []
+    for chunk in content_chunks:
+        if chunk not in seen_chunks:
+            unique_content_chunks.append(chunk)
+            seen_chunks.add(chunk)
+    content_chunks = unique_content_chunks
+    if parent_cid in cid_chunk_set:
+        pass
+    else:
+        cid_chunks = {"parent_cid": parent_cid, "items" : [], "children": []}
+        for chunk in content_chunks:
+            chunk_index = chunk
+            chunk_content = content_tokens[chunk[0]:chunk[1]]
+            chunk_text = tokenizer.decode(chunk_content)
+            child_cid = ipfs_multiformats.get_cid(chunk_text)
+            child_content = {"cid": child_cid, "index": chunk_index, "content": chunk_text, "parent_cid": parent_cid}
+            cid_chunks["children"].append(child_cid)
+            cid_chunks["items"].append(child_content)
+
+        if type(cid_chunks["parent_cid"]) is not str:
+            print("Parent CID is not a string")
+    
+        if parent_cid not in cid_chunk_set and type(cid_chunks["parent_cid"]) is str:
+            while cid_chunk_queue.full():
+                time.sleep(0.1)
+            if not cid_chunk_queue.full():
+                cid_chunk_set.append(parent_cid)
+                cid_chunk_queue.put_nowait(cid_chunks)
+                print("Added chunked item to queue for CID " + cid_chunks["parent_cid"])
+        else:
+            print("CID " + cid_chunks["parent_cid"] + " already in chunk set")
+    return cid_chunks
+
+def chunk_item(item_data, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, chunker=None, metadata=None):
+    item = item_data[0]
+    batch_size = 1
+    device = 'cpu'
+    if column is None:
+        content = json.dumps(item)
+    elif type(item) is dict and column not in list(item.keys()):
+        content = json.dumps(item)
+    elif type(item) is dict and column in list(item.keys()):
+        content = item[column]
+    else:
+        content = json.dumps(item)    
+    if embed_model is None:
+        if len(metadata["models"]) == 0:
+            embed_model = "thenlper/gte-small"
+        else:
+            embed_model = metadata["models"][0]
+    if chunk_size is None:
+        chunk_size = 512
+    if n_sentences is None:
+        n_sentences = 8
+    if step_size is None:
+        step_size = 256    
+    if method is None:
+        fixed_chunk_list = this_chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, metadata["models"][0], device, batch_size)
+        # semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0], device, batch_size)
+        sentences_chunk_list = this_chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, metadata["models"][0], device, batch_size) 
+        sliding_window_chunk_list = this_chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, metadata["models"][0], device, batch_size)
+        # content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
+        content_chunks = fixed_chunk_list + sentences_chunk_list + sliding_window_chunk_list
+    else:
+        content_chunks = this_chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
     parent_cid = item["cid"]
     content_tokens = tokenizer.encode(content)
     ## sort content_chunks by the firt element of each tuple then the second element
@@ -262,7 +419,7 @@ def chunk_item(item, column=None, method=None, tokenizer=None, chunk_size=None, 
             chunk_index = chunk
             chunk_content = content_tokens[chunk[0]:chunk[1]]
             chunk_text = tokenizer.decode(chunk_content)
-            child_cid = multiformats.get_cid(chunk_text)
+            child_cid = ipfs_multiformats.get_cid(chunk_text)
             child_content = {"cid": child_cid, "index": chunk_index, "content": chunk_text, "parent_cid": parent_cid}
             cid_chunks["children"].append(child_cid)
             cid_chunks["items"].append(child_content)
@@ -274,29 +431,25 @@ def chunk_item(item, column=None, method=None, tokenizer=None, chunk_size=None, 
             while cid_chunk_queue.full():
                 time.sleep(0.1)
             if not cid_chunk_queue.full():
-                cid_chunk_set.add(parent_cid)
+                cid_chunk_set.append(parent_cid)
                 cid_chunk_queue.put_nowait(cid_chunks)
                 print("Added chunked item to queue for CID " + cid_chunks["parent_cid"])
         else:
             print("CID " + cid_chunks["parent_cid"] + " already in chunk set")
     return cid_chunks
 
-def process_item(item, column=None, queues=None, dst_path=None, embed_model=None, chunker=None, metadata=None, caches=None, all_cid_set=None, ipfs_accelerate_py=None):
-    # Assuming `item` is a dictionary with required data
-    if "new_dataset" not in list(caches.keys()):
-        caches["new_dataset"] = {}
-    if "new_dataset" not in list(all_cid_set.keys()):
-        all_cid_set["new_dataset"] = set()
+        
+def process_item(item, column=None, queues=None, caches=None, all_cid_set=None):
     # print(f"Processing item with CID {index_cid(item[column])[0]}")
-    if queues is None:
-        queues = ipfs_accelerate_py.resources["queues"]
+    # if queues is None:
+    #     queues = ipfs_accelerate_py.resources["queues"]
     column_names = list(item.keys())
     if column is None:
         this_cid = index_cid(json.dumps(item))[0]
     elif column not in column_names:
         this_cid =  index_cid(json.dumps(item))[0]
     else:
-        this_cid = ipfs_multiformats_py.get_cid(item[column])
+        this_cid = ipfs_multiformats.get_cid(item[column])
         index_cid(item[column])[0]
     if "cid" not in column_names:
         item["cid"] = this_cid
@@ -310,9 +463,9 @@ def process_item(item, column=None, queues=None, dst_path=None, embed_model=None
         while cid_queue.full():
             time.sleep(0.1)    
         if this_cid not in cid_set:
-            cid_set.add(this_cid)
-            caches["new_dataset"][this_cid] = item
-            cid_queue.put_nowait(item)
+            cid_set.append(this_cid)
+            caches["hashed_dataset"][this_cid] = item
+            cid_queue.put_nowait
             print("Added item to queue for CID " + str(this_cid))
             # self.saved = False
     return item
@@ -336,7 +489,7 @@ class ipfs_embeddings_py:
         self.elasticsearch_kit = elasticsearch_kit(resources, metadata)
         self.faiss_kit = faiss_kit_py(resources, metadata)
         self.ipfs_accelerate_py = ipfs_accelerate_py(resources, metadata)
-        self.process_new_dataset_shard = self.ipfs_datasets.process_new_dataset_shard
+        self.process_hashed_dataset_shard = self.ipfs_datasets.process_hashed_dataset_shard
         self.process_index_shard = self.ipfs_datasets.process_index_shard
         self.ipfs_parquet_to_car = self.ipfs_datasets.ipfs_parquet_to_car_py
         self.ipfs_parquet_to_car_test = self.ipfs_datasets.ipfs_parquet_to_car_py.test
@@ -364,7 +517,7 @@ class ipfs_embeddings_py:
         self.batch_sizes = {}
         self.cid_list = []
         self.cid_set = set()
-        self.new_dataset = None
+        self.hashed_dataset = None
         self.all_cid_list = {}
         self.all_cid_set = {}
         self.cid_chunk_queue = None
@@ -374,10 +527,10 @@ class ipfs_embeddings_py:
         self.tokenizer = {}
         self.endpoint_status = {}
         self.endpoint_handler = {}
-        self.new_dataset = {}
+        self.hashed_dataset = {}
         self.chunk_item = chunk_item
         self.process_item = process_item
-        self.new_dataset_children = {}
+        self.hashed_dataset_children = {}
         self.saved = False
         self.resources = resources
         self.metadata = metadata
@@ -527,6 +680,8 @@ class ipfs_embeddings_py:
     #         else:
     #             print("CID " + cid_chunks["parent_cid"] + " already in chunk set")
     #     return cid_chunks
+    
+    
 
     async def queue_size(self, model):
         print("Checking queue size")
@@ -549,32 +704,32 @@ class ipfs_embeddings_py:
                 if not os.path.exists(os.path.join(dst_path, "checkpoints", "sparse_embeddings")):
                     os.makedirs(os.path.join(dst_path, "checkpoints", "sparse_embeddings"))
                 ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
-                if "new_dataset" not in list(self.all_cid_list.keys()):
-                    self.all_cid_list["new_dataset"] = []
-                if "new_dataset" not in list(self.all_cid_set.keys()):
-                    self.all_cid_set["new_dataset"] = set()
-                if "new_dataset" in list(self.caches.keys()):
-                    for cid in list(self.caches["new_dataset"].keys()):
-                        if "embedding" in list(self.caches["new_dataset"][cid].keys()):
-                            self.caches[model][cid] = self.caches["new_dataset"][cid]["embedding"]
+                if "hashed_dataset" not in list(self.all_cid_list.keys()):
+                    self.all_cid_list["hashed_dataset"] = []
+                if "hashed_dataset" not in list(self.all_cid_set.keys()):
+                    self.all_cid_set["hashed_dataset"] = set()
+                if "hashed_dataset" in list(self.caches.keys()):
+                    for cid in list(self.caches["hashed_dataset"].keys()):
+                        if "embedding" in list(self.caches["hashed_dataset"][cid].keys()):
+                            self.caches[model][cid] = self.caches["hashed_dataset"][cid]["embedding"]
                             self.all_cid_list[model].append(cid)
                             self.all_cid_set[model].add(cid)
-                            del self.caches["new_dataset"][cid]["embedding"]
-                    if self.caches["new_dataset"] and len(self.caches["new_dataset"]) > 0:
-                        tmp_dataset = datasets.Dataset.from_dict(self.caches["new_dataset"])
-                        tmp_dataset_cids = list(self.caches["new_dataset"].keys())
-                        self.all_cid_list["new_dataset"] += tmp_dataset_cids
-                        self.all_cid_set["new_dataset"] = set(self.all_cid_set["new_dataset"].union(set(tmp_dataset_cids)))
+                            del self.caches["hashed_dataset"][cid]["embedding"]
+                    if self.caches["hashed_dataset"] and len(self.caches["hashed_dataset"]) > 0:
+                        tmp_dataset = datasets.Dataset.from_dict(self.caches["hashed_dataset"])
+                        tmp_dataset_cids = list(self.caches["hashed_dataset"].keys())
+                        self.all_cid_list["hashed_dataset"] += tmp_dataset_cids
+                        self.all_cid_set["hashed_dataset"] = set(self.all_cid_set["hashed_dataset"].union(set(tmp_dataset_cids)))
                         tmp_dataset_cids_dataset = datasets.Dataset.from_dict({"cids": tmp_dataset_cids})
-                        new_dataset_shards = [x for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x]
-                        next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_shard_{len(new_dataset_shards)}"
+                        hashed_dataset_shards = [x for x in ls_checkpoints if "ipfs_" + dataset.replace("/", "___") + "_shard" in x and "_cids" not in x]
+                        next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_shard_{len(hashed_dataset_shards)}"
                         tmp_dataset_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + "_cids.parquet"))
                         tmp_dataset.to_parquet(os.path.join(dst_path, "checkpoints", next_filename_shard + ".parquet"))
                         del tmp_dataset
                         del tmp_dataset_cids
                         del tmp_dataset_cids_dataset
-                        del self.caches["new_dataset"]
-                        self.caches["new_dataset"] = {}
+                        del self.caches["hashed_dataset"]
+                        self.caches["hashed_dataset"] = {}
                         pass
                 for model in models:
                     if model in list(self.item_cache.keys()):
@@ -596,8 +751,8 @@ class ipfs_embeddings_py:
                                 del self.item_cache[model][result]["embedding"]
                             if "children" not in list(this_result.keys()) and "parent_cid" not in list(this_result.keys()):
                                 if this_embedding is None:
-                                    if this_cid not in list(self.caches["new_dataset"].keys()):
-                                        # self.caches["new_dataset"][this_cid] = this_embedding
+                                    if this_cid not in list(self.caches["hashed_dataset"].keys()):
+                                        # self.caches["hashed_dataset"][this_cid] = this_embedding
                                         pass
                                     pass
                                 else:
@@ -609,7 +764,7 @@ class ipfs_embeddings_py:
                     else:
                         pass
                 for model in models:
-                    if model in list(self.chunk_cache.keys()) and model != "new_dataset":
+                    if model in list(self.chunk_cache.keys()) and model != "hashed_dataset":
                         if "items" in list(self.chunk_cache[model].keys()):
                             del self.chunk_cache[model]["items"]
                         if len(list(self.chunk_cache[model].keys())) > 0:
@@ -636,7 +791,7 @@ class ipfs_embeddings_py:
                                     print("Chunk is not ready for CID " + this_cid)
                                     pass
                 for model in models:
-                    if len( list(self.chunk_cache[model].keys())) > 0 and model != "new_dataset":           
+                    if len( list(self.chunk_cache[model].keys())) > 0 and model != "hashed_dataset":           
                         chunk_cids = list(self.chunk_cache[model].keys())
                         for cid in chunk_cids:
                             len_children = len(self.chunk_cache[model][cid]["children"])
@@ -665,8 +820,8 @@ class ipfs_embeddings_py:
                             cache_cid_list = list(self.caches[model].keys())
                             cache_cids_dataset = datasets.Dataset.from_dict({"cids": cache_cid_list})
                             ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints", model.replace('/', '___')))
-                            new_dataset_shards = [x for x in ls_checkpoints if f"ipfs_{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard" in x and "_cids" not in x]
-                            next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard_{len(new_dataset_shards)}"
+                            hashed_dataset_shards = [x for x in ls_checkpoints if f"ipfs_{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard" in x and "_cids" not in x]
+                            next_filename_shard = f"ipfs_{dataset.replace('/', '___')}_{model.replace('/', '___')}_shard_{len(hashed_dataset_shards)}"
                             cache_dataset.to_parquet(os.path.join(dst_path, "checkpoints", model.replace('/', '___'), next_filename_shard + ".parquet"))
                             cache_cids_dataset.to_parquet(os.path.join(dst_path, "checkpoints", model.replace('/', '___'), next_filename_shard + "_cids.parquet"))
                             print("Saved " + str(len(cache_cid_list)) + " embeddings to disk at " + dst_path)
@@ -678,6 +833,20 @@ class ipfs_embeddings_py:
         return None 
     
     async def init_datasets(self, models, dataset, split, column, dst_path):
+        await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
+        
+        # Load dataset
+        if split is None:
+            self.dataset = load_dataset(dataset).shuffle(random.randint(0,65536))
+        else:
+            self.dataset = load_dataset(dataset, split=split).shuffle(random.randint(0,65536))
+        
+        columns = self.dataset.column_names
+        columns.append("cid")
+        await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)
+        return None
+
+    async def init_datasets_bak(self, models, dataset, split, column, dst_path):
         await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
         
         # Load dataset
@@ -846,16 +1015,19 @@ class ipfs_embeddings_py:
         consumer_tasks = []
         producer_tasks = []
         all_tasks = []
+        metadata = self.metadata
         
+        # def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None, chunker=None, metadata=None, caches=None, all_cid_set=None):
 
-        with multiprocessing.Pool() as pool:
-            args = [
-                (self.dataset.shard(num_shards=num_workers, index=worker_id), column, dst_path, models[0])
-                for worker_id in range(num_workers)
-            ]
-            pool.starmap(chunk_producer, args)
+        # with multiprocessing.Pool() as pool:
+        #     args = [
+        #         (self.dataset.shard(num_shards= num_workers, index=worker_id), column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:"+str(worker_id % 2)] , None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, all_cid_set)
+        #         for worker_id in range(num_workers)
+        #     ]
+        #     pool.starmap(chunk_producer, args)
             
-
+        args = [self.dataset, column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:0"], None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, all_cid_set]        
+        chunk_producer_results = chunk_producer(*args)
         # Create producer tasks directly as asyncio tasks
         # for worker_id in range(num_workers):
         #     producer_task = asyncio.create_task(
@@ -1110,7 +1282,7 @@ class ipfs_embeddings_py:
                         self.item_cache[model_name][this_cid] = {}
                     if "embedding" in list(batch_result.keys()):
                         self.caches[model_name][this_cid] = batch_result["embedding"]
-                    if this_cid not in list(self.caches["new_dataset"].keys()):
+                    if this_cid not in list(self.caches["hashed_dataset"].keys()):
                         if "embedding" in list(batch_result.keys()):
                             self.caches[model_name][this_cid] = batch_result["embedding"]
                             del batch_result["embedding"]
@@ -1142,10 +1314,10 @@ class ipfs_embeddings_py:
 
     # async def process_item(self, item, column=None, queues=None, dst_path=None, embed_model=None, ):
     #     # Assuming `item` is a dictionary with required data
-    #     if "new_dataset" not in list(self.caches.keys()):
-    #         self.caches["new_dataset"] = {}
-    #     if "new_dataset" not in list(self.all_cid_set.keys()):
-    #         self.all_cid_set["new_dataset"] = set()
+    #     if "hashed_dataset" not in list(self.caches.keys()):
+    #         self.caches["hashed_dataset"] = {}
+    #     if "hashed_dataset" not in list(self.all_cid_set.keys()):
+    #         self.all_cid_set["hashed_dataset"] = set()
     #     # print(f"Processing item with CID {index_cid(item[column])[0]}")
     #     if queues is None:
     #         queues = self.ipfs_accelerate_py.resources["queues"]
@@ -1168,8 +1340,8 @@ class ipfs_embeddings_py:
     #         while self.cid_queue.full():
     #             await asyncio.sleep(0.1)    
     #         self.cid_set.add(this_cid)
-    #         if this_cid not in self.all_cid_set["new_dataset"]:
-    #             self.caches["new_dataset"][this_cid] = item
+    #         if this_cid not in self.all_cid_set["hashed_dataset"]:
+    #             self.caches["hashed_dataset"][this_cid] = item
     #             self.cid_queue.put_nowait(item)
     #             print("Added item to queue for CID " + str(this_cid))
     #             # self.saved = False
@@ -1198,8 +1370,8 @@ class ipfs_embeddings_py:
            
     #     return None
         
-    async def process_new_dataset_shard(self, dataset, split=None):
-        results = await self.ipfs_datasets.process_new_dataset_shard(dataset, split)
+    async def process_hashed_dataset_shard(self, dataset, split=None):
+        results = await self.ipfs_datasets.process_hashed_dataset_shard(dataset, split)
         return results
     
     async def init_endpoints(self, models, endpoint_list=None):
@@ -1276,13 +1448,13 @@ class ipfs_embeddings_py:
             centroids = np.array(centroids)
             max_splits = len(centroids)
         else:
-            new_dataset_download_size = self.new_dataset.dataset_size            
+            hashed_dataset_download_size = self.hashed_dataset.dataset_size            
             embeddings_size = {}
             for model in self.metadata["models"]:
                 embeddings_size[model] = self.index[model].dataset_size
             largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
             largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-            embeddings_size["new_dataset"] = new_dataset_download_size
+            embeddings_size["hashed_dataset"] = hashed_dataset_download_size
             largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
             largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
             max_size = 50 * 1024 * 1024 # 50 MB
@@ -1318,13 +1490,13 @@ class ipfs_embeddings_py:
             ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
         else:
             if kmeans is None:
-                new_dataset_download_size = self.new_dataset.dataset_size            
+                hashed_dataset_download_size = self.hashed_dataset.dataset_size            
                 embeddings_size = {}
                 for model in self.metadata["models"]:
                     embeddings_size[model] = self.index[model].dataset_size
                 largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
                 largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-                embeddings_size["new_dataset"] = new_dataset_download_size
+                embeddings_size["hashed_dataset"] = hashed_dataset_download_size
                 largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
                 largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
                 max_size = 50 * 1024 * 1024 # 50 MB
@@ -1346,7 +1518,7 @@ class ipfs_embeddings_py:
                 pass
             
             if len(ipfs_cids) == 0:
-                new_dataset_download_size = self.new_dataset.dataset_size            
+                hashed_dataset_download_size = self.hashed_dataset.dataset_size            
                 embeddings_size = {}
                 for model in self.metadata["models"]:
                     embeddings_size[model] = self.index[model].dataset_size
@@ -1428,7 +1600,7 @@ class ipfs_embeddings_py:
                 if cluster_id not in cluster_id_list:
                     cluster_id_list.append(cluster_id)
                     kmeans_embeddings_splits[cluster_id] = {}
-            first_item = self.new_dataset[0]
+            first_item = self.hashed_dataset[0]
             if "items" in list(first_item.keys()):
                 keys_list = list(first_item["items"].keys())
             else:
@@ -1450,7 +1622,7 @@ class ipfs_embeddings_py:
                     ipfs_cid_clusters_list[cluster_id].index(this_cid),
                     item["items"][key] if "items" in list(item.keys()) else item[key]
                 )
-                for item in self.new_dataset
+                for item in self.hashed_dataset
                 for this_cid in [item["items"]["cid"] if "items" in list(item.keys()) else item["cid"]]
                 if this_cid in ipfs_cid_set
                 for cluster_id in range(max_splits)
