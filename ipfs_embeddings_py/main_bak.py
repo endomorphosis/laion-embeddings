@@ -185,7 +185,7 @@ def process_dataset(dataset_stream, column=None, caches=None, this_cid_list=None
         else:
             while cid_queue.full():
                  time.sleep(0.1)    
-            if this_cid not in cid_set:
+            if this_cid not in this_cid_list["hashed_dataset"] and this_cid not in cid_set:
                 cid_set.append(this_cid)
                 all_cid_set["hashed_dataset"].append(this_cid)
                 # caches["hashed_dataset"][this_cid] = item
@@ -876,20 +876,6 @@ class ipfs_embeddings_py:
         results = { "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "columns": columns }
         return results
 
-    async def init_datasets_bak(self, models, dataset, split, column, dst_path):
-        await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
-        
-        # Load dataset
-        if split is None:
-            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
-        else:
-            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
-        
-        columns = self.dataset.column_names
-        columns.append("cid")
-        await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)
-        return None
-
     async def init_queues(self, models, endpoints, dst_path):
         self.queues = {}
         self.cid_set = set()
@@ -1036,8 +1022,8 @@ class ipfs_embeddings_py:
         self.resources = await self.init_endpoints(models, endpoints)
         await self.init_datasets(models, dataset, split, column, dst_path)
         await self.init_queues(models, endpoints, dst_path)
-        cid_list = self.ipfs_datasets.all_cid_list["hashed_dataset"]
-        cid_set = self.ipfs_datasets.all_cid_set["hashed_dataset"]
+        cid_list = self.ipfs_datasets.all_cid_list
+        cid_set = self.ipfs_datasets.all_cid_set
         self.cid_list = cid_list
         self.cid_set = cid_set
         all_cid_list = self.ipfs_datasets.all_cid_list
@@ -1062,7 +1048,7 @@ class ipfs_embeddings_py:
         #     ]
         #     pool.starmap(chunk_producer, args)
             
-        args = [self.dataset, column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:0"], None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, cid_list]        
+        args = [self.dataset, column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:0"], None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, all_cid_set]        
         chunk_producer_results = chunk_producer(*args)
         # Create producer tasks directly as asyncio tasks
         # for worker_id in range(num_workers):
