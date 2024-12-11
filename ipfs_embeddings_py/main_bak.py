@@ -133,10 +133,13 @@ def tokenize_batch(batch, tokenizer, column):
     else:
         len_columns = len(list(batch.keys()))
     if len_columns > 1 and column is None:
-        batch = batch[column]
+        batch = [json.dumps(item) for item in batch]
         pass
     elif len_columns > 1 and column not in list(batch.keys()):
         batch = [json.dumps(item) for item in batch]
+    elif len_columns > 1 and column in list(batch.keys()):
+        batch = batch[column]
+
     new_token_data = {}
     try:
         results = tokenizer(batch, padding=True, return_tensors="pt")
