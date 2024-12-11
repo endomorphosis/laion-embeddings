@@ -11,7 +11,6 @@ import torch
 import faiss
 import math
 import gc
-import timeit
 import time
 import numpy as np
 from aiohttp import ClientSession, ClientTimeout
@@ -127,7 +126,17 @@ def index_cid(samples):
         raise ValueError("samples must be a list or string")
     return results
 
-def tokenize_batch(batch, tokenizer):
+def tokenize_batch(batch, tokenizer, column):
+    if type(batch) is Dataset:
+        len_columns = len(batch.column_names)
+        batch = batch.to_dict()
+    else:
+        len_columns = len(list(batch.keys()))
+    if len_columns > 1 and column is None:
+        batch = batch[column]
+        pass
+    elif len_columns > 1 and column not in list(batch.keys()):
+        batch = [json.dumps(item) for item in batch]
     new_token_data = {}
     try:
         results = tokenizer(batch, padding=True, return_tensors="pt")
@@ -184,16 +193,18 @@ def process_dataset(dataset_stream, column=None, caches=None, this_cid_list=None
             print(f"CID {this_cid} already in index, skipping item.")
         else:
             while cid_queue.full():
-                 time.sleep(0.1)    
-            if this_cid not in this_cid_list["hashed_dataset"] and this_cid not in cid_set:
+                 time.sleep(0.1)
+            if this_cid in this_cid_list["hashed_dataset"] or this_cid in cid_set:
+                pass    
+            # if this_cid not in this_cid_list["hashed_dataset"] and this_cid not in cid_set:
+            else:
                 cid_set.append(this_cid)
                 all_cid_set["hashed_dataset"].append(this_cid)
                 # caches["hashed_dataset"][this_cid] = item
                 dataset[item["cid"]] = item
                 cid_queue.put_nowait
                 print("Added item to queue for CID " + str(this_cid))
-    return dataset
-                        
+    return dataset              
 
 def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None, chunker=None, metadata=None, caches=None, all_cid_set=None):
     batch_size = 2048  # Adjust batch size based on your needs
@@ -205,56 +216,84 @@ def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_si
     shard_id = 0
     dataset = {}
     shards = []
-    for i in range(num_shards):
-        shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i))
+    if "hashed_dataset" in list(dataset_stream.keys()) and dataset_stream["hashed_dataset"] is not None:
+        for i in range(num_shards): 
+            shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i))
     
     with Pool(processes=32) as pool:
-        len_hashed_dataset_cids = all_cid_set["hashed_dataset"]
+        len_hashed_dataset_cids = len(all_cid_set["hashed_dataset"])
+        len_hashed_dataset = dataset_stream["hashed_dataset"].num_rows
         len_dataset_stream = dataset_stream["dataset"].num_rows
-        if len(len_hashed_dataset_cids) <= len_dataset_stream:            
+        len_model_dataset_cids = len(all_cid_set[embed_model])
+        if column == None and len_hashed_dataset_cids <= len_dataset_stream or len_model_dataset_cids <= len_hashed_dataset:        
             args = [(shards[i], column, caches, all_cid_set) for i in range(len(shards))]
             processed_dataset = pool.starmap(process_dataset, args)
             for shard in processed_dataset:
                 dataset.update(shard)
-            hashed_dataset = datasets.Dataset.from_dict(dataset)
-            ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
-            this_model_shards = [os.path.join(dst_path, "checkpoints", x)  for x in ls_checkpoints if embed_model.replace("/", "___") + "_shard" in x and "_cids" not in x]
-            next_model_shard = os.path.join(dst_path, "checkpoints", embed_model.replace("/", "___") + "_shard_" + str(len(this_model_shards)))
-            hashed_dataset.to_parquet(next_model_shard)
+            if len(list(dataset.keys())) > 0:
+                hashed_dataset = datasets.Dataset.from_dict(dataset)
+                ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+                this_model_shards = [os.path.join(dst_path, "checkpoints", x)  for x in ls_checkpoints if embed_model.replace("/", "___") + "_shard" in x and "_cids" not in x]
+                next_model_shard = os.path.join(dst_path, "checkpoints", embed_model.replace("/", "___") + "_shard_" + str(len(this_model_shards)))
+                hashed_dataset.to_parquet(next_model_shard)
+                this_model_shards.append(next_model_shard)
+                dataset_stream["hashed_dataset"] = load_dataset(shards=this_model_shards)
+                hashed_dataset = dataset_stream["hashed_dataset"]
+                shards = []
+                for i in range(num_shards) and "hashed_dataset" and hashed_dataset is not None:
+                    shards.append(hashed_dataset.shard(num_shards=num_shards, index=i))
+        elif column != None and len_hashed_dataset_cids <= len_dataset_stream or len_model_dataset_cids <= len_hashed_dataset:
+            dataset_column_row = dataset_stream["dataset"][column]
+            unique_dataset_column_row = set(dataset_column_row)
+            len_unique_dataset_columns_rows = len(unique_dataset_column_row)
+            if len_unique_dataset_columns_rows >  len_hashed_dataset_cids or len_unique_dataset_columns_rows > len_model_dataset_cids:
+                args = [(shards[i], column, caches, all_cid_set) for i in range(len(shards))]
+                processed_dataset = pool.starmap(process_dataset, args)
+                for shard in processed_dataset:
+                    dataset.update(shard)
+                if len(list(dataset.keys())) > 0:
+                    hashed_dataset = datasets.Dataset.from_dict(dataset)
+                    ls_checkpoints = os.listdir(os.path.join(dst_path, "checkpoints"))
+                    this_model_shards = [os.path.join(dst_path, "checkpoints", x)  for x in ls_checkpoints if embed_model.replace("/", "___") + "_shard" in x and "_cids" not in x]
+                    next_model_shard = os.path.join(dst_path, "checkpoints", embed_model.replace("/", "___") + "_shard_" + str(len(this_model_shards)))
+                    hashed_dataset.to_parquet(next_model_shard)
+                    dataset_stream["hashed_dataset"] = load_dataset(shards=this_model_shards)
+                    hashed_dataset = dataset_stream["hashed_dataset"]
+                    shards = []
+                    for i in range(num_shards) and "hashed_dataset" and hashed_dataset is not None:
+                        shards.append(hashed_dataset.shard(num_shards=num_shards, index=i))
+            else:
+                hashed_dataset = dataset_stream["hashed_dataset"]
         else:
-            hashed_dataset = None
-        # if hashed_dataset == None:
-        #     return None
-        # else:        
-        #     print(len(hashed_dataset))
-            
-        for item in generator(dataset_stream["hashed_dataset"]):
-            cid = item["cid"]
-            if cid not in cid_chunk_set[embed_model] or cid not in all_cid_set[embed_model]:
-                current_batch.append(item)
-            if len(current_batch) >= batch_size:
-                # Process batch in parallel
-                tokenized_texts = pool.starmap(tokenize_batch, [(batch, tokenizer) for batch in chunks(current_batch, len(pool._pool))])
-                if "processed_items"  not in list(tokenized_texts[0].keys()):
-                    tokenized_texts[0]["processed_items"] = []
-                for i in range(len(tokenized_texts[0]["text_list"])):
-                    if i >= len(tokenized_texts[0]["processed_items"]):
-                        tokenized_texts[0]["processed_items"].append(current_processed_items[i])
-                    
-                tokenized_texts_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
-                args = [(tokenized_texts_datasets[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_texts_datasets))]    
-                tokenized_chunks = pool.starmap(chunk_items, args)
-                if "parent_cid" not in list(chunk_cache.keys()):
-                    chunk_cache[cid] = manager.dict()
-                for chunk in tokenized_chunks:
-                    if chunk is not None:
-                        chunk_cache[chunk["parent_cid"]] = chunk
-                        current_results.append(chunk)
-                        cid_chunk_set.append(chunk["parent_cid"])
-                current_batch = []
-                current_processed_items = []
-                pass
+            hashed_dataset = dataset_stream["hashed_dataset"]
             pass
+        
+        args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
+        tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer) for i in range(len(shards))])    
+        if "processed_items"  not in list(tokenized_texts[0].keys()):
+            tokenized_texts[0]["processed_items"] = []
+        for i in range(len(tokenized_texts[0]["text_list"])):
+            if i >= len(tokenized_texts[0]["processed_items"]):
+                tokenized_texts[0]["processed_items"].append(current_processed_items[i])
+            
+        tokenized_texts_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
+        tokenized_texts_shards = []
+        for i in range(num_shards):
+            tokenized_texts_shards.append(tokenized_texts_datasets.shard(num_shards=num_shards, index=i))
+        args = [(tokenized_texts_shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_texts_shards))]    
+        tokenized_chunks = pool.starmap(chunk_items, args)
+        # if "parent_cid" not in list(chunk_cache.keys()):
+        #     chunk_cache[cid] = manager.dict()
+        # for chunk in tokenized_chunks:
+        #     if chunk is not None:
+        #         chunk_cache[chunk["parent_cid"]] = chunk
+        #         current_results.append(chunk)
+        #         cid_chunk_set.append(chunk["parent_cid"])
+        # current_batch = []
+        # current_processed_items = []
+        return tokenized_chunks
+        pass
+             
         
         # Process remaining items
         if current_batch:
@@ -1034,10 +1073,10 @@ class ipfs_embeddings_py:
             self.index[key] = self.ipfs_datasets.index[key]
         self.cid_chunk_set = self.ipfs_datasets.cid_chunk_set
         self.cid_chunk_list = self.ipfs_datasets.cid_chunk_list
-        self.cid_list = self.ipfs_datasets.all_cid_list
-        self.cid_set = self.ipfs_datasets.all_cid_list
-        cid_list = self.ipfs_datasets.all_cid_list
-        cid_set = self.ipfs_datasets.all_cid_set
+        self.cid_list = self.ipfs_datasets.cid_list
+        self.cid_set = self.ipfs_datasets.cid_set
+        cid_list = self.ipfs_datasets.cid_list
+        cid_set = self.ipfs_datasets.cid_set
         all_cid_list = self.ipfs_datasets.all_cid_list
         all_cid_set = self.ipfs_datasets.all_cid_set
             
