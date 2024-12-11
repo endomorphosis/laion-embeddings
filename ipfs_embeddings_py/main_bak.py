@@ -139,15 +139,21 @@ def tokenize_batch(batch, tokenizer, column):
         batch = [json.dumps(item) for item in batch]
     elif len_columns > 1 and column in list(batch.keys()):
         batch = batch[column]
-
+    mini_batch = []
+    mini_batch_size = 2048
     new_token_data = {}
+    batch_results = []
+    ## split batch into 2048 rows 
+    mini_batches = [ batch[i:i + mini_batch_size] for i in range(0, len(batch), mini_batch_size)]
     try:
-        results = tokenizer(batch, padding=True, return_tensors="pt")
-        new_token_data["tokens_list"] = [ results["input_ids"][i].tolist() for i in range(len(results["input_ids"])) ]
-        new_token_data["tokens_text"] = [ tokenizer.decode(tokens) for tokens in new_token_data["tokens_list"]]
-        new_token_data["text_list"] = [ tokenizer.decode(tokens) for tokens in new_token_data["tokens_list"]]
-        new_token_data["token_lengths"] = [new_token_data["tokens_list"][i].count(0) for i in range(len(new_token_data["tokens_list"])) ]
-        return new_token_data
+        for mini_batch in mini_batches:
+            results = tokenizer(mini_batch, padding=True, return_tensors="pt")
+            new_token_data["tokens_list"] = [ results["input_ids"][i].tolist() for i in range(len(results["input_ids"])) ]
+            new_token_data["tokens_text"] = [ tokenizer.decode(tokens) for tokens in new_token_data["tokens_list"]]
+            new_token_data["text_list"] = [ tokenizer.decode(tokens) for tokens in new_token_data["tokens_list"]]
+            new_token_data["token_lengths"] = [new_token_data["tokens_list"][i].count(0) for i in range(len(new_token_data["tokens_list"])) ]
+            batch_results.append(new_token_data)
+        return batch_results
     except Exception as e:
         print("Error tokenizing batch: ", e)
         return e
@@ -270,6 +276,9 @@ def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_si
         else:
             hashed_dataset = dataset_stream["hashed_dataset"]
             pass
+        
+        for i in range(num_shards) and "hashed_dataset" and hashed_dataset is not None:
+            shards.append(hashed_dataset.shard(num_shards=num_shards, index=i).to_dict())
         
         args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
         tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
