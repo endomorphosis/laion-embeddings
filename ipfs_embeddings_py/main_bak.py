@@ -269,7 +269,7 @@ def chunk_producer(dataset_stream, column, method=None, tokenizer=None, chunk_si
             pass
         
         args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
-        tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer) for i in range(len(shards))])    
+        tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
         if "processed_items"  not in list(tokenized_texts[0].keys()):
             tokenized_texts[0]["processed_items"] = []
         for i in range(len(tokenized_texts[0]["text_list"])):
