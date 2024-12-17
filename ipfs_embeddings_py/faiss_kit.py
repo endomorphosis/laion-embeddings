@@ -10,6 +10,13 @@ class faiss_kit_py:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
+        self.search_chunks = self.search_chunks
+        self.autofaiss_chunks = self.autofaiss_chunks
+        self.search_centroids = self.search_centroids
+        self.search_shards = self.search_shards
+        self.autofaiss_shards = self.autofaiss_shards
+        self.kmeans_cluster_split_dataset = self.kmeans_cluster_split_dataset
+        self.chunk_cache = {}
         return None
     
     
@@ -102,11 +109,13 @@ class faiss_kit_py:
         
         return None
     
-    
-    async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits=None):
-        await self.load_clusters(dataset, split, dst_path)
+    async def kmeans_cluster_split_dataset(self, dataset, split, columns, dst_path, models, max_splits=None):
+        # await self.load_clusters(dataset, split, dst_path)
+        # await self.load_checkpoints(dataset, split, dst_path, models)
+        await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
+        await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
         await self.load_dataset(dataset, split)
-        await self.load_checkpoints(dataset, split, dst_path, models)
+
         centroids = []
         embeddings_np = []                    
         ipfs_cids = []
@@ -117,13 +126,13 @@ class faiss_kit_py:
             centroids = np.array(centroids)
             max_splits = len(centroids)
         else:
-            new_dataset_download_size = self.new_dataset.dataset_size            
+            hashed_dataset_download_size = self.hashed_dataset.dataset_size            
             embeddings_size = {}
             for model in self.metadata["models"]:
                 embeddings_size[model] = self.index[model].dataset_size
             largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
             largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-            embeddings_size["new_dataset"] = new_dataset_download_size
+            embeddings_size["hashed_dataset"] = hashed_dataset_download_size
             largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
             largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
             max_size = 50 * 1024 * 1024 # 50 MB
@@ -159,13 +168,13 @@ class faiss_kit_py:
             ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
         else:
             if kmeans is None:
-                new_dataset_download_size = self.new_dataset.dataset_size            
+                hashed_dataset_download_size = self.hashed_dataset.dataset_size            
                 embeddings_size = {}
                 for model in self.metadata["models"]:
                     embeddings_size[model] = self.index[model].dataset_size
                 largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
                 largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-                embeddings_size["new_dataset"] = new_dataset_download_size
+                embeddings_size["hashed_dataset"] = hashed_dataset_download_size
                 largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
                 largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
                 max_size = 50 * 1024 * 1024 # 50 MB
@@ -187,7 +196,7 @@ class faiss_kit_py:
                 pass
             
             if len(ipfs_cids) == 0:
-                new_dataset_download_size = self.new_dataset.dataset_size            
+                hashed_dataset_download_size = self.hashed_dataset.dataset_size            
                 embeddings_size = {}
                 for model in self.metadata["models"]:
                     embeddings_size[model] = self.index[model].dataset_size
@@ -269,7 +278,7 @@ class faiss_kit_py:
                 if cluster_id not in cluster_id_list:
                     cluster_id_list.append(cluster_id)
                     kmeans_embeddings_splits[cluster_id] = {}
-            first_item = self.new_dataset[0]
+            first_item = self.hashed_dataset[0]
             if "items" in list(first_item.keys()):
                 keys_list = list(first_item["items"].keys())
             else:
@@ -291,7 +300,7 @@ class faiss_kit_py:
                     ipfs_cid_clusters_list[cluster_id].index(this_cid),
                     item["items"][key] if "items" in list(item.keys()) else item[key]
                 )
-                for item in self.new_dataset
+                for item in self.hashed_dataset
                 for this_cid in [item["items"]["cid"] if "items" in list(item.keys()) else item["cid"]]
                 if this_cid in ipfs_cid_set
                 for cluster_id in range(max_splits)
@@ -305,11 +314,4 @@ class faiss_kit_py:
                 cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
                 cluster_dataset.to_parquet(cluster_filename)
         return True
-
-    def __test__(self):
-        results = {}
-        test_faiss_kit_init = None
-        test_faiss_kit = None
-        test_faiss = self.faiss_kit.test()
-        results = {"test_faiss_kit_init": test_faiss_kit_init, "test_faiss_kit": test_faiss_kit, "test_faiss": test_faiss}
-        return results
+    

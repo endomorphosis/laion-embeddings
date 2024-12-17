@@ -23,6 +23,7 @@ import ipfs_accelerate_py
 import chunker
 import qdrant_kit
 import elasticsearch_kit
+import faiss_kit
 
 from datasets import Dataset, concatenate_datasets, load_dataset
 try:
@@ -251,18 +252,16 @@ def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, c
                 for i in range(num_shards) and "hashed_dataset" and hashed_dataset is not None:
                     shards.append(hashed_dataset.shard(num_shards=num_shards, index=i))
         elif column != None and len_hashed_dataset_cids <= len_dataset_stream or len_model_dataset_cids <= len_hashed_dataset:
-            unique_column_cid_dataset_path = os.path.join(dst_path, "checkpoints",  + "_"+ column +"_cids.parquet")
+            unique_column_cid_dataset_path = os.path.join(dst_path, "checkpoints", metadata["dataset"].replace("/","___") + "_"+ column +"_cids.parquet")
             len_unique_dataset_columns_rows = 0
             if os.path.exists(unique_column_cid_dataset_path):
                 unique_column_cid_dataset = load_dataset(unique_column_cid_dataset_path)
-                unique_dataset_columns_rows = unique_column_cid_dataset[column]
-                len_unique_dataset_columns_rows = len(unique_dataset_columns_rows)
+                len_unique_dataset_column_rows = len(unique_column_cid_dataset[column])
             else:
                 unique_dataset_column_row = set(dataset_stream["dataset"][column])
-                unique_dataset_columns_rows = len(unique_dataset_column_row)
-                len_unique_dataset_columns_rows = len(unique_dataset_columns_rows)
-            
-            if len_unique_dataset_columns_rows >  len_hashed_dataset_cids or len_unique_dataset_columns_rows > len_model_dataset_cids:
+                len_unique_dataset_column_rows = len(unique_dataset_column_row)
+                
+            if len_unique_dataset_column_rows >  len_hashed_dataset_cids or len_unique_dataset_column_rows > len_model_dataset_cids:
                 args = [(shards[i], column, caches, all_cid_set) for i in range(len(shards))]
                 processed_dataset = pool.starmap(process_dataset, args)
                 for shard in processed_dataset:
@@ -285,29 +284,59 @@ def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, c
             # hashed_dataset = dataset_stream["hashed_dataset"]
             pass
         
-        for i in range(num_shards):
-            if "hashed_dataset" in list(dataset_stream.keys()) and dataset_stream["hashed_dataset"] is not None:
-                shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i).to_dict())
-        
-        args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
-        tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
-        if "processed_items"  not in list(tokenized_texts[0].keys()):
-            tokenized_texts[0]["processed_items"] = []
-        for i in range(len(tokenized_texts[0]["text_list"])):
-            if i >= len(tokenized_texts[0]["processed_items"]):
-                tokenized_texts[0]["processed_items"].append(current_processed_items[i])
-        if len(tokenized_texts[0]) > 0:  
-            tokenized_text_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
-            tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet"))
-        else:
+        if os.path.exists (os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet")):
             if split != None:
                 tokenized_text_datasets = load_dataset(os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet"), format="parquet")            
             else:
                 tokenized_text_datasets = load_dataset(os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet"), format="parquet")
+        else:
+            tokenized_text_datasets = None
+        if tokenized_text_datasets is not None:
+            tokenized_text_len = tokenized_text_datasets.num_rows
+            if tokenized_text_len >= len_hashed_dataset_cids or tokenized_text_len >= len_model_dataset_cids:
+                pass
+            else:
+                # tokenize some more
+                for i in range(num_shards):
+                    if "hashed_dataset" in list(dataset_stream.keys()) and dataset_stream["hashed_dataset"] is not None:
+                        shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i).to_dict())
         
+                args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
+                tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
+                if "processed_items"  not in list(tokenized_texts[0].keys()):
+                    tokenized_texts[0]["processed_items"] = []
+                for i in range(len(tokenized_texts[0]["text_list"])):
+                    if i >= len(tokenized_texts[0]["processed_items"]):
+                        tokenized_texts[0]["processed_items"].append(current_processed_items[i])
+                if len(tokenized_texts[0]) > 0:  
+                    tokenized_text_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
+                    tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet"))
+                elif len(tokenized_texts) > 0:
+                    tokenized_text_datasets = dataset.Dataset.from_dict(tokenized_texts)
+    
+        else:        
+            for i in range(num_shards):
+                if "hashed_dataset" in list(dataset_stream.keys()) and dataset_stream["hashed_dataset"] is not None:
+                    shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i).to_dict())
+
+            args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
+            tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
+            if "processed_items"  not in list(tokenized_texts[0].keys()):
+                tokenized_texts[0]["processed_items"] = []
+            for i in range(len(tokenized_texts[0]["text_list"])):
+                if i >= len(tokenized_texts[0]["processed_items"]):
+                    tokenized_texts[0]["processed_items"].append(current_processed_items[i])
+            if len(tokenized_texts[0]) > 0:  
+                tokenized_text_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
+                tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet"))
+            elif len(tokenized_texts) > 0:
+                tokenized_text_datasets = dataset.Dataset.from_dict(tokenized_texts)
+
+        ## check here for OOM problems
         tokenized_text_shards = []
         for i in range(num_shards):
             tokenized_text_shards.append(tokenized_text_datasets.shard(num_shards=num_shards, index=i))
+    
         args = [(tokenized_text_shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_texts_shards))]    
         tokenized_chunks = pool.starmap(chunk_items, args)
         # if "parent_cid" not in list(chunk_cache.keys()):
@@ -323,23 +352,23 @@ def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, c
         pass
              
         
-        # Process remaining items
-        if current_batch:
-            tokenized_texts = pool.starmap(tokenize_batch, [(batch, tokenizer) for batch in chunks(current_batch, len(pool._pool))])
-            if "processed_items"  not in list(tokenized_texts[0].keys()):
-                tokenized_texts[0]["processed_items"] = []
-            for i in range (len(tokenized_texts[0]["text_list"])):
-                tokenized_texts[0]["processed_items"].append(current_processed_items[i])
+        # # Process remaining items
+        # if current_batch:
+        #     tokenized_texts = pool.starmap(tokenize_batch, [(batch, tokenizer) for batch in chunks(current_batch, len(pool._pool))])
+        #     if "processed_items"  not in list(tokenized_texts[0].keys()):
+        #         tokenized_texts[0]["processed_items"] = []
+        #     for i in range (len(tokenized_texts[0]["text_list"])):
+        #         tokenized_texts[0]["processed_items"].append(current_processed_items[i])
                 
-            tokenized_text_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
-            args = [(tokenized_text_datasets[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_text_datasets))]    
-            tokenized_chunks = pool.starmap(chunk_items, args)
-            if "parent_cid" not in list(chunk_cache.keys()):
-                chunk_cache[cid] = manager.dict()
-            for chunk in tokenized_chunks:
-                chunk_cache[chunk["parent_cid"]] = chunk
-                current_results.append(chunk)
-                cid_chunk_set.append(chunk["parent_cid"])
+        #     tokenized_text_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
+        #     args = [(tokenized_text_datasets[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_text_datasets))]    
+        #     tokenized_chunks = pool.starmap(chunk_items, args)
+        #     if "parent_cid" not in list(chunk_cache.keys()):
+        #         chunk_cache[cid] = manager.dict()
+        #     for chunk in tokenized_chunks:
+        #         chunk_cache[chunk["parent_cid"]] = chunk
+        #         current_results.append(chunk)
+        #         cid_chunk_set.append(chunk["parent_cid"])
                 
 def chunks(lst, n):
     """Yield successive n-sized chunks from lst."""
@@ -606,7 +635,8 @@ class ipfs_embeddings_py:
         self.index_cid = self.index_cid
         self.load_index = self.load_index
         self.async_generator = self.async_generator
-        self.kmeans_cluster_split = self.kmeans_cluster_split
+        self.kmeans_cluster_split = self.faiss_kit.kmeans_cluster_split_dataset
+        self.kmeans_cluster_split_dataset = self.faiss_kit.kmeans_cluster_split_dataset
         self.endpoint_types = ["tei_endpoints", "openvino_endpoints", "libp2p_endpoints", "local_endpoints"]
         self.add_endpoint = self.ipfs_accelerate_py.add_endpoint
         self.rm_endpoint = self.ipfs_accelerate_py.rm_endpoint
@@ -636,116 +666,6 @@ class ipfs_embeddings_py:
     async def max_batch_size(self, model, endpoint, endpoit_handler):
         print("max batch size")
         return await self.ipfs_accelerate_py.max_batch_size(model, endpoint, endpoit_handler)
-        
-    # async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
-    #     # Assuming `item` is a dictionary with required data
-    #     cuda_test = False
-    #     openvino_test = False
-    #     tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
-    #     cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
-    #     openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
-    #     if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True:
-    #         cuda_test = True
-    #     if self.ipfs_accelerate_py.resources["hwtest"]["openvino"] == True:
-    #         openvino_test = True
-    #     if column is None:
-    #         content = json.dumps(item)
-    #     elif column not in list(item.keys()):
-    #         content = json.dumps(item)
-    #     else:
-    #         content = item[column]
-    #     if embed_model is None:
-    #         if len(self.metadata["models"]) == 0:
-    #             embed_model = "thenlper/gte-small"
-    #         else:
-    #             embed_model = self.metadata["models"][0]
-    #     if chunk_size is None:
-    #         chunk_size = 512
-    #     if n_sentences is None:
-    #         n_sentences = 8
-    #     if step_size is None:
-    #         step_size = 256
-    #     if tokenizer is None:
-    #         if embed_model not in list(self.ipfs_accelerate_py.resources["tokenizer"].keys()):
-    #             self.tokenizer[embed_model] = {}
-    #         if cuda_test == True:
-    #             tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
-    #             cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
-    #             random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
-    #             device = random_cuda_tokenizer
-    #             tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_cuda_tokenizer]
-    #             batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_cuda_tokenizer]
-    #             if batch_size == 0 or batch_size is None:
-    #                 batch_size = 32
-    #         elif openvino_test == True:
-    #             openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
-    #             random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
-    #             device = random_openvino_tokenizer
-    #             tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_openvino_tokenizer]  
-    #             batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_openvino_tokenizer]
-    #             if batch_size == 0 or batch_size is None:
-    #                 batch_size = 1
-    #         elif "cpu" not in tokenizer_types:
-    #             tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model]["cpu"]                
-    #             batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model]["cpu"]
-    #             device = "cpu"
-    #             if batch_size == 0 or batch_size is None:
-    #                 batch_size = 1
-    #         else:
-    #             device = "cpu"
-    #             tokenizer =  AutoTokenizer.from_pretrained(embed_model, device='cpu', use_fast=True)
-    #             batch_size = 1
-    #     if method is None:
-    #         fixed_chunk_list = self.chunker.chunk(content, tokenizer, "fixed", 512, 8, 256, self.metadata["models"][0], device, batch_size)
-    #         # semantic_chunk_list = self.chunker.chunk(content, tokenizer, "semantic", 512, 8, 256, self.metadata["models"][0], device, batch_size)
-    #         sentences_chunk_list = self.chunker.chunk(content, tokenizer, "sentences", 512, 8, 256, self.metadata["models"][0], device, batch_size) 
-    #         sliding_window_chunk_list = self.chunker.chunk(content, tokenizer, "sliding_window", 512, 8, 256, self.metadata["models"][0], device, batch_size)
-    #         # content_chunks = fixed_chunk_list + semantic_chunk_list + sentences_chunk_list + sliding_window_chunk_list
-    #         content_chunks = fixed_chunk_list + sentences_chunk_list + sliding_window_chunk_list
-    #     else:
-    #         content_chunks = self.chunker.chunk(content, tokenizer, method, chunk_size, n_sentences, step_size, embed_model)
-    #     parent_cid = item["cid"]
-    #     content_tokens = tokenizer.encode(content)
-    #     ## sort content_chunks by the firt element of each tuple then the second element
-    #     content_chunks = sorted(content_chunks, key=lambda x: (x[0], x[1]))
-    #     ## filter out chunks that are larger than the chunk_size
-    #     content_chunks = [chunk for chunk in content_chunks if chunk[1] - chunk[0] <= chunk_size]
-    #     ## filter content_chunks to remove duplicates
-    #     seen_chunks = set()
-    #     unique_content_chunks = []
-    #     for chunk in content_chunks:
-    #         if chunk not in seen_chunks:
-    #             unique_content_chunks.append(chunk)
-    #             seen_chunks.add(chunk)
-    #     content_chunks = unique_content_chunks
-    #     if parent_cid in list(self.caches.keys()):
-    #         pass
-    #     else:
-    #         cid_chunks = {"parent_cid": parent_cid, "items" : [], "children": []}
-    #         for chunk in content_chunks:
-    #             chunk_index = chunk
-    #             chunk_content = content_tokens[chunk[0]:chunk[1]]
-    #             chunk_text = tokenizer.decode(chunk_content)
-    #             child_cid = self.multiformats.get_cid(chunk_text)
-    #             child_content = {"cid": child_cid, "index": chunk_index, "content": chunk_text, "parent_cid": parent_cid}
-    #             cid_chunks["children"].append(child_cid)
-    #             cid_chunks["items"].append(child_content)
-    
-    #         if type(cid_chunks["parent_cid"]) is not str:
-    #             print("Parent CID is not a string")
-        
-    #         if parent_cid not in self.cid_chunk_set and type(cid_chunks["parent_cid"]) is str:
-    #             while self.cid_chunk_queue.full():
-    #                 await asyncio.sleep(0.1)
-    #             if not self.cid_chunk_queue.full():
-    #                 self.cid_chunk_set.add(parent_cid)
-    #                 self.cid_chunk_queue.put_nowait(cid_chunks)
-    #                 print("Added chunked item to queue for CID " + cid_chunks["parent_cid"])
-    #         else:
-    #             print("CID " + cid_chunks["parent_cid"] + " already in chunk set")
-    #     return cid_chunks
-    
-    
 
     async def queue_size(self, model):
         print("Checking queue size")
@@ -1413,64 +1333,6 @@ class ipfs_embeddings_py:
             ])
             await asyncio.sleep(0.001)                
 
-    # async def process_item(self, item, column=None, queues=None, dst_path=None, embed_model=None, ):
-    #     # Assuming `item` is a dictionary with required data
-    #     if "hashed_dataset" not in list(self.caches.keys()):
-    #         self.caches["hashed_dataset"] = {}
-    #     if "hashed_dataset" not in list(self.all_cid_set.keys()):
-    #         self.all_cid_set["hashed_dataset"] = set()
-    #     # print(f"Processing item with CID {index_cid(item[column])[0]}")
-    #     if queues is None:
-    #         queues = self.ipfs_accelerate_py.resources["queues"]
-    #     column_names = list(item.keys())
-    #     if column is None:
-    #         this_cid = self.index_cid(json.dumps(item))[0]
-    #     elif column not in column_names:
-    #         this_cid = self.index_cid(json.dumps(item))[0]
-    #     else:
-    #         this_cid = self.index_cid(item[column])[0]
-    #     if "cid" not in column_names:
-    #         item["cid"] = this_cid
-    #     elif item["cid"] is None:
-    #         item["cid"] = this_cid
-    #     # Check if cid is in index
-    #     if this_cid in self.cid_set:
-    #         # print(f"CID {this_cid} already in index, skipping item.")
-    #         return None
-    #     else:
-    #         while self.cid_queue.full():
-    #             await asyncio.sleep(0.1)    
-    #         self.cid_set.add(this_cid)
-    #         if this_cid not in self.all_cid_set["hashed_dataset"]:
-    #             self.caches["hashed_dataset"][this_cid] = item
-    #             self.cid_queue.put_nowait(item)
-    #             print("Added item to queue for CID " + str(this_cid))
-    #             # self.saved = False
-    #     return item
-                
-    # async def chunk_producer(self, dataset_stream, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None):
-    #     tasks = []
-    #     self.producer_task_done = False
-        
-    #     async for item in self.async_generator(dataset_stream):
-    #         while self.cid_queue.full():
-    #             await asyncio.sleep(0.1)
-    #         if column is not None:
-    #             cid = self.multiformats.get_cid(item[column])
-    #         else:
-    #             json_item = json.dumps(item)
-    #             cid = self.multiformats.get_cid(json_item)
-    #         if cid not in list(item.keys()):
-    #             item["cid"] = cid
-    #         if cid not in self.cid_chunk_set:
-    #             processed_item = await self.process_item(item, column, None, embed_model, dst_path)
-    #             chunked_item = await self.chunk_item(item, column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model)
-    #         else:
-    #             pass
-    #         await asyncio.sleep(0.001)
-           
-    #     return None
-        
     async def process_hashed_dataset_shard(self, dataset, split=None):
         results = await self.ipfs_datasets.process_hashed_dataset_shard(dataset, split)
         return results
@@ -1532,212 +1394,6 @@ class ipfs_embeddings_py:
         columns.append("cid")
         return None
 
-    async def kmeans_cluster_split(self, dataset, split, columns, dst_path, models, max_splits=None):
-        # await self.load_clusters(dataset, split, dst_path)
-        # await self.load_checkpoints(dataset, split, dst_path, models)
-        await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
-        await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
-        await self.load_dataset(dataset, split)
-
-        centroids = []
-        embeddings_np = []                    
-        ipfs_cids = []
-        kmeans = None
-        if os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet")):
-            centroids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))["train"]
-            centroids = centroids_dataset["centroids"]
-            centroids = np.array(centroids)
-            max_splits = len(centroids)
-        else:
-            hashed_dataset_download_size = self.hashed_dataset.dataset_size            
-            embeddings_size = {}
-            for model in self.metadata["models"]:
-                embeddings_size[model] = self.index[model].dataset_size
-            largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
-            largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-            embeddings_size["hashed_dataset"] = hashed_dataset_download_size
-            largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
-            largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-            max_size = 50 * 1024 * 1024 # 50 MB
-            max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
-            max_splits_size = round(largest_dataset_size / max_size)
-            max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
-            if max_splits == None:                
-                if max_splits_rows > max_splits_size:
-                    max_splits = max_splits_rows
-                else:
-                    max_splits = max_splits_size
-            num_items = len(self.index[largest_embeddings_dataset])
-            embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
-            embeddings_np = np.zeros((num_items, embedding_dim))
-            
-            for i, item in enumerate(self.index[largest_embeddings_dataset]):
-                    embeddings_np[i] = item["items"]["embedding"]
-                    ipfs_cids.append(item["items"]["cid"])
-
-            # Perform KMeans clustering using faiss
-            kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
-            kmeans.train(embeddings_np)               
-            # Get centroids
-            centroids = kmeans.centroids
-            # Save centroids to disk
-            centroids_dataset = datasets.Dataset.from_dict({"centroids": centroids.tolist()})
-            centroids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_centroids.parquet"))
-
-        if os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet")):
-            cluster_cids_dataset = load_dataset('parquet', data_files=os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))["train"]
-            ipfs_cid_clusters_list = cluster_cids_dataset["cluster_cids"]
-            ipfs_cid_clusters_set = [set(x) for x in ipfs_cid_clusters_list]
-            ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
-        else:
-            if kmeans is None:
-                hashed_dataset_download_size = self.hashed_dataset.dataset_size            
-                embeddings_size = {}
-                for model in self.metadata["models"]:
-                    embeddings_size[model] = self.index[model].dataset_size
-                largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
-                largest_embeddings_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-                embeddings_size["hashed_dataset"] = hashed_dataset_download_size
-                largest_embedding_dataset_rows = len(self.index[largest_embeddings_dataset])                
-                largest_dataset_size = embeddings_size[max(embeddings_size, key=embeddings_size.get)]
-                max_size = 50 * 1024 * 1024 # 50 MB
-                max_rows_in_powers_of_64 = math.ceil(math.log(largest_embedding_dataset_rows, 64))                        
-                max_splits_size = round(largest_dataset_size / max_size)
-                max_splits_rows = 64 ** (max_rows_in_powers_of_64 - 2)
-                if max_splits_rows > max_splits_size:
-                    max_splits = max_splits_rows
-                else:
-                    max_splits = max_splits_size
-                num_items = len(self.index[largest_embeddings_dataset])
-                embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
-                embeddings_np = np.zeros((num_items, embedding_dim))
-                for i, item in enumerate(self.index[largest_embeddings_dataset]):
-                    embeddings_np[i] = item["items"]["embedding"]
-                    ipfs_cids.append(item["items"]["cid"])
-                kmeans = faiss.Kmeans(d=embeddings_np.shape[1], k=max_splits, niter=100, verbose=True)
-                kmeans.centroids = centroids
-                pass
-            
-            if len(ipfs_cids) == 0:
-                hashed_dataset_download_size = self.hashed_dataset.dataset_size            
-                embeddings_size = {}
-                for model in self.metadata["models"]:
-                    embeddings_size[model] = self.index[model].dataset_size
-                largest_embeddings_dataset = max(embeddings_size, key=embeddings_size.get)
-                num_items = len(self.index[largest_embeddings_dataset])
-                embedding_dim = len(self.index[largest_embeddings_dataset][0]["items"]["embedding"])
-                embeddings_np = np.zeros((num_items, embedding_dim))
-                for i, item in enumerate(self.index[largest_embeddings_dataset]):
-                    embeddings_np[i] = item["items"]["embedding"]
-                    ipfs_cids.append(item["items"]["cid"])
-        
-            max_splits = len(centroids)
-            index = faiss.IndexFlatL2(centroids.shape[1])
-            index.add(centroids)
-            _, cluster_assignments = index.search(embeddings_np, 1)
-            cluster_assignments = cluster_assignments.flatten()  # Flatten the cluster_assignments array
-            ipfs_cid_clusters_list = [[] for _ in range(max_splits)]
-            ipfs_cid_clusters_set = [set() for _ in range(max_splits)]
-            for cid, cluster_id in zip(ipfs_cids, cluster_assignments):
-                ipfs_cid_clusters_list[cluster_id].append(cid)
-                ipfs_cid_clusters_set[cluster_id].add(cid) 
-            ipfs_cid_set = set([cid for sublist in ipfs_cid_clusters_list for cid in sublist])
-            cluster_cids_dataset = datasets.Dataset.from_dict({"cluster_cids": ipfs_cid_clusters_list})
-            cluster_cids_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + "_cluster_cids.parquet"))
-
-        max_splits = len(centroids)
-        for model in list(self.index.keys()):
-            kmeans_embeddings_splits = {}
-            if not os.path.exists(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters")):
-                os.makedirs(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
-            model_splits = os.listdir(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters"))
-            if len(model_splits) == max_splits:
-                pass 
-            else:
-                kmeans_embeddings_splits_set = set()
-                cluster_id_list = []
-                cluster_id_set = set()
-                for cluster_id in range(max_splits):
-                    if cluster_id not in kmeans_embeddings_splits_set:
-                        kmeans_embeddings_splits[cluster_id] = {}
-                first_item = self.index[model][0]
-                embedding_dim = len(first_item["items"]["embedding"])
-                kmeans_embeddings_splits = [
-                    {
-                        key: (np.zeros((len(ipfs_cid_clusters_list[cluster_id]), embedding_dim)) if key == "embedding" else ["" for _ in range(len(ipfs_cid_clusters_list[cluster_id]))])
-                        for key in first_item["items"].keys()
-                    }
-                    for cluster_id in range(max_splits)
-                ]
-
-                def process_item(item):
-                    for cluster_id in range(max_splits):
-                        if item["items"]["cid"] in ipfs_cid_clusters_set[cluster_id]:
-                            for key in item["items"].keys():
-                                kmeans_embeddings_splits[cluster_id][key][
-                                    ipfs_cid_clusters_list[cluster_id].index(item["items"]["cid"])
-                                ] = np.array(item["items"][key]) if key == "embedding" else item["items"][key]
-                            break
-
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    executor.map(process_item, [item for item in self.index[model] if item["items"]["cid"] in ipfs_cid_set])
-                
-                for cluster_id in range(max_splits):
-                    if cluster_id not in list(kmeans_embeddings_splits.keys()):
-                        continue
-                    cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
-                    cluster_dataset.to_parquet(os.path.join(dst_path, dataset.replace("/", "___") + model.replace("/", "___") + "_clusters", f"cluster_{cluster_id}.parquet"))
-        
-        kmeans_embeddings_splits = {}
-        cluster_folder = os.path.join(dst_path, dataset.replace("/", "___") + "_clusters")
-        if not os.path.exists(cluster_folder):
-            os.makedirs(cluster_folder)
-        model_splits = os.listdir(cluster_folder)
-        if len(model_splits) == max_splits:
-            pass 
-        else:
-            cluster_id_list = []
-            for cluster_id in range(max_splits):
-                if cluster_id not in cluster_id_list:
-                    cluster_id_list.append(cluster_id)
-                    kmeans_embeddings_splits[cluster_id] = {}
-            first_item = self.hashed_dataset[0]
-            if "items" in list(first_item.keys()):
-                keys_list = list(first_item["items"].keys())
-            else:
-                keys_list = list(first_item.keys())
-            keys_set = set(keys_list)          
-            cluster_id_set = set(cluster_id_list)
-            kmeans_embeddings_splits_list = []
-            kmeans_embeddings_splits_set = set()       
-            kmeans_embeddings_splits_list = [
-                cluster_id
-                for cluster_id in range(max_splits)
-                if cluster_id not in kmeans_embeddings_splits_list
-                for key in keys_list
-                if not kmeans_embeddings_splits[cluster_id].__setitem__(key, [""] * len(ipfs_cid_clusters_list[cluster_id]))
-            ]
-            kmeans_embeddings_splits_set = set(kmeans_embeddings_splits_list)
-            [
-                kmeans_embeddings_splits[cluster_id][key].__setitem__(
-                    ipfs_cid_clusters_list[cluster_id].index(this_cid),
-                    item["items"][key] if "items" in list(item.keys()) else item[key]
-                )
-                for item in self.hashed_dataset
-                for this_cid in [item["items"]["cid"] if "items" in list(item.keys()) else item["cid"]]
-                if this_cid in ipfs_cid_set
-                for cluster_id in range(max_splits)
-                if this_cid in ipfs_cid_clusters_set[cluster_id]
-                for key in keys_list
-            ]
-            for cluster_id in range(max_splits):
-                cluster_filename = os.path.join(cluster_folder, dataset.replace("/", "___") + "_cluster_" + str(cluster_id) + ".parquet")
-                if cluster_id not in list(kmeans_embeddings_splits.keys()):
-                    continue
-                cluster_dataset = datasets.Dataset.from_dict(kmeans_embeddings_splits[cluster_id])
-                cluster_dataset.to_parquet(cluster_filename)
-        return True
-    
     
 if __name__ == "__main__":
     metadata = {
