@@ -28,3 +28,5 @@ optimum[openvino]
 ipfs_transformers_py
 toml
 torchvision
+einops
+timm
