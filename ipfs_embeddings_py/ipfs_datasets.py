@@ -516,14 +516,21 @@ class ipfs_datasets_py:
             this_hashed_dataset_cids = load_dataset('parquet', data_files=combind_cid_checkpoint)[split]
         else:
             this_hashed_dataset = load_dataset('parquet', data_files=combined_checkpoint)[split]
-            this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["items"]["cid"]})['cids']
+            this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["items"]["cid"]})
+        this_hashed_dataset_cids = this_hashed_dataset_cids["cids"]
         self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
         self.all_cid_set["hashed_dataset"] = set(list(this_hashed_dataset_cids))
         
         try:
-            len_hashed_dataset = this_hashed_dataset_cids.num_rows
-        except Exception as e:
             len_hashed_dataset = len(this_hashed_dataset_cids)
+        except Exception as e:
+            len_hashed_dataset = this_hashed_dataset_cids.num_rows
+
+        try:
+            len_dataset = self.dataset.num_rows
+        except Exception as e:
+            len_dataset = self.dataset.shape[0]
+
         len_dataset = self.dataset.num_rows
         if len_dataset > len_hashed_dataset:
             len_unique_column = len_dataset
