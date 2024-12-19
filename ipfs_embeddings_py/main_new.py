@@ -865,6 +865,11 @@ class ipfs_embeddings_py:
     
     async def init_datasets(self, models, dataset, split, column, dst_path):
         columns = []
+        init_hashed_datasets = None
+        init_load_combined = None
+        init_load_clusters = None
+        init_load_checkpoints = None
+        
         try:
             # Load dataset
             if split is None:
@@ -889,17 +894,29 @@ class ipfs_embeddings_py:
             print(e)
             init_load_combined = e
         ## fix this to stop if this completes successfully
-        try:
-            init_load_clusters = await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
-        except Exception as e:
-            print(e)
-            init_load_clusters = e
-
-        try:
-            init_load_checkpoints = await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)        
-        except Exception as e:
-            print(e)
-            init_load_checkpoints = e
+        if type(init_load_combined) == Dataset:
+            self.hashed_dataset = init_load_combined
+            del init_load_combined
+        else:            
+            try:
+                init_load_clusters = await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
+            except Exception as e:
+                print(e)
+                init_load_clusters = e
+            if type(init_load_clusters) == Dataset:
+                self.hashed_dataset = init_load_clusters
+                del init_load_clusters
+            else:
+                try:
+                    init_load_checkpoints = await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)        
+                    self.hashed_dataset = init_load_checkpoints
+                except Exception as e:
+                    print(e)
+                    init_load_checkpoints = e
+    
+        if type(self.hashed_dataset) == Dataset:
+            if type(self.ipfs_datasets.dataset) == Dataset:
+                del self.ipfs_datasets.dataset
     
         len_datasets_list = self.dataset.num_rows
         len_cid_list = len(self.ipfs_datasets.cid_list)
