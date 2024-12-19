@@ -479,8 +479,8 @@ class ipfs_datasets_py:
                 splits = load_dataset(dataset, streaming=True).list_splits()
                 self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
                 pass
-        columns = self.dataset.column_names
-        columns.append("cid")
+        # columns = self.dataset.column_names
+        # columns.append("cid")
         return None
 
     async def load_original_dataset(self, dataset, split=None):
@@ -498,8 +498,8 @@ class ipfs_datasets_py:
                 splits = load_dataset(dataset, streaming=True).list_splits()
                 self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
                 pass
-        columns = self.dataset.column_names
-        columns.append("cid")
+        # columns = self.dataset.column_names
+        # columns.append("cid")
         return None
 
     async def load_combined(self, models, dataset, split, column, dst_path):
@@ -514,15 +514,16 @@ class ipfs_datasets_py:
         this_hashed_dataset = None
         if os.path.exists(combind_cid_checkpoint):
             this_hashed_dataset_cids = load_dataset('parquet', data_files=combind_cid_checkpoint)[split]
-            self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
-            self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
         else:
             this_hashed_dataset = load_dataset('parquet', data_files=combined_checkpoint)[split]
-            this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
-            self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
-            self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
+            this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["items"]["cid"]})['cids']
+        self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
+        self.all_cid_set["hashed_dataset"] = set(list(this_hashed_dataset_cids))
         
-        len_hashed_dataset = this_hashed_dataset_cids.num_rows
+        try:
+            len_hashed_dataset = this_hashed_dataset_cids.num_rows
+        except:
+            len_hashed_dataset = len(this_hashed_dataset_cids)
         len_dataset = self.dataset.num_rows
         if len_dataset > len_hashed_dataset:
             len_unique_column = len_dataset
