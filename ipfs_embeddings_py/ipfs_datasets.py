@@ -2,7 +2,8 @@ import os
 import datasets
 import multiprocessing
 from datasets import Dataset, load_dataset, concatenate_datasets, load_from_disk
-
+import random
+import numpy as np
 try:
     from .ipfs_parquet_to_car import ipfs_parquet_to_car_py
 except Exception as e:
@@ -25,6 +26,7 @@ except Exception as e:
         except Exception as e:
             pass
     pass
+
 # def process_hashed_dataset_shard(shard, datatype=None, split="train"):
 def process_hashed_dataset_shard(shard, datatype=None, split=None):
     items = None
@@ -214,6 +216,7 @@ class ipfs_datasets_py:
         self.ipfs_cid_set = set()
         self.ipfs_cid_list = []
         self.all_cid_list = {}
+        self.all_cid_set = {}
         self.schemas = {} 
         return None
     
@@ -461,9 +464,107 @@ class ipfs_datasets_py:
         self.cid_list = list(self.cid_set)
         return None
     
-    async def load_combined(self, dataset, split, dst_path, models):
-        
+    async def load_dataset(self, dataset, split=None):
+        if split is None:
+            try:
+                self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+            except:
+                splits = load_dataset(dataset, streaming=True).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                pass
+        else:
+            try:
+                self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+            except:
+                splits = load_dataset(dataset, streaming=True).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                pass
+        columns = self.dataset.column_names
+        columns.append("cid")
         return None
+
+    async def load_original_dataset(self, dataset, split=None):
+        if split is None:
+            try:
+                self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+            except:
+                splits = load_dataset(dataset, streaming=True).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                pass
+        else:
+            try:
+                self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+            except:
+                splits = load_dataset(dataset, streaming=True).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                pass
+        columns = self.dataset.column_names
+        columns.append("cid")
+        return None
+
+    async def load_combined(self, models, dataset, split, column, dst_path):
+        print("load combined") 
+        await self.load_original_dataset(dataset, split)
+        combined_checkpoint = os.path.join(dst_path, "ipfs_" + dataset.replace("/", "___") + ".parquet")
+        combind_cid_checkpoint = os.path.join(dst_path, "ipfs_" + dataset.replace("/", "___") + "_cids.parquet")
+        combinded_cid_checkpoint_dir = os.path.join(dst_path, "checkpoints","hashed_dataset")
+        combinded_cid_checkpoint_dir_files = os.listdir(combinded_cid_checkpoint_dir)
+        combinded_cid_checkpoint_dir_files_cid = [x for x in combinded_cid_checkpoint_dir_files if "_cids" in x]
+        combinded_cid_checkpoint_dir_files_checkpoints = [x for x in combinded_cid_checkpoint_dir_files if "_cids" not in x]
+        this_hashed_dataset = None
+        if os.path.exists(combind_cid_checkpoint):
+            this_hashed_dataset_cids = load_dataset('parquet', data_files=combind_cid_checkpoint)[split]
+            self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
+            self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
+        else:
+            this_hashed_dataset = load_dataset('parquet', data_files=combined_checkpoint)[split]
+            this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+            self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
+            self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
+        
+        len_hashed_dataset = this_hashed_dataset_cids.num_rows
+        len_dataset = self.dataset.num_rows
+        if len_dataset > len_hashed_dataset:
+            len_unique_column = len_dataset
+            if column is not None:
+                tmp_unique_column = self.dataset[column]
+                tmp_unique_column = list(set(tmp_unique_column))
+                len_unique_column = len(tmp_unique_column)
+                pass
+            
+            if len_unique_column > len_hashed_dataset:
+                this_hashed_dataset_checkpoints = load_dataset('parquet', data_files=combinded_cid_checkpoint_dir_files_cid)[split]
+                len_this_hashed_dataset_checkpoints = this_hashed_dataset_checkpoints_cids.num_rows
+                if len_this_hashed_dataset_checkpoints > len_hashed_dataset:
+                    this_hashed_dataset_checkpoints = load_dataset('parquet', data_files=combinded_cid_checkpoint_dir_files_checkpoints)[split]
+                    this_hashed_dataset_checkpoints_cids = this_hashed_dataset_checkpoints["cids"]
+                    self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_checkpoints_cids)
+                    self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_checkpoints_cids)
+                    len_hashed_dataset = this_hashed_dataset_checkpoints_cids.num_rows
+                    pass
+                else:
+                    this_hashed_dataset_checkpoints = load_dataset('parquet', data_files=combinded_cid_checkpoint_dir_files_checkpoints)[split]
+                    this_hashed_dataset_checkpoints_cids = this_hashed_dataset_checkpoints["cids"]
+                    self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_checkpoints_cids)
+                    self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_checkpoints_cids)
+                    len_hashed_dataset = this_hashed_dataset_checkpoints_cids.num_rows
+                    pass
+            else:
+                if this_hashed_dataset is None:
+                    this_hashed_dataset = load_dataset('parquet', data_files=combined_checkpoint)[split]
+                this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+                self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
+                self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
+                pass             
+        else:
+            if this_hashed_dataset is None:
+                this_hashed_dataset = load_dataset('parquet', data_files=combined_checkpoint)[split]
+            this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+            self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
+            self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
+            pass
+        del self.dataset
+        return this_hashed_dataset
     
     async def combine_checkpoints(self, dataset, split, column, dst_path, models):
         await self.load_dataset(dataset, split)
@@ -795,7 +896,7 @@ class ipfs_datasets_py:
         self.cid_set = self.ipfs_cid_set
         return cluster_cids_dataset, ipfs_cid_clusters_list, ipfs_cid_clusters_set, ipfs_cid_list, ipfs_cid_set
         
-    def test():    
+    def test(self):    
         return None
 
     def process_chunk_files(path, datatype="cids"):

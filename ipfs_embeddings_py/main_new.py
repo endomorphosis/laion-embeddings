@@ -851,9 +851,18 @@ class ipfs_embeddings_py:
             #     break
         return None 
     
+    async def init_hashed_datasets(self, models, dataset, split, column, dst_path):
+        
+        return None
+    
+    async def init_embedding_datasets(self, models, dataset, split, column, dst_path):
+        combined_checkpoint = os.path.join(dst_path, "ipfs_" + dataset.replace("/", "___") + ".parquet")
+        combind_cid_checkpoint = os.path.join(dst_path, "ipfs_" + dataset.replace("/", "___") + "_cids.parquet")
+
+        return None
+    
     async def init_datasets(self, models, dataset, split, column, dst_path):
         columns = []
-                
         try:
             # Load dataset
             if split is None:
@@ -867,7 +876,13 @@ class ipfs_embeddings_py:
             self.dataset = None
             
         try:
-            init_load_combined = await self.ipfs_datasets.load_combined(dataset, split, column, dst_path)
+            init_hashed_datasets = await self.init_hashed_datasets(models, dataset, split, column, dst_path)
+        except Exception as e:
+            print(e)
+            pass
+            
+        try:
+            init_load_combined = await self.ipfs_datasets.load_combined(models, dataset, split, column, dst_path)
         except Exception as e:
             print(e)
             init_load_combined = e
@@ -1087,7 +1102,7 @@ class ipfs_embeddings_py:
         #         for worker_id in range(num_workers)
         #     ]
         #     pool.starmap(chunk_producer, args)
-            
+        
         args = [self.index, split, column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:0"], None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, all_cid_set]        
         chunk_producer_results = chunk_producer(*args)
         # Create producer tasks directly as asyncio tasks
@@ -1425,12 +1440,21 @@ class ipfs_embeddings_py:
             raise ValueError("samples must be a list or string")
         return results
             
-        
     async def load_dataset(self, dataset, split=None):
         if split is None:
-            self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+            try:
+                self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+            except:
+                splits = load_dataset(dataset, streaming=True).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                pass
         else:
-            self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+            try:
+                self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+            except:
+                splits = load_dataset(dataset, streaming=True).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                pass
         columns = self.dataset.column_names
         columns.append("cid")
         return None
