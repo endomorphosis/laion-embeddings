@@ -467,17 +467,17 @@ class ipfs_datasets_py:
     async def load_dataset(self, dataset, split=None):
         if split is None:
             try:
-                self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+                self.dataset = load_dataset(dataset).shuffle(random.randint(0,65536))
             except:
-                splits = load_dataset(dataset, streaming=True).list_splits()
-                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                splits = load_dataset(dataset).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0]).shuffle(random.randint(0,65536))
                 pass
         else:
             try:
-                self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+                self.dataset = load_dataset(dataset, split=split).shuffle(random.randint(0,65536))
             except:
-                splits = load_dataset(dataset, streaming=True).list_splits()
-                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                splits = load_dataset(dataset).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0]).shuffle(random.randint(0,65536))
                 pass
         # columns = self.dataset.column_names
         # columns.append("cid")
@@ -486,17 +486,17 @@ class ipfs_datasets_py:
     async def load_original_dataset(self, dataset, split=None):
         if split is None:
             try:
-                self.dataset = load_dataset(dataset, streaming=True).shuffle(random.randint(0,65536))
+                self.dataset = load_dataset(dataset ).shuffle(random.randint(0,65536))
             except:
-                splits = load_dataset(dataset, streaming=True).list_splits()
-                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                splits = load_dataset(dataset).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0]).shuffle(random.randint(0,65536))
                 pass
         else:
             try:
-                self.dataset = load_dataset(dataset, split=split, streaming=True).shuffle(random.randint(0,65536))
+                self.dataset = load_dataset(dataset, split=split).shuffle(random.randint(0,65536))
             except:
-                splits = load_dataset(dataset, streaming=True).list_splits()
-                self.dataset = load_dataset(dataset, split=splits[0], streaming=True).shuffle(random.randint(0,65536))
+                splits = load_dataset(dataset).list_splits()
+                self.dataset = load_dataset(dataset, split=splits[0]).shuffle(random.randint(0,65536))
                 pass
         # columns = self.dataset.column_names
         # columns.append("cid")
@@ -529,7 +529,8 @@ class ipfs_datasets_py:
         try:
             len_dataset = self.dataset.num_rows
         except Exception as e:
-            len_dataset = self.dataset[self.dataset.column_names[0]]
+            dataset_columns = self.dataset.column_names
+            len_dataset = self.dataset[dataset_columns[0]]
             len_dataset = len(len_dataset)
 
         if len_dataset > len_hashed_dataset:
@@ -560,7 +561,8 @@ class ipfs_datasets_py:
             else:
                 if this_hashed_dataset is None:
                     this_hashed_dataset = load_dataset('parquet', data_files=combined_checkpoint)[split]
-                this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["items"]["cid"]})["cid"]
+                this_hashed_dataset_columns = this_hashed_dataset.column_names
+                this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["cid"]})[this_hashed_dataset_columns[0]]
                 self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
                 self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
                 pass             
