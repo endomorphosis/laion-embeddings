@@ -257,7 +257,7 @@ def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, c
         for i in range(num_shards): 
             shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i))
     
-    with Pool(processes=32) as pool:
+    with Pool(processes=num_shards) as pool:
         len_hashed_dataset_cids = len(all_cid_set["hashed_dataset"])
         len_hashed_dataset = dataset_stream["hashed_dataset"].num_rows
         len_dataset_stream = dataset_stream["dataset"].num_rows
@@ -354,6 +354,8 @@ def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, c
             args = [[shards[i], tokenizer, column] for i in range(len(shards))]
             del dataset_stream
             del shards
+            if unique_dataset_column_row is not None:
+                del unique_dataset_column_row
             tokenized_texts = pool.starmap(tokenize_batch, args)
             # tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
             if "processed_items"  not in list(tokenized_texts[0].keys()):
@@ -886,7 +888,7 @@ class ipfs_embeddings_py:
         except Exception as e:
             print(e)
             init_load_combined = e
-
+        ## fix this to stop if this completes successfully
         try:
             init_load_clusters = await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
         except Exception as e:
@@ -905,23 +907,22 @@ class ipfs_embeddings_py:
         if len_cid_list == len_datasets_list:
             self.cid_list = self.ipfs_datasets.cid_list
             self.cid_set = set(self.cid_list)
-            self.all_cid_list["hashed_dataset"] = self.cid_list
-            self.all_cid_set["hashed_dataset"] = self.cid_set
+            self.all_cid_list["dataset"] = self.cid_list
+            self.all_cid_set["dataset"] = self.cid_set
             pass
         elif len_cid_list < len_datasets_list:
             self.cid_list = self.ipfs_datasets.cid_list
             self.cid_set = set(self.cid_list)
-            self.all_cid_list["hashed_dataset"] = self.cid_list
-            self.all_cid_set["hashed_dataset"] = self.cid_set
+            self.all_cid_list["dataset"] = self.cid_list
+            self.all_cid_set["dataset"] = self.cid_set
             pass
         elif len_cid_list > len_datasets_list:
             self.cid_list = self.ipfs_datasets.hashed_dataset["cid"][:len_datasets_list]
             self.cid_set = set(self.cid_list)
-            self.all_cid_list["hashed_dataset"] = self.cid_list
-            self.all_cid_set["hashed_dataset"] = self.cid_set
+            self.all_cid_list["dataset"] = self.cid_list
+            self.all_cid_set["dataset"] = self.cid_set
             pass
         
-                                
         results = { "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
         return results
 
@@ -1104,7 +1105,7 @@ class ipfs_embeddings_py:
         #     pool.starmap(chunk_producer, args)
         
         args = [self.index, split, column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:0"], None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, all_cid_set]        
-        chunk_producer_results = chunk_producer(*args)
+        chunk_producer_results = await chunk_producer(*args)
         # Create producer tasks directly as asyncio tasks
         # for worker_id in range(num_workers):
         #     producer_task = asyncio.create_task(

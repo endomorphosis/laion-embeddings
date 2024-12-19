@@ -529,9 +529,9 @@ class ipfs_datasets_py:
         try:
             len_dataset = self.dataset.num_rows
         except Exception as e:
-            len_dataset = len(self.dataset[self.dataset.column_names[0]])
+            len_dataset = self.dataset[self.dataset.column_names[0]]
+            len_dataset = len(len_dataset)
 
-        len_dataset = self.dataset.num_rows
         if len_dataset > len_hashed_dataset:
             len_unique_column = len_dataset
             if column is not None:
