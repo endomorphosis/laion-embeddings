@@ -522,7 +522,7 @@ class ipfs_datasets_py:
         
         try:
             len_hashed_dataset = this_hashed_dataset_cids.num_rows
-        except:
+        except Exception as e:
             len_hashed_dataset = len(this_hashed_dataset_cids)
         len_dataset = self.dataset.num_rows
         if len_dataset > len_hashed_dataset:
