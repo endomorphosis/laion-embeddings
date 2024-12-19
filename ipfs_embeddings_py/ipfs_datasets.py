@@ -529,7 +529,7 @@ class ipfs_datasets_py:
         try:
             len_dataset = self.dataset.num_rows
         except Exception as e:
-            len_dataset = self.dataset.shape[0]
+            len_dataset = len(self.dataset[self.dataset.column_names[0]])
 
         len_dataset = self.dataset.num_rows
         if len_dataset > len_hashed_dataset:
