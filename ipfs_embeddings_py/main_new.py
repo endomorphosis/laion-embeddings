@@ -127,12 +127,15 @@ def index_cid(samples):
         raise ValueError("samples must be a list or string")
     return results
 
-def tokenize_batch(batch, tokenizer, column):
+
+def tokenize_batch_bak(batch, tokenizer, column):
     if type(batch) is Dataset:
         len_columns = len(batch.column_names)
         batch = batch.to_dict()
     else:
         len_columns = len(list(batch.keys()))
+    num_rows = batch.num_rows
+    
     if len_columns > 1 and column is None:
         batch = [json.dumps(item) for item in batch]
         pass
@@ -142,16 +145,41 @@ def tokenize_batch(batch, tokenizer, column):
         batch = batch[column]
     mini_batch = []
     mini_batch_size = 2048
-    new_token_data = {}
-    batch_results = []
+    batch_results = np.array([])
     ## split batch into 2048 rows 
     try:
         for mini_batch in [ batch[i:i + mini_batch_size] for i in range(0, len(batch), mini_batch_size)]:
             results = tokenizer(mini_batch, padding=True, return_tensors="pt")
-            new_token_data["tokens_list"] = [ results["input_ids"][i].tolist() for i in range(len(results["input_ids"])) ]
-            # new_token_data["tokens_text"] = [ tokenizer.decode(tokens) for tokens in new_token_data["tokens_list"]]
-            new_token_data["token_lengths"] = [new_token_data["tokens_list"][i].count(0) for i in range(len(new_token_data["tokens_list"])) ]
-            batch_results.append(new_token_data)
+            new_token_data = np.array([ np.array(results["input_ids"][i].tolist()) for i in range(len(results["input_ids"]))])
+            batch_results += new_token_data
+        return batch_results
+    except Exception as e:
+        print("Error tokenizing batch: ", e)
+        return e
+
+
+def tokenize_batch(batch, tokenizer, column):
+    if type(batch) is Dataset:
+        len_columns = len(batch.column_names)
+    else:
+        len_columns = len(list(batch.keys()))
+    num_rows = batch.num_rows   
+    mini_batch = []
+    mini_batch_size = 2048
+    batch_results = np.array([])
+    try:
+        for mini_batch in [ batch[i:i + mini_batch_size] for i in range(0, num_rows, mini_batch_size)]:
+            if len_columns > 1 and column is None:
+                mini_batch = [json.dumps(item) for item in mini_batch]
+            elif len_columns > 1 and column in list(mini_batch.keys()):
+                mini_batch = [item for item in mini_batch[column]]
+            elif len_columns > 1 and column not in list(mini_batch.keys()):
+                mini_batch = [json.dumps(item) for item in mini_batch]
+            elif len_columns == 1:
+                pass
+            results = tokenizer(mini_batch, padding=True, return_tensors="pt")
+            new_token_data = np.array([ np.array(results["input_ids"][i].tolist()) for i in range(len(results["input_ids"]))])
+            batch_results += new_token_data
         return batch_results
     except Exception as e:
         print("Error tokenizing batch: ", e)
@@ -220,7 +248,7 @@ def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, c
     current_processed_items = []
     current_items = []
     current_results = []
-    num_shards = 32
+    num_shards = 20
     shard_id = 0
     dataset = {}
     shards = []
@@ -299,10 +327,13 @@ def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, c
                 # tokenize some more
                 for i in range(num_shards):
                     if "hashed_dataset" in list(dataset_stream.keys()) and dataset_stream["hashed_dataset"] is not None:
-                        shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i).to_dict())
-        
-                args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
-                tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
+                        shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i))
+                
+                # args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
+                args = [[shards[i], None, column] for i in range(len(shards))]
+                del shards
+                del dataset_stream
+                tokenized_texts = pool.starmap(tokenize_batch, args)
                 if "processed_items"  not in list(tokenized_texts[0].keys()):
                     tokenized_texts[0]["processed_items"] = []
                 for i in range(len(tokenized_texts[0]["text_list"])):
@@ -319,8 +350,12 @@ def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, c
                 if "hashed_dataset" in list(dataset_stream.keys()) and dataset_stream["hashed_dataset"] is not None:
                     shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i).to_dict())
 
-            args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
-            tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
+            # args = [(shards[i], column, method, None, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
+            args = [[shards[i], tokenizer, column] for i in range(len(shards))]
+            del dataset_stream
+            del shards
+            tokenized_texts = pool.starmap(tokenize_batch, args)
+            # tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
             if "processed_items"  not in list(tokenized_texts[0].keys()):
                 tokenized_texts[0]["processed_items"] = []
             for i in range(len(tokenized_texts[0]["text_list"])):
@@ -830,6 +865,12 @@ class ipfs_embeddings_py:
         except Exception as e:
             print(e)
             self.dataset = None
+            
+        try:
+            init_load_combined = await self.ipfs_datasets.load_combined(dataset, split, column, dst_path)
+        except Exception as e:
+            print(e)
+            init_load_combined = e
 
         try:
             init_load_clusters = await self.ipfs_datasets.load_clusters(dataset, split, dst_path)
@@ -866,7 +907,7 @@ class ipfs_embeddings_py:
             pass
         
                                 
-        results = { "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "columns": columns }
+        results = { "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
         return results
 
     async def init_queues(self, models, endpoints, dst_path):
