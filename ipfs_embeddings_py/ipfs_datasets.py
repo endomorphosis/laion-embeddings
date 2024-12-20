@@ -561,7 +561,7 @@ class ipfs_datasets_py:
             else:
                 if this_hashed_dataset is None:
                     this_hashed_dataset = load_dataset('parquet', data_files=combined_checkpoint)[split]
-                this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["cid"]})[this_hashed_dataset_columns[0]]
+                this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["cid"]})
                 self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
                 self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
                 pass             
