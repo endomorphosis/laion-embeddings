@@ -128,6 +128,7 @@ def index_cid(samples):
     return results
 
 
+
 def tokenize_batch_bak(batch, tokenizer, column):
     if type(batch) is Dataset:
         len_columns = len(batch.column_names)
@@ -242,7 +243,9 @@ def process_dataset(dataset_stream, column=None, caches=None, this_cid_list=None
                 print("Added item to queue for CID " + str(this_cid))
     return dataset              
 
-def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None, chunker=None, metadata=None, caches=None, all_cid_set=None):
+def chunk_producer(dataset_stream, split, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None, chunker=None, metadata=None, caches=None, all_cid_set=None,  load_dataset_function=None):
+    dataset_stream = load_dataset_function(models, dataset, split, column, dst_path)
+    # if dataset_stream is not None and load_dataset_function is not None:
     batch_size = 2048  # Adjust batch size based on your needs
     current_batch = []
     current_processed_items = []
@@ -863,6 +866,7 @@ class ipfs_embeddings_py:
 
         return None
     
+    
     async def init_datasets(self, models, dataset, split, column, dst_path):
         columns = []
         init_hashed_datasets = None
@@ -1075,6 +1079,88 @@ class ipfs_embeddings_py:
             # all_tasks.append(endpoint_consumer)
             
         return consumer_tasks 
+    
+    
+    
+    async def load_hashed_dataset(self, models, dataset, split, column, dst_path):
+        columns = []
+        init_hashed_datasets = None
+        init_load_combined = None
+        init_load_clusters = None
+        init_load_checkpoints = None
+        
+        try:
+            # Load dataset
+            if split is None:
+                self.dataset = load_dataset(dataset).shuffle(random.randint(0,65536))
+            else:
+                self.dataset = load_dataset(dataset, split=split).shuffle(random.randint(0,65536))
+            columns = self.dataset.column_names
+            columns.append("cid")
+        except Exception as e:
+            print(e)
+            self.dataset = None
+            
+        try:
+            init_hashed_datasets = await self.init_hashed_datasets(models, dataset, split, column, dst_path)
+        except Exception as e:
+            print(e)
+            pass
+            
+        try:
+            init_load_combined = await ipfs_datasets_py.load_combined(models, dataset, split, column, dst_path)
+            self.hashed_dataset = init_load_combined
+            init_load_combined = True
+        except Exception as e:
+            print(e)
+            init_load_combined = e
+        else:            
+            try:
+                init_load_clusters = await ipfs_datasets_py.load_clusters(dataset, split, dst_path)
+                self.hashed_dataset = init_load_clusters
+                init_load_clusters = True
+            except Exception as e:
+                print(e)
+                init_load_clusters = e
+            else:
+                try:
+                    init_load_checkpoints = await self.ipfs_datasets.load_checkpoints(dataset, split, dst_path, models)        
+                    self.hashed_dataset = init_load_checkpoints
+                    init_load_checkpoints = True
+                except Exception as e:
+                    print(e)
+                    init_load_checkpoints = e
+
+        if type(self.hashed_dataset) == Dataset:
+            if dataset in list(dir(self.ipfs_datasets)):
+                if type(self.ipfs_datasets.dataset) == Dataset:
+                    del self.ipfs_datasets.dataset
+
+        len_datasets_list = self.dataset.num_rows
+        len_cid_list = len(self.ipfs_datasets.cid_list)
+        len_cid_set = len(self.ipfs_datasets.cid_set)
+        if len_cid_list == len_datasets_list:
+            self.cid_list = self.ipfs_datasets.cid_list
+            self.cid_set = set(self.cid_list)
+            self.all_cid_list["dataset"] = self.cid_list
+            self.all_cid_set["dataset"] = self.cid_set
+            pass
+        elif len_cid_list < len_datasets_list:
+            self.cid_list = self.ipfs_datasets.cid_list
+            self.cid_set = set(self.cid_list)
+            self.all_cid_list["dataset"] = self.cid_list
+            self.all_cid_set["dataset"] = self.cid_set
+            pass
+        elif len_cid_list > len_datasets_list:
+            self.cid_list = self.ipfs_datasets.hashed_dataset["cid"][:len_datasets_list]
+            self.cid_set = set(self.cid_list)
+            self.all_cid_list["dataset"] = self.cid_list
+            self.all_cid_set["dataset"] = self.cid_set
+            pass
+        
+        results = { "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
+        return results
+
         
     async def index_dataset(self, dataset, split, column, dst_path, models = None):
         if not os.path.exists(dst_path):
@@ -1086,7 +1172,7 @@ class ipfs_embeddings_py:
         self.cid_queue = asyncio.Queue() 
         # Load required data
         self.resources = await self.init_endpoints(models, endpoints)
-        await self.init_datasets(models, dataset, split, column, dst_path)
+        # await self.init_datasets(models, dataset, split, column, dst_path)
         await self.init_queues(models, endpoints, dst_path)
         self.index["hashed_dataset"] = self.ipfs_datasets.hashed_dataset
         self.index["dataset"] = self.dataset
@@ -1119,8 +1205,8 @@ class ipfs_embeddings_py:
         #         for worker_id in range(num_workers)
         #     ]
         #     pool.starmap(chunk_producer, args)
-        
-        args = [self.index, split, column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:0"], None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, all_cid_set]        
+        # self.init_datasets(models, dataset, split, column, dst_path)
+        args = [None, split, column, None, self.ipfs_accelerate_py.resources["tokenizer"][models[0]]["cuda:0"], None, None, None, models[0], dst_path, chunk_item, process_item, cid_queue, cid_chunk_set, chunker, metadata, caches, all_cid_set, self.init_datasets]        
         chunk_producer_results = await chunk_producer(*args)
         # Create producer tasks directly as asyncio tasks
         # for worker_id in range(num_workers):
