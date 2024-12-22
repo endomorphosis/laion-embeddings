@@ -1,3 +1,4 @@
+import time
 import os
 import datasets
 import multiprocessing
@@ -561,7 +562,21 @@ class ipfs_datasets_py:
             else:
                 if this_hashed_dataset is None:
                     this_hashed_dataset = load_dataset('parquet', data_files=combined_checkpoint)[split]
-                this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["cid"]})
+                try:
+                    this_hashed_dataset_cids = this_hashed_dataset["cid"]
+                except:
+                    try:
+                        ## is this less than 50 mins?
+                        timestamp1 = time.time()
+                        this_hashed_dataset_cids = this_hashed_dataset_cids.to_dict()
+                        this_hashed_dataset_cids = this_hashed_dataset_cids["cid"]
+                        timestamp2 = time.time()
+                        print("Time to convert to dict: ", timestamp2 - timestamp1)
+                    except:                
+                        try:
+                            this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["cid"]})
+                        except:
+                            pass
                 self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
                 self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
                 pass             
@@ -572,7 +587,8 @@ class ipfs_datasets_py:
             self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
             self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
             pass
-        del self.dataset
+        if "dataset" in list(dir(self)):
+            del self.dataset
         return this_hashed_dataset
     
     async def combine_checkpoints(self, dataset, split, column, dst_path, models):
