@@ -484,7 +484,7 @@ class ipfs_datasets_py:
         # columns.append("cid")
         return None
 
-    async def load_original_dataset(self, dataset, split=None):
+    def load_original_dataset(self, dataset, split=None):
         if split is None:
             try:
                 self.dataset = load_dataset(dataset ).shuffle(random.randint(0,65536))
@@ -503,9 +503,12 @@ class ipfs_datasets_py:
         # columns.append("cid")
         return None
 
-    async def load_combined(self, models, dataset, split, column, dst_path):
+    def load_combined(self, dataset_stream, models, dataset, split, column, dst_path):
         print("load combined") 
-        await self.load_original_dataset(dataset, split)
+        if type(dataset_stream) is Dataset:
+            this_dataset = dataset_stream
+        else:
+            this_dataset = self.load_original_dataset(dataset, split)
         combined_checkpoint = os.path.join(dst_path, "ipfs_" + dataset.replace("/", "___") + ".parquet")
         combind_cid_checkpoint = os.path.join(dst_path, "ipfs_" + dataset.replace("/", "___") + "_cids.parquet")
         combinded_cid_checkpoint_dir = os.path.join(dst_path, "checkpoints","hashed_dataset")
@@ -528,16 +531,16 @@ class ipfs_datasets_py:
             len_hashed_dataset = this_hashed_dataset_cids.num_rows
 
         try:
-            len_dataset = self.dataset.num_rows
+            len_dataset = this_dataset.num_rows
         except Exception as e:
-            dataset_columns = self.dataset.column_names
-            len_dataset = self.dataset[dataset_columns[0]]
+            dataset_columns = this_dataset.column_names
+            len_dataset = this_dataset[dataset_columns[0]]
             len_dataset = len(len_dataset)
 
         if len_dataset > len_hashed_dataset:
             len_unique_column = len_dataset
             if column is not None:
-                tmp_unique_column = self.dataset[column]
+                tmp_unique_column = this_dataset[column]
                 tmp_unique_column = list(set(tmp_unique_column))
                 len_unique_column = len(tmp_unique_column)
                 pass
@@ -562,21 +565,24 @@ class ipfs_datasets_py:
             else:
                 if this_hashed_dataset is None:
                     this_hashed_dataset = load_dataset('parquet', data_files=combined_checkpoint)[split]
-                try:
-                    this_hashed_dataset_cids = this_hashed_dataset["cid"]
-                except:
-                    try:
-                        ## is this less than 50 mins?
-                        timestamp1 = time.time()
-                        this_hashed_dataset_cids = this_hashed_dataset_cids.to_dict()
-                        this_hashed_dataset_cids = this_hashed_dataset_cids["cid"]
-                        timestamp2 = time.time()
-                        print("Time to convert to dict: ", timestamp2 - timestamp1)
-                    except:                
-                        try:
-                            this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["cid"]})
-                        except:
-                            pass
+                    if type(this_hashed_dataset_cids) is dict:
+                        this_hashed_dataset_cids = this_hashed_dataset["cid"]
+                    elif type(this_hashed_dataset_cids) is Dataset:
+                        try:                        
+                            this_hashed_dataset_cids = this_hashed_dataset_cids.to_dict()
+                            this_hashed_dataset_cids = this_hashed_dataset_cids["cid"]
+
+                            ## is this less than 50 mins?
+                            timestamp1 = time.time()
+                            this_hashed_dataset_cids = this_hashed_dataset_cids.to_dict()
+                            this_hashed_dataset_cids = this_hashed_dataset_cids["cid"]
+                            timestamp2 = time.time()
+                            print("Time to convert to dict: ", timestamp2 - timestamp1)
+                        except:                
+                            try:
+                                this_hashed_dataset_cids = this_hashed_dataset.map(lambda x: {"cid": x["cid"]})
+                            except:
+                                pass
                 self.all_cid_list["hashed_dataset"] = list(this_hashed_dataset_cids)
                 self.all_cid_set["hashed_dataset"] = set(this_hashed_dataset_cids)
                 pass             
