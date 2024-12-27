@@ -595,7 +595,7 @@ class ipfs_datasets_py:
             pass
         if "dataset" in list(dir(self)):
             del self.dataset
-        return this_hashed_dataset
+        return this_dataset, this_hashed_dataset
     
     async def combine_checkpoints(self, dataset, split, column, dst_path, models):
         await self.load_dataset(dataset, split)

@@ -107,6 +107,7 @@ cid_queue = manager.Queue()
 cid_set = manager.list()
 cid_chunk_set = manager.list()
 all_cid_set = manager.dict()
+model_cid_set = manager.dict()
 batch_sizes = manager.dict()
 metadata = manager.dict()
 caches["hashed_dataset"] = manager.dict()
@@ -129,7 +130,7 @@ def index_cid(samples):
 
 
 
-def init_datasets(models, dataset, split, column, dst_path):
+def init_datasets(model, dataset, split, column, dst_path):
     columns = []
     init_hashed_datasets = None
     init_load_combined = None
@@ -147,10 +148,9 @@ def init_datasets(models, dataset, split, column, dst_path):
     except Exception as e:
         print(e)
         this_dataset = None
-        
+    len_datasets_list = this_dataset.num_rows
     try:
-        init_load_combined = this_ipfs_datasets.load_combined(this_dataset, models, dataset, split, column, dst_path)
-        this_hashed_dataset = init_load_combined
+        this_dataset, this_hashed_dataset = this_ipfs_datasets.load_combined(this_dataset, models, dataset, split, column, dst_path)
         init_load_combined = True
     except Exception as e:
         print(e)
@@ -170,32 +170,49 @@ def init_datasets(models, dataset, split, column, dst_path):
                 print(e)
                 init_load_checkpoints = e
 
-    len_datasets_list = this_dataset.num_rows
-    if type(this_dataset) == Dataset:
-        del this_dataset
-        
+    # if type(this_dataset) == Dataset:
+    #     del this_dataset
+
     len_cid_list = len(this_ipfs_datasets.all_cid_list["hashed_dataset"])
     len_cid_set = len(this_ipfs_datasets.all_cid_set["hashed_dataset"])
     if len_cid_list == len_datasets_list:
         this_cid_list = this_ipfs_datasets.all_cid_list["hashed_dataset"]
         this_cid_set = set(this_cid_list)
-        this_all_cid_list["dataset"] = this_cid_list
-        this_all_cid_set["dataset"] = this_cid_set
+        this_all_cid_list["hashed_dataset"] = this_cid_list
+        this_all_cid_set["hashed_dataset"] = this_cid_set
         pass
     elif len_cid_list < len_datasets_list:
         this_cid_list = this_ipfs_datasets.all_cid_list["hashed_dataset"]
         this_cid_set = set(this_cid_list)
-        this_all_cid_list["dataset"] = this_cid_list
-        this_all_cid_set["dataset"] = this_cid_set
+        this_all_cid_list["hashed_dataset"] = this_cid_list
+        this_all_cid_set["hashed_dataset"] = this_cid_set
         pass
     elif len_cid_list > len_datasets_list:
         this_cid_list = list(set(this_hashed_dataset["cid"]))
         this_cid_set = set(this_cid_list)
-        this_all_cid_list["dataset"] = this_cid_list
-        this_all_cid_set["dataset"] = this_cid_set
+        this_all_cid_list["hashed_dataset"] = this_cid_list
+        this_all_cid_set["hashed_dataset"] = this_cid_set
         pass
     
-    results = { "this_hashed_dataset": this_hashed_dataset, "this_all_cid_list" : this_all_cid_list, "this_all_cid_set": this_all_cid_set, "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
+
+    len_datasets_list = this_dataset.num_rows
+    model_dst_path = os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + model.replace("/", "___") + ".parquet")
+    model_cid_dst_path = os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + model.replace("/", "___") + "_cids.parquet")
+    if os.path.exists(model_cid_dst_path):
+        this_model_cid_list = load_dataset(model_cid_dst_path)
+    elif os.path.exists(model_dst_path):
+        this_model_dataset = load_dataset(model_dst_path)
+        this_model_cid_list = list(set(this_model_dataset["cid"]))
+        del this_model_dataset
+    else:
+        this_model_cid_list = None
+    
+    if this_model_cid_list is not None:
+        this_all_cid_list[model] = this_model_cid_list
+        this_all_cid_set[model] = set(this_model_cid_list)
+        pass
+
+    results = { "this_hashed_dataset": this_hashed_dataset, "dataset": this_dataset, "this_all_cid_list" : this_all_cid_list, "this_all_cid_set": this_all_cid_set, "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
     return results
 
 def tokenize_batch_bak(batch, tokenizer, column):
@@ -309,7 +326,7 @@ def process_dataset(dataset_stream, column=None, caches=None, this_cid_list=None
                 # caches["hashed_dataset"][this_cid] = item
                 dataset[item["cid"]] = item
                 cid_queue.put_nowait
-                print("Added item to queue for CID " + str(this_cid))
+            print("Added item to qu~qeue for CID " + str(this_cid))
     return dataset              
 
 def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None, chunker=None, metadata=None, caches=None, all_cid_set=None):
@@ -333,14 +350,14 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     dataset = {}
     shards = []
     hashed_dataset = None
+    len_hashed_dataset = this_datasets["hashed_dataset"].num_rows
+    len_dataset_stream = dataset_stream["dataset"].num_rows
+    len_model_dataset_cids = len(all_cid_set[embed_model])
     if "hashed_dataset" in list(this_datasets.keys()) and this_datasets["hashed_dataset"] is not None:
         for i in range(num_shards): 
             shards.append(this_datasets["hashed_dataset"].shard(num_shards=num_shards, index=i))
-    
+    del this_datasets
     with Pool(processes=num_shards) as pool:
-        len_hashed_dataset = this_datasets["hashed_dataset"].num_rows
-        len_dataset_stream = dataset_stream["dataset"].num_rows
-        len_model_dataset_cids = len(all_cid_set[embed_model])
         if column == None and len_model_dataset_cids <= len_hashed_dataset:        
             args = [(shards[i], column, caches, all_cid_set) for i in range(len(shards))]
             processed_dataset = pool.starmap(process_dataset, args)
