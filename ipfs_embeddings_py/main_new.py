@@ -196,8 +196,8 @@ def init_datasets(model, dataset, split, column, dst_path):
     
 
     len_datasets_list = this_dataset.num_rows
-    model_dst_path = os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + model.replace("/", "___") + ".parquet")
-    model_cid_dst_path = os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + model.replace("/", "___") + "_cids.parquet")
+    model_dst_path = os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + "___" + model.replace("/", "___") + ".parquet")
+    model_cid_dst_path = os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + "___" + model.replace("/", "___") + "_cids.parquet")
     if os.path.exists(model_cid_dst_path):
         this_model_cid_list = load_dataset(model_cid_dst_path)
     elif os.path.exists(model_dst_path):
@@ -206,13 +206,13 @@ def init_datasets(model, dataset, split, column, dst_path):
         del this_model_dataset
     else:
         this_model_cid_list = None
-    
+    ## need to add checkpoints and clusters to this
     if this_model_cid_list is not None:
         this_all_cid_list[model] = this_model_cid_list
         this_all_cid_set[model] = set(this_model_cid_list)
         pass
 
-    results = { "this_hashed_dataset": this_hashed_dataset, "dataset": this_dataset, "this_all_cid_list" : this_all_cid_list, "this_all_cid_set": this_all_cid_set, "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
+    results = { "this_hashed_dataset": this_hashed_dataset, "dataset": this_dataset, "all_cid_list" : this_all_cid_list, "all_cid_set": this_all_cid_set, "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
     return results
 
 def tokenize_batch_bak(batch, tokenizer, column):
@@ -336,9 +336,9 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     this_datasets = {}
     this_datasets["hashed_dataset"] = dataset_stream["this_hashed_dataset"]
     this_cid_list = {}
-    this_cid_list["hashed_dataset"] = dataset_stream["this_all_cid_list"]
+    this_cid_list["hashed_dataset"] = dataset_stream["all_cid_list"]["hashed_dataset"]
     this_cid_set = {}
-    this_cid_set["hashed_dataset"] = dataset_stream["this_all_cid_set"]
+    this_cid_set["hashed_dataset"] = dataset_stream["all_cid_set"]["hashed_dataset"]
     # if dataset_stream is not None and load_dataset_function is not None:
     batch_size = 2048  # Adjust batch size based on your needs
     current_batch = []
@@ -350,9 +350,9 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     dataset = {}
     shards = []
     hashed_dataset = None
-    len_hashed_dataset = this_datasets["hashed_dataset"].num_rows
+    len_hashed_dataset = dataset_stream["hashed_dataset"].num_rows
     len_dataset_stream = dataset_stream["dataset"].num_rows
-    len_model_dataset_cids = len(all_cid_set[embed_model])
+    len_model_dataset_cids = len(dataset_stream["all_cid_list"][embed_model])
     if "hashed_dataset" in list(this_datasets.keys()) and this_datasets["hashed_dataset"] is not None:
         for i in range(num_shards): 
             shards.append(this_datasets["hashed_dataset"].shard(num_shards=num_shards, index=i))
