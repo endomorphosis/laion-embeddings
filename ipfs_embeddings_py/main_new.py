@@ -317,7 +317,11 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     if type(dataset_stream["this_hashed_dataset"]) is dict:
         dataset_stream = Dataset.from_dict(dataset_stream["this_hashed_dataset"])
     this_datasets = {}
-    this_datasets["hashed_dataset"] = {}
+    this_datasets["hashed_dataset"] = dataset_stream["this_hashed_dataset"]
+    this_cid_list = {}
+    this_cid_list["hashed_dataset"] = dataset_stream["this_all_cid_list"]
+    this_cid_set = {}
+    this_cid_set["hashed_dataset"] = dataset_stream["this_all_cid_set"]
     # if dataset_stream is not None and load_dataset_function is not None:
     batch_size = 2048  # Adjust batch size based on your needs
     current_batch = []
