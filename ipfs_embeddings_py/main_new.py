@@ -131,6 +131,7 @@ def index_cid(samples):
 
 
 def init_datasets(model, dataset, split, column, dst_path):
+
     columns = []
     init_hashed_datasets = None
     init_load_combined = None
@@ -172,7 +173,7 @@ def init_datasets(model, dataset, split, column, dst_path):
 
     # if type(this_dataset) == Dataset:
     #     del this_dataset
-
+    len_datasets_list = this_dataset.num_rows
     len_cid_list = len(this_ipfs_datasets.all_cid_list["hashed_dataset"])
     len_cid_set = len(this_ipfs_datasets.all_cid_set["hashed_dataset"])
     if len_cid_list == len_datasets_list:
@@ -194,25 +195,26 @@ def init_datasets(model, dataset, split, column, dst_path):
         this_all_cid_set["hashed_dataset"] = this_cid_set
         pass
     
-
-    len_datasets_list = this_dataset.num_rows
-    model_dst_path = os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + "___" + model.replace("/", "___") + ".parquet")
-    model_cid_dst_path = os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + "___" + model.replace("/", "___") + "_cids.parquet")
-    if os.path.exists(model_cid_dst_path):
-        this_model_cid_list = load_dataset(model_cid_dst_path)
-    elif os.path.exists(model_dst_path):
-        this_model_dataset = load_dataset(model_dst_path)
-        this_model_cid_list = list(set(this_model_dataset["cid"]))
-        del this_model_dataset
-    else:
-        this_model_cid_list = None
+    model_dst_path = os.path.abspath(os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + "___" + model.replace("/", "___") + ".parquet"))
+    model_cid_dst_path = os.path.abspath(os.path.join(dst_path, "ipfs_"+ dataset.replace("/", "___") + "___" + model.replace("/", "___") + "_cids.parquet"))
+    try:
+        if os.path.exists(model_cid_dst_path): 
+            this_model_cid_list = load_dataset("parquet", data_files=model_cid_dst_path)
+    except Exception as e:
+        try:
+            if os.path.exists(model_dst_path):
+                this_model_dataset = load_dataset("parquet", data_files=model_dst_path)
+                this_model_cid_list = list(set(this_model_dataset["cid"]))
+                del this_model_dataset
+        except Exception as e:
+            this_model_cid_list = None
     ## need to add checkpoints and clusters to this
     if this_model_cid_list is not None:
         this_all_cid_list[model] = this_model_cid_list
         this_all_cid_set[model] = set(this_model_cid_list)
         pass
 
-    results = { "this_hashed_dataset": this_hashed_dataset, "dataset": this_dataset, "all_cid_list" : this_all_cid_list, "all_cid_set": this_all_cid_set, "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
+    results = { "hashed_dataset": this_hashed_dataset, "dataset": this_dataset, "all_cid_list" : this_all_cid_list, "all_cid_set": this_all_cid_set, "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
     return results
 
 def tokenize_batch_bak(batch, tokenizer, column):
@@ -326,15 +328,15 @@ def process_dataset(dataset_stream, column=None, caches=None, this_cid_list=None
                 # caches["hashed_dataset"][this_cid] = item
                 dataset[item["cid"]] = item
                 cid_queue.put_nowait
-            print("Added item to qu~qeue for CID " + str(this_cid))
+            print("Added item to queue for CID " + str(this_cid))
     return dataset              
 
 def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None, dst_path=None, chunk_item=None, process_item=None, cid_queue=None, cid_chunk_set=None, chunker=None, metadata=None, caches=None, all_cid_set=None):
     dataset_stream = init_datasets(embed_model, dataset, split, column, dst_path)
-    if type(dataset_stream["this_hashed_dataset"]) is dict:
-        dataset_stream = Dataset.from_dict(dataset_stream["this_hashed_dataset"])
+    if type(dataset_stream["hashed_dataset"]) is dict:
+        dataset_stream = Dataset.from_dict(dataset_stream["hashed_dataset"])
     this_datasets = {}
-    this_datasets["hashed_dataset"] = dataset_stream["this_hashed_dataset"]
+    this_datasets["hashed_dataset"] = dataset_stream["hashed_dataset"]
     this_cid_list = {}
     this_cid_list["hashed_dataset"] = dataset_stream["all_cid_list"]["hashed_dataset"]
     this_cid_set = {}
@@ -353,10 +355,20 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     len_hashed_dataset = dataset_stream["hashed_dataset"].num_rows
     len_dataset_stream = dataset_stream["dataset"].num_rows
     len_model_dataset_cids = len(dataset_stream["all_cid_list"][embed_model])
+    if column is not None:
+        unique_column_cid_dataset_path = os.path.join(dst_path, "checkpoints", metadata["dataset"].replace("/","___") + "_"+ column +"_cids.parquet")
+        len_unique_dataset_columns_rows = 0
+        if os.path.exists(unique_column_cid_dataset_path):
+            unique_column_cid_dataset = load_dataset(unique_column_cid_dataset_path)
+            len_unique_dataset_column_rows = len(unique_column_cid_dataset[column])
+        else:
+            unique_dataset_column_row = set(dataset_stream["dataset"][column])
+            len_unique_dataset_column_rows = len(unique_dataset_column_row)
     if "hashed_dataset" in list(this_datasets.keys()) and this_datasets["hashed_dataset"] is not None:
         for i in range(num_shards): 
-            shards.append(this_datasets["hashed_dataset"].shard(num_shards=num_shards, index=i))
+            shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i))
     del this_datasets
+    del dataset_stream
     with Pool(processes=num_shards) as pool:
         if column == None and len_model_dataset_cids <= len_hashed_dataset:        
             args = [(shards[i], column, caches, all_cid_set) for i in range(len(shards))]
@@ -376,15 +388,6 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 for i in range(num_shards) and "hashed_dataset" and hashed_dataset is not None:
                     shards.append(hashed_dataset.shard(num_shards=num_shards, index=i))
         elif column != None and len_model_dataset_cids <= len_hashed_dataset:
-            unique_column_cid_dataset_path = os.path.join(dst_path, "checkpoints", metadata["dataset"].replace("/","___") + "_"+ column +"_cids.parquet")
-            len_unique_dataset_columns_rows = 0
-            if os.path.exists(unique_column_cid_dataset_path):
-                unique_column_cid_dataset = load_dataset(unique_column_cid_dataset_path)
-                len_unique_dataset_column_rows = len(unique_column_cid_dataset[column])
-            else:
-                unique_dataset_column_row = set(dataset_stream["dataset"][column])
-                len_unique_dataset_column_rows = len(unique_dataset_column_row)
-                
             if  len_unique_dataset_column_rows > len_model_dataset_cids:
                 args = [(shards[i], column, caches, all_cid_set) for i in range(len(shards))]
                 processed_dataset = pool.starmap(process_dataset, args)
@@ -428,7 +431,6 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 # args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
                 args = [[shards[i], None, column] for i in range(len(shards))]
                 del shards
-                del dataset_stream
                 tokenized_texts = pool.starmap(tokenize_batch, args)
                 if "processed_items"  not in list(tokenized_texts[0].keys()):
                     tokenized_texts[0]["processed_items"] = []
@@ -1669,9 +1671,9 @@ if __name__ == "__main__":
         "column": "text",
         "split": "train",
         "models": [
-            "thenlper/gte-small",
+            # "thenlper/gte-small",
             # "Alibaba-NLP/gte-large-en-v1.5",
-            # "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         ],
         "chunk_settings": {
             "chunk_size": 512,
