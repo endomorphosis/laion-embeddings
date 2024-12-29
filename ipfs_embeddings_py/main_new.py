@@ -110,7 +110,6 @@ all_cid_set = manager.dict()
 model_cid_set = manager.dict()
 batch_sizes = manager.dict()
 metadata = manager.dict()
-caches["hashed_dataset"] = manager.dict()
 
 ipfs_multiformats = ipfs_multiformats_py()
 this_chunker = chunker()
@@ -128,10 +127,7 @@ def index_cid(samples):
         raise ValueError("samples must be a list or string")
     return results
 
-
-
 def init_datasets(model, dataset, split, column, dst_path):
-
     columns = []
     init_hashed_datasets = None
     init_load_combined = None
@@ -274,7 +270,20 @@ def tokenize_batch(batch, tokenizer, column):
         print("Error tokenizing batch: ", e)
         return e
 
-def process_dataset(dataset_stream, column=None, caches=None, this_cid_list=None):
+
+# caches = manager.dict()
+# chunk_cache = manager.dict()
+# cid_cache = manager.dict()
+# cid_chunk_queue = manager.Queue()
+# cid_queue = manager.Queue()
+# cid_set = manager.list()
+# cid_chunk_set = manager.list()
+# all_cid_set = manager.dict()
+# model_cid_set = manager.dict()
+# batch_sizes = manager.dict()
+# metadata = manager.dict()
+
+def process_dataset(dataset_stream, column=None, caches=None, this_cid_list=None, this_cid_set=None):
     if "hashed_dataset" not in list(all_cid_set.keys()):
         all_cid_set["hashed_dataset"] = []
     if this_cid_list is not None:
@@ -319,7 +328,7 @@ def process_dataset(dataset_stream, column=None, caches=None, this_cid_list=None
         else:
             while cid_queue.full():
                  time.sleep(0.1)
-            if this_cid in this_cid_list["hashed_dataset"] or this_cid in cid_set:
+            if this_cid in this_cid_list or this_cid in cid_set:
                 pass    
             # if this_cid not in this_cid_list["hashed_dataset"] and this_cid not in cid_set:
             else:
@@ -370,8 +379,11 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     del this_datasets
     del dataset_stream
     with Pool(processes=num_shards) as pool:
+        manager = Manager()
+        all_cid_set = manager.dict()
+        caches = manager.dict()
         if column == None and len_model_dataset_cids <= len_hashed_dataset:        
-            args = [(shards[i], column, caches, all_cid_set) for i in range(len(shards))]
+            args = [(shards[i], column, caches, all_cid_set, all_cid_set) for i in range(len(shards))]
             processed_dataset = pool.starmap(process_dataset, args)
             for shard in processed_dataset:
                 dataset.update(shard)
@@ -388,8 +400,9 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 for i in range(num_shards) and "hashed_dataset" and hashed_dataset is not None:
                     shards.append(hashed_dataset.shard(num_shards=num_shards, index=i))
         elif column != None and len_model_dataset_cids <= len_hashed_dataset:
-            if  len_unique_dataset_column_rows > len_model_dataset_cids:
-                args = [(shards[i], column, caches, all_cid_set) for i in range(len(shards))]
+            if len_unique_dataset_column_rows > len_model_dataset_cids:
+                args = [(shards[i], column, caches, all_cid_set, all_cid_set) for i in range(len(shards))]                
+                # args = (dataset_stream, column, caches, this_cid_list, all_cid_set):
                 processed_dataset = pool.starmap(process_dataset, args)
                 for shard in processed_dataset:
                     dataset.update(shard)
