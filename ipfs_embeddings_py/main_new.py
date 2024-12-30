@@ -397,7 +397,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 for i in range(num_shards) and "hashed_dataset" and hashed_dataset is not None:
                     shards.append(hashed_dataset.shard(num_shards=num_shards, index=i))
         elif column != None and len_model_dataset_cids <= len_hashed_dataset:
-            if len_unique_dataset_column_rows > len_model_dataset_cids:
+            if len_unique_dataset_column_rows > len_hashed_dataset:
                 args = [(shards[i], column, caches, this_cid_list["hashed_dataset"], all_cid_set) for i in range(len(shards))]                
                 # args = (dataset_stream, column, caches, this_cid_list, all_cid_set):
                 processed_dataset = pool.starmap(process_dataset, args)
