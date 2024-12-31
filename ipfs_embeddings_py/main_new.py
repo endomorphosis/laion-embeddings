@@ -264,7 +264,11 @@ def tokenize_batch(batch, tokenizer, column=None):
                 mini_batch = [json.dumps(item) for item in mini_batch]
             elif len_columns == 1:
                 pass
-            max_len = max([len(item) for item in mini_batch])
+            ## find the longest row in the mini_batch
+            longest_row_item = max(mini_batch, key=len)
+            tokens_longest_row_item = tokenizer(longest_row_item, padding='max_length', max_length=512, truncation=True, return_tensors="pt")
+            max_len = len(tokens_longest_row_item["input_ids"][0])
+            # max_len = max([len(item) for item in mini_batch])
             if column is None:
                 results = tokenizer(
                     mini_batch,
