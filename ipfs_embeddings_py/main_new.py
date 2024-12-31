@@ -378,6 +378,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     shard_id = 0
     dataset = {}
     shards = []
+    shard_cids = []
     hashed_dataset = None
     len_hashed_dataset = dataset_stream["hashed_dataset"].num_rows
     len_dataset_stream = dataset_stream["dataset"].num_rows
@@ -399,9 +400,12 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
             for i in range(num_shards):
                 this_shard = dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i)
                 this_shard_column = list(this_shard[column])
+                this_shard_cid = list(this_shard["cid"])
                 if len(this_shard_column) > 0:
-                    this_shard_column = datasets.Dataset.from_dict(this_shard_column)
+                    this_shard_cid = datasets.Dataset.from_dict({ "cid": this_shard_cid})
+                    this_shard_column = datasets.Dataset.from_dict({column: this_shard_column})
                     shards.append(this_shard_column)
+                    shard_cids.append(this_shard_cid)
     del this_datasets
     del dataset_stream
     with Pool(processes=num_shards) as pool:
@@ -471,10 +475,20 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 pass
             else:
                 # tokenize some more
-                for i in range(num_shards):
-                    if "hashed_dataset" in list(dataset_stream.keys()) and dataset_stream["hashed_dataset"] is not None:
-                        shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i))
-                
+                if len(num_shards) == 0:
+                    if column is None:
+                        for i in range(num_shards): 
+                            shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i))
+                    else:
+                        for i in range(num_shards):
+                            this_shard = dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i)
+                            this_shard_column = list(this_shard[column])
+                            this_shard_cid = list(this_shard["cid"])
+                            if len(this_shard_column) > 0:
+                                this_shard_cid = datasets.Dataset.from_dict({ "cid": this_shard_cid})
+                                this_shard_column = datasets.Dataset.from_dict({column: this_shard_column})
+                                shards.append(this_shard_column)
+                                shard_cids.append(this_shard_cid)
                 # args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
                 args = [[shards[i], tokenizer, column] for i in range(len(shards))]
                 # del shards
