@@ -243,7 +243,7 @@ def tokenize_batch_bak(batch, tokenizer, column):
         return e
 
 
-def tokenize_batch(batch, tokenizer, column):
+def tokenize_batch(batch, tokenizer, column=None):
     if type(batch) is Dataset:
         len_columns = len(batch.column_names)
     else:
@@ -265,13 +265,22 @@ def tokenize_batch(batch, tokenizer, column):
             elif len_columns == 1:
                 pass
             max_len = max([len(item) for item in mini_batch])
-            results = tokenizer(
-                mini_batch,
-                padding='max_length',
-                max_length=max_len,
-                truncation=True,
-                return_tensors="pt"
-            )
+            if column is None:
+                results = tokenizer(
+                    mini_batch,
+                    padding='max_length',
+                    max_length=max_len,
+                    truncation=True,
+                    return_tensors="pt"
+                )
+            else:
+                results = tokenizer(
+                    mini_batch[column],
+                    padding='max_length',
+                    max_length=max_len,
+                    truncation=True,
+                    return_tensors="pt"
+                )
             chunk = results["input_ids"].numpy().astype(np.int32)
             pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id else 0
             chunk = np.array([row[row != pad_token_id] for row in chunk], dtype=np.int32)
