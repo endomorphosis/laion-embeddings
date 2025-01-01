@@ -213,36 +213,6 @@ def init_datasets(model, dataset, split, column, dst_path):
     results = { "hashed_dataset": this_hashed_dataset, "dataset": this_dataset, "all_cid_list" : this_all_cid_list, "all_cid_set": this_all_cid_set, "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
     return results
 
-def tokenize_batch_bak(batch, tokenizer, column):
-    if type(batch) is Dataset:
-        len_columns = len(batch.column_names)
-        batch = batch.to_dict()
-    else:
-        len_columns = len(list(batch.keys()))
-    num_rows = batch.num_rows
-    
-    if len_columns > 1 and column is None:
-        batch = [json.dumps(item) for item in batch]
-        pass
-    elif len_columns > 1 and column not in list(batch.keys()):
-        batch = [json.dumps(item) for item in batch]
-    elif len_columns > 1 and column in list(batch.keys()):
-        batch = batch[column]
-    mini_batch = []
-    mini_batch_size = 2048
-    batch_results = np.array([])
-    ## split batch into 2048 rows 
-    try:
-        for mini_batch in [ batch[i:i + mini_batch_size] for i in range(0, len(batch), mini_batch_size)]:
-            results = tokenizer(mini_batch, padding=True, return_tensors="pt")
-            new_token_data = np.array([ np.array(results["input_ids"][i].tolist()) for i in range(len(results["input_ids"]))])
-            batch_results += new_token_data
-        return batch_results
-    except Exception as e:
-        print("Error tokenizing batch: ", e)
-        return e
-
-
 def tokenize_batch(batch, tokenizer, column=None):
     if type(batch) is Dataset:
         len_columns = len(batch.column_names)
@@ -287,11 +257,10 @@ def tokenize_batch(batch, tokenizer, column=None):
                 )
             chunk = results["input_ids"].numpy().astype(np.int32)
             pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id else 0
-            chunk = np.array([row[row != pad_token_id] for row in chunk], dtype=np.int32)
+            chunk = [row[row != pad_token_id] for row in chunk]
             if collected_tokens is None:
-                collected_tokens = chunk
-            else:
-                collected_tokens = np.concatenate((collected_tokens, chunk), axis=0)
+                collected_tokens = []
+            collected_tokens.extend(chunk)
             # remove processed rows
             if isinstance(batch, Dataset):
                 keep_indices = list(range(0, i)) + list(range(i + mini_batch_size, num_rows))
@@ -387,7 +356,8 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     current_processed_items = []
     current_items = []
     current_results = []
-    num_shards = 8
+    num_shards = 256
+    num_threads = 16
     shard_id = 0
     dataset = {}
     shards = []
@@ -406,6 +376,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
             unique_dataset_column_row = set(dataset_stream["dataset"][column])
             len_unique_dataset_column_rows = len(unique_dataset_column_row)
     if "hashed_dataset" in list(this_datasets.keys()) and this_datasets["hashed_dataset"] is not None:
+        
         if column is None:
             for i in range(num_shards): 
                 shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i))
@@ -421,7 +392,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                     shard_cids.append(this_shard_cid)
     del this_datasets
     del dataset_stream
-    with Pool(processes=num_shards) as pool:
+    with Pool(processes=num_threads) as pool:
         manager = Manager()
         all_cid_set = manager.dict()
         caches = manager.dict()
@@ -526,15 +497,21 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                         shards.append(dataset_stream["hashed_dataset"].shard(num_shards=num_shards, index=i).to_dict())
                 del dataset_stream
             # args = [(shards[i], column, method, None, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
-            args = [[shards[i], tokenizer, column] for i in range(len(shards))]
+            # args = [[shards[i], tokenizer, column] for i in range(len(shards))]
             if "dataset_stream" in locals():
                 del dataset_stream
             if unique_dataset_column_row is not None:
                 del unique_dataset_column_row
-            args = [[shards[i], tokenizer, column] for i in range(len(shards))]
-            tokenized_texts = pool.starmap(tokenize_batch, args)
+            macro_batch = []           
+            collected_tokens = []
+            for i in range(num_threads):
+                macro_batch = [shards[x + (i * num_threads)] for x in range(round(num_shards / num_threads))]
+                args = [[macro_batch[i], tokenizer, column] for i in range(round(num_shards / num_threads))]
+                tokenized_texts = pool.starmap(tokenize_batch, args)
+                collected_tokens.extend(tokenized_texts)
+
             # tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
-            if "processed_items"  not in list(tokenized_texts[0].keys()):
+            if "processed_items"  not in list(tokenized_texts.keys()):
                 tokenized_texts[0]["processed_items"] = []
             for i in range(len(tokenized_texts[0]["text_list"])):
                 if i >= len(tokenized_texts[0]["processed_items"]):
