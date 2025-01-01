@@ -236,7 +236,7 @@ def tokenize_batch(batch, tokenizer, column=None):
                 pass
             ## find the longest row in the mini_batch
             longest_row_item = max(mini_batch, key=len)
-            tokens_longest_row_item = tokenizer(longest_row_item, padding='max_length', max_length=512, truncation=True, return_tensors="pt")
+            tokens_longest_row_item = tokenizer(longest_row_item, padding='max_length', max_length=1000000, truncation=True, return_tensors="pt")
             max_len = len(tokens_longest_row_item["input_ids"][0])
             # max_len = max([len(item) for item in mini_batch])
             if column is None:
@@ -257,10 +257,11 @@ def tokenize_batch(batch, tokenizer, column=None):
                 )
             chunk = results["input_ids"].numpy().astype(np.int32)
             pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id else 0
-            chunk = [row[row != pad_token_id] for row in chunk]
+            chunk = np.array([row[row != pad_token_id] for row in chunk], dtype=np.int32)
             if collected_tokens is None:
-                collected_tokens = []
-            collected_tokens.extend(chunk)
+                collected_tokens = chunk
+            else:
+                collected_tokens = np.concatenate((collected_tokens, chunk), axis=0)
             # remove processed rows
             if isinstance(batch, Dataset):
                 keep_indices = list(range(0, i)) + list(range(i + mini_batch_size, num_rows))
@@ -356,8 +357,8 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     current_processed_items = []
     current_items = []
     current_results = []
-    num_shards = 256
-    num_threads = 16
+    num_shards = 400
+    num_threads = 20
     shard_id = 0
     dataset = {}
     shards = []
@@ -503,12 +504,15 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
             if unique_dataset_column_row is not None:
                 del unique_dataset_column_row
             macro_batch = []           
-            collected_tokens = []
+            tokens_list = []
             for i in range(num_threads):
                 macro_batch = [shards[x + (i * num_threads)] for x in range(round(num_shards / num_threads))]
                 args = [[macro_batch[i], tokenizer, column] for i in range(round(num_shards / num_threads))]
                 tokenized_texts = pool.starmap(tokenize_batch, args)
-                collected_tokens.extend(tokenized_texts)
+                for i in len(tokenized_texts):
+                    this_batch = tokenized_texts[i]
+                    for j in len(this_batch):
+                        tokens_list.append(this_batch[j])
 
             # tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
             if "processed_items"  not in list(tokenized_texts.keys()):
