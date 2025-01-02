@@ -220,7 +220,8 @@ def tokenize_batch(batch, tokenizer, column=None):
         len_columns = len(list(batch.keys()))
     num_rows = batch.num_rows   
     mini_batch = []
-    mini_batch_size = 2048
+    mini_batch_size = 64
+    # mini_batch_size = 2048
     collected_tokens = None
     try:
         i = 0
@@ -257,10 +258,18 @@ def tokenize_batch(batch, tokenizer, column=None):
                 )
             chunk = results["input_ids"].numpy().astype(np.int32)
             pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id else 0
-            chunk = np.array([row[row != pad_token_id] for row in chunk], dtype=np.int32)
+            filtered_rows = [row[row != pad_token_id] for row in chunk]
+            max_length = max(len(row) for row in filtered_rows)
+            padded_rows = [np.pad(row, (0, max_length - len(row)), constant_values=pad_token_id) for row in filtered_rows]
+            chunk = np.array(padded_rows, dtype=np.int32)
             if collected_tokens is None:
                 collected_tokens = chunk
             else:
+                if chunk.shape[1] != collected_tokens.shape[1]:
+                    # Pad shorter sequences to match longer ones
+                    max_len = max(chunk.shape[1], collected_tokens.shape[1])
+                    chunk = np.pad(chunk, ((0, 0), (0, max_len - chunk.shape[1])), constant_values=pad_token_id)
+                    collected_tokens = np.pad(collected_tokens, ((0, 0), (0, max_len - collected_tokens.shape[1])), constant_values=pad_token_id)
                 collected_tokens = np.concatenate((collected_tokens, chunk), axis=0)
             # remove processed rows
             if isinstance(batch, Dataset):
@@ -357,8 +366,10 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     current_processed_items = []
     current_items = []
     current_results = []
-    num_shards = 400
-    num_threads = 20
+    
+    ## this needs to be autodetected with a memory test.
+    num_shards = 1024
+    num_threads = 8
     shard_id = 0
     dataset = {}
     shards = []
@@ -476,7 +487,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                                 shard_cids.append(this_shard_cid)
                 # args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
                 args = [[shards[i], tokenizer, column] for i in range(len(shards))]
-                # del shards
+                # find some way to find out how much ram one single shard takes before running this.
                 tokenized_texts = pool.starmap(tokenize_batch, args)
                 if "processed_items"  not in list(tokenized_texts[0].keys()):
                     tokenized_texts[0]["processed_items"] = []
@@ -1796,5 +1807,5 @@ if __name__ == "__main__":
     create_embeddings_batch = ipfs_embeddings_py(resources, metadata)
     asyncio.run(create_embeddings_batch.index_dataset(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
     # asyncio.run(create_embeddings_batch.combine_checkpoints(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
-    # asyncio.run(create_embeddings_batch.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))
+    # asyncio.run(create_embeddings_batch.kmecccccccccccccans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"], 10))
     # asyncio.run(create_embeddings_batch.index_sparse_chunks(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))
