@@ -458,11 +458,11 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
             # hashed_dataset = dataset_stream["hashed_dataset"]
             pass
         
-        if os.path.exists (os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet")):
+        if os.path.exists (os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet")):
             if split != None:
-                tokenized_text_datasets = load_dataset(os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet"), format="parquet")            
+                tokenized_text_datasets = load_dataset(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"), format="parquet")            
             else:
-                tokenized_text_datasets = load_dataset(os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet"), format="parquet")
+                tokenized_text_datasets = load_dataset(os.path.join(dst_path, "checkpoints","tokens_" + embed_model.replace("/", "___") + ".parquet"), format="parquet")
         else:
             tokenized_text_datasets = None
         if tokenized_text_datasets is not None:
@@ -496,7 +496,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                         tokenized_texts[0]["processed_items"].append(current_processed_items[i])
                 if len(tokenized_texts[0]) > 0:  
                     tokenized_text_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
-                    tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet"))
+                    tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
                 elif len(tokenized_texts) > 0:
                     tokenized_text_datasets = dataset.Dataset.from_dict(tokenized_texts)
     
@@ -516,32 +516,34 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 del unique_dataset_column_row
             macro_batch = []           
             tokens_list = []
-            for i in range(num_threads):
-                macro_batch = [shards[x + (i * num_threads)] for x in range(round(num_shards / num_threads))]
-                args = [[macro_batch[i], tokenizer, column] for i in range(round(num_shards / num_threads))]
+            shard_cids_list = []
+            i = 0
+            while len(shards) > 0:
+                macro_batch = shards[((i * num_threads)): ((i * num_threads)) + macro_batch]
+                args = [[macro_batch[j], tokenizer, column] for j in range(num_threads)]
                 tokenized_texts = pool.starmap(tokenize_batch, args)
-                for i in len(tokenized_texts):
-                    this_batch = tokenized_texts[i]
-                    for j in len(this_batch):
-                        tokens_list.append(this_batch[j])
-
-            # tokenized_texts = pool.starmap(tokenize_batch, [(shards[i], tokenizer, column) for i in range(len(shards))])    
-            if "processed_items"  not in list(tokenized_texts.keys()):
-                tokenized_texts[0]["processed_items"] = []
-            for i in range(len(tokenized_texts[0]["text_list"])):
-                if i >= len(tokenized_texts[0]["processed_items"]):
-                    tokenized_texts[0]["processed_items"].append(current_processed_items[i])
-            if len(tokenized_texts[0]) > 0:  
-                tokenized_text_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
-                tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokenized_texts.parquet"))
-            elif len(tokenized_texts) > 0:
-                tokenized_text_datasets = dataset.Dataset.from_dict(tokenized_texts)
+                for k in range(len(num_threads)):
+                    shards.pop(0)
+                del macro_batch
+                del args
+                i += 1
+                tokens_list.extend([
+                    [token for token in batch if token != 0]
+                    for batch in tokenized_texts[i]
+                ])
+                shard_cids_list.extend([
+                    [cid for cid in batch if cid != 0]
+                    for batch in shard_cids[i]
+                ])
+                tokenized_text_datasets = datasets.Dataset.from_dict({"cid": shard_cids_list, "tokens": tokens_list})
+                tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
 
         ## check here for OOM problems
         tokenized_text_shards = []
-        for i in range(num_shards):
-            tokenized_text_shards.append(tokenized_text_datasets.shard(num_shards=num_shards, index=i))
-    
+        for i in range(num_threads):
+            tokenized_text_shard = tokenized_text_datasets.shard(num_shards=num_shards, index=i)
+            tokenized_text_shards.append(tokenized_text_shard)
+            
         args = [(tokenized_text_shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(tokenized_text_shards))]    
         tokenized_chunks = pool.starmap(chunk_items, args)
         # if "parent_cid" not in list(chunk_cache.keys()):
