@@ -516,7 +516,6 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
             macro_batch = []           
             tokens_list = []
             shard_cids_list = []
-            i = 0
             while len(shards) > 0:
                 if len(shards) < num_threads:
                     macro_batch = shards[0: len(shards)]
@@ -531,15 +530,14 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 tokenized_texts = pool.starmap(tokenize_batch, args)
                 del macro_batch
                 del args
-                i += 1
                 tokens_list.extend([
                     [token for token in batch if token != 0]
-                    for batch in tokenized_texts[i]
+                    for batch in tokenized_texts
                 ])
-                shard_cids_list.extend([
-                    [cid for cid in batch if cid != 0]
-                    for batch in shard_cids[i]
-                ])
+            shard_cids_list.extend([
+                [cid for cid in batch if cid != 0]
+                for batch in shard_cids_list
+            ])
             tokenized_text_datasets = datasets.Dataset.from_dict({"cid": shard_cids_list, "tokens": tokens_list})
             tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
             del tokens_list
