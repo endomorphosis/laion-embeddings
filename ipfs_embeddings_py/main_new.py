@@ -426,7 +426,6 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 for i in range(num_shards) and "hashed_dataset" and hashed_dataset is not None:
                     shards.append(hashed_dataset.shard(num_shards=num_shards, index=i))
             
-        
         elif column != None and len_model_dataset_cids <= len_hashed_dataset:
             if len_unique_dataset_column_rows > len_hashed_dataset:
                 args = [(shards[i], column, caches, this_cid_list["hashed_dataset"], all_cid_set) for i in range(len(shards))]                
@@ -519,7 +518,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
             shard_cids_list = []
             i = 0
             while len(shards) > 0:
-                macro_batch = shards[((i * num_threads)): ((i * num_threads)) + macro_batch]
+                macro_batch = shards[((i * num_threads)): ((i * num_threads)) + num_threads]
                 args = [[macro_batch[j], tokenizer, column] for j in range(num_threads)]
                 tokenized_texts = pool.starmap(tokenize_batch, args)
                 for k in range(len(num_threads)):
@@ -535,9 +534,10 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                     [cid for cid in batch if cid != 0]
                     for batch in shard_cids[i]
                 ])
-                tokenized_text_datasets = datasets.Dataset.from_dict({"cid": shard_cids_list, "tokens": tokens_list})
-                tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
-
+            tokenized_text_datasets = datasets.Dataset.from_dict({"cid": shard_cids_list, "tokens": tokens_list})
+            tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
+            del tokens_list
+            del shard_cids_list
         ## check here for OOM problems
         tokenized_text_shards = []
         for i in range(num_threads):
