@@ -521,12 +521,14 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 if len(shards) < num_threads:
                     macro_batch = shards[0: len(shards)]
                     args = [[macro_batch[j], tokenizer, column] for j in range(len(shards))]
+                    for k in range(len(shards)):
+                        shards.pop(0)
                 else:
                     macro_batch = shards[0: num_threads]
                     args = [[macro_batch[j], tokenizer, column] for j in range(num_threads)]
+                    for k in range(num_threads):
+                        shards.pop(0)
                 tokenized_texts = pool.starmap(tokenize_batch, args)
-                for k in range(len(num_threads)):
-                    shards.pop(0)
                 del macro_batch
                 del args
                 i += 1
