@@ -525,8 +525,9 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 del macro_batch
                 del args
                 tokens_list.extend([
-                    [token for token in batch if token != 0]
+                    [t for t in token if t != 0]
                     for batch in tokenized_texts
+                    for token in batch if isinstance(token, (list, np.ndarray))
                 ])
             shard_cids_list.extend([
                 [cid for cid in batch if cid != 0]
