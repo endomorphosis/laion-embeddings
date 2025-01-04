@@ -282,6 +282,10 @@ def tokenize_batch(batch, tokenizer, column=None, tokenize_batch_size=None):
             else:
                 del batch[i:i + mini_batch_size]
                 num_rows = len(batch)
+            ## remove padding in the collected_tokens
+            # collected_tokens = collected_tokens[~np.all(collected_tokens == pad_token_id, axis=1)]
+            ## remove padding in the rows of the collected_tokens
+            collected_tokens = collected_tokens[:, ~np.all(collected_tokens == pad_token_id, axis=0)]
         return collected_tokens
     except Exception as e:
         print("Error tokenizing batch: ", e)
