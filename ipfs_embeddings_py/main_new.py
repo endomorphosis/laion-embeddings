@@ -213,15 +213,18 @@ def init_datasets(model, dataset, split, column, dst_path):
     results = { "hashed_dataset": this_hashed_dataset, "dataset": this_dataset, "all_cid_list" : this_all_cid_list, "all_cid_set": this_all_cid_set, "load_clusters": init_load_clusters, "load_checkpoints": init_load_checkpoints, "init_load_combined": init_load_combined, "columns": columns }
     return results
 
-def tokenize_batch(batch, tokenizer, column=None):
+def tokenize_batch(batch, tokenizer, column=None, tokenize_batch_size=None):
     if type(batch) is Dataset:
         len_columns = len(batch.column_names)
     else:
         len_columns = len(list(batch.keys()))
     num_rows = batch.num_rows   
     mini_batch = []
-    mini_batch_size = 64
-    # mini_batch_size = 2048
+    if tokenize_batch_size is None:
+        # mini_batch_size = 2048 # max size of a batch
+        mini_batch_size = 64
+    else:
+        mini_batch_size = tokenize_batch_size
     collected_tokens = None
     try:
         i = 0
@@ -283,18 +286,6 @@ def tokenize_batch(batch, tokenizer, column=None):
     except Exception as e:
         print("Error tokenizing batch: ", e)
         return e
-
-# caches = manager.dict()
-# chunk_cache = manager.dict()
-# cid_cache = manager.dict()
-# cid_chunk_queue = manager.Queue()
-# cid_queue = manager.Queue()
-# cid_set = manager.list()
-# cid_chunk_set = manager.list()
-# all_cid_set = manager.dict()
-# model_cid_set = manager.dict()
-# batch_sizes = manager.dict()
-# metadata = manager.dict()
 
 def process_dataset(dataset_stream, column=None, caches=None, this_cid_list=None, this_cid_set=None):
     if this_cid_list is not None:
@@ -361,15 +352,10 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     this_cid_set = {}
     this_cid_set["hashed_dataset"] = dataset_stream["all_cid_set"]["hashed_dataset"]
     # if dataset_stream is not None and load_dataset_function is not None:
-    batch_size = 2048  # Adjust batch size based on your needs
     current_batch = []
     current_processed_items = []
     current_items = []
     current_results = []
-    
-    ## this needs to be autodetected with a memory test.
-    num_shards = 1024
-    num_threads = 8
     shard_id = 0
     dataset = {}
     shards = []
@@ -378,6 +364,14 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     len_hashed_dataset = dataset_stream["hashed_dataset"].num_rows
     len_dataset_stream = dataset_stream["dataset"].num_rows
     len_model_dataset_cids = len(dataset_stream["all_cid_list"][embed_model])
+    ## use the  number of the len_dataset_stream to determine the number of shards, such that no shard is larger than 4096, and that the number of shards is a power of 2
+    num_threads = 8
+    tokenize_batch_size = 64
+    num_shards = 1024
+    batch_size = 2048  # Adjust batch size based on your needs
+    if len_dataset_stream > 0:
+        min_shards_needed = math.ceil(len_dataset_stream / 4096)
+        num_shards = 2 ** math.ceil(math.log2(min_shards_needed))
     if column is not None:
         unique_column_cid_dataset_path = os.path.join(dst_path, "checkpoints", metadata["dataset"].replace("/","___") + "_"+ column +"_cids.parquet")
         len_unique_dataset_column_rows = 0
@@ -456,7 +450,8 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
         else:
             # hashed_dataset = dataset_stream["hashed_dataset"]
             pass
-        
+        tokens_list = []
+
         if os.path.exists (os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet")):
             if split != None:
                 tokenized_text_datasets = load_dataset(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"), format="parquet")            
@@ -485,7 +480,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                                 shards.append(this_shard_column)
                                 shard_cids.append(this_shard_cid)
                 # args = [(shards[i], column, method, tokenizer, chunk_size, n_sentences, step_size, embed_model, chunker, metadata) for i in range(len(shards))]
-                args = [[shards[i], tokenizer, column] for i in range(len(shards))]
+                args = [[shards[i], tokenizer, column, tokenize_batch_size] for i in range(len(shards))]
                 # find some way to find out how much ram one single shard takes before running this.
                 tokenized_texts = pool.starmap(tokenize_batch, args)
                 if "processed_items"  not in list(tokenized_texts[0].keys()):
@@ -497,7 +492,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                     tokenized_text_datasets = datasets.Dataset.from_dict(tokenized_texts[0])
                     tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
                 elif len(tokenized_texts) > 0:
-                    tokenized_text_datasets = dataset.Dataset.from_dict(tokenized_texts)
+                    tokenized_text_datasets = datasets.Dataset.from_dict(tokenized_texts)
     
         else:
             if len(shards) == 0:
@@ -514,7 +509,6 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
             if unique_dataset_column_row is not None:
                 del unique_dataset_column_row
             macro_batch = []           
-            tokens_list = []
             shard_cids_list = []
             while len(shards) > 0:
                 if len(shards) < num_threads:
@@ -540,7 +534,6 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
             ])
             tokenized_text_datasets = datasets.Dataset.from_dict({"cid": shard_cids_list, "tokens": tokens_list})
             tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
-            del tokens_list
             del shard_cids_list
         ## check here for OOM problems
         tokenized_text_shards = []
