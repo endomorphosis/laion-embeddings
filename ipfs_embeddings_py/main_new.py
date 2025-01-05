@@ -282,10 +282,84 @@ def tokenize_batch(batch, tokenizer, column=None, tokenize_batch_size=None):
             else:
                 del batch[i:i + mini_batch_size]
                 num_rows = len(batch)
-            ## remove padding in the collected_tokens
-            # collected_tokens = collected_tokens[~np.all(collected_tokens == pad_token_id, axis=1)]
-            ## remove padding in the rows of the collected_tokens
-            collected_tokens = collected_tokens[:, ~np.all(collected_tokens == pad_token_id, axis=0)]
+            ## remove padding in the collected_tokens and rows
+            filtered_tokens = []
+            for row in collected_tokens:
+                filtered_row = row[row != pad_token_id or row != 0]
+                if len(filtered_row) > 0:  # Only keep non-empty rows
+                    filtered_tokens.append(filtered_row)
+            collected_tokens = np.array(filtered_tokens, dtype=np.int32)
+        return collected_tokens
+    except Exception as e:
+        print("Error tokenizing batch: ", e)
+        return e
+
+
+
+def tokenize_batch(batch, tokenizer, column=None, tokenize_batch_size=None):
+    if type(batch) is Dataset:
+        len_columns = len(batch.column_names)
+    else:
+        len_columns = len(list(batch.keys()))
+    num_rows = batch.num_rows   
+    mini_batch = []
+    if tokenize_batch_size is None:
+        # mini_batch_size = 2048 # max size of a batch
+        mini_batch_size = 64
+    else:
+        mini_batch_size = tokenize_batch_size
+    collected_tokens = []
+    try:
+        i = 0
+        while i < num_rows:
+            mini_batch = batch[i:i + mini_batch_size]
+            if len_columns > 1 and column is None:
+                mini_batch = [json.dumps(item) for item in mini_batch]
+            elif len_columns > 1 and column in list(mini_batch.keys()):
+                mini_batch = [item for item in mini_batch[column]]
+            elif len_columns > 1 and column not in list(mini_batch.keys()):
+                mini_batch = [json.dumps(item) for item in mini_batch]
+            elif len_columns == 1:
+                pass
+            ## find the longest row in the mini_batch
+            longest_row_item = max(mini_batch, key=len)
+            tokens_longest_row_item = tokenizer(longest_row_item, padding='max_length', max_length=1000000, truncation=True, return_tensors="pt")
+            max_len = len(tokens_longest_row_item["input_ids"][0])
+            # max_len = max([len(item) for item in mini_batch])
+            if column is None:
+                results = tokenizer(
+                    mini_batch,
+                    padding='max_length',
+                    max_length=max_len,
+                    truncation=True,
+                    return_tensors="pt"
+                )
+            else:
+                results = tokenizer(
+                    mini_batch[column],
+                    padding='max_length',
+                    max_length=max_len,
+                    truncation=True,
+                    return_tensors="pt"
+                )
+            chunk = results["input_ids"].numpy().astype(np.int32)
+            # filter out the padding tokens
+            pad_token_id = tokenizer.pad_token_id if tokenizer.pad_token_id else 0
+            collected_tokens.extend([row[row != pad_token_id] for row in chunk if len(row[row != pad_token_id]) > 0])
+            # if collected_tokens is None:
+            #     collected_tokens = chunk
+            # else:
+            #     collected_tokens.extend(chunk) 
+            # remove processed rows
+
+            if isinstance(batch, Dataset):
+                keep_indices = list(range(0, i)) + list(range(i + mini_batch_size, num_rows))
+                batch = batch.select(keep_indices)
+                num_rows = batch.num_rows
+            else:
+                del batch[i:i + mini_batch_size]
+                num_rows = len(batch)
+            pass
         return collected_tokens
     except Exception as e:
         print("Error tokenizing batch: ", e)
