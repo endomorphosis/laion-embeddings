@@ -606,8 +606,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                     [row for row in batch]
                     for batch in tokenized_texts
                 ])
-            tokens_list = [item for sublist in tokens_list for item in sublist]
-        
+    tokens_list = [item for sublist in tokens_list for item in sublist]
     min_length = min(len(this_cid_list["hashed_dataset"]), len(tokens_list))
     tokenized_text_datasets = datasets.Dataset.from_dict({
         "cid": this_cid_list["hashed_dataset"][:min_length],
