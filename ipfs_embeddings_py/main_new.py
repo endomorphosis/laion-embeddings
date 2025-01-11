@@ -305,7 +305,7 @@ def tokenize_batch(batch, tokenizer, column=None, tokenize_batch_size=None):
     mini_batch = []
     if tokenize_batch_size is None:
         # mini_batch_size = 2048 # max size of a batch
-        mini_batch_size = 64
+        mini_batch_size = 16
     else:
         mini_batch_size = tokenize_batch_size
     collected_tokens = []
@@ -443,8 +443,8 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     len_dataset_stream = dataset_stream["dataset"].num_rows
     len_model_dataset_cids = len(dataset_stream["all_cid_list"][embed_model])
     ## use the  number of the len_dataset_stream to determine the number of shards, such that no shard is larger than 4096, and that the number of shards is a power of 2
-    num_threads = 8
-    tokenize_batch_size = 64
+    num_threads = 16
+    tokenize_batch_size = 16
     num_shards = 1024
     batch_size = 2048  # Adjust batch size based on your needs
     if len_dataset_stream > 0:
