@@ -603,17 +603,24 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 del macro_batch
                 del args
                 tokens_list.extend([
-                    [t for t in token if t != 0]
-                    for batch in tokenized_texts
-                    for token in batch if isinstance(token, (list, np.ndarray))
+                    row for batch in tokenized_texts
+                    for rows in batch
+                    for row in rows
                 ])
             shard_cids_list.extend([
-                [cid for cid in batch if cid != 0]
+                [cid for cid in batch]
                 for batch in shard_cids_list
             ])
-            tokenized_text_datasets = datasets.Dataset.from_dict({"cid": shard_cids_list, "tokens": tokens_list})
-            tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
-            del shard_cids_list
+    # Ensure lists have the same length
+    min_length = min(len(this_cid_list["hashed_dataset"]), len(tokens_list))
+    tokenized_text_datasets = datasets.Dataset.from_dict({
+        "cid": this_cid_list["hashed_dataset"][:min_length],
+        "tokens": tokens_list[:min_length]
+    })
+    tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
+    del shard_cids_list
+    with Pool(processes=num_threads) as pool:
+
         ## check here for OOM problems
         tokenized_text_shards = []
         for i in range(num_threads):
