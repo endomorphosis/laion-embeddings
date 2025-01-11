@@ -603,15 +603,11 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 del macro_batch
                 del args
                 tokens_list.extend([
-                    row for batch in tokenized_texts
-                    for rows in batch
-                    for row in rows
+                    [row for row in batch]
+                    for batch in tokenized_texts
                 ])
-            shard_cids_list.extend([
-                [cid for cid in batch]
-                for batch in shard_cids_list
-            ])
-    # Ensure lists have the same length
+            tokens_list = [item for sublist in tokens_list for item in sublist]
+        
     min_length = min(len(this_cid_list["hashed_dataset"]), len(tokens_list))
     tokenized_text_datasets = datasets.Dataset.from_dict({
         "cid": this_cid_list["hashed_dataset"][:min_length],
