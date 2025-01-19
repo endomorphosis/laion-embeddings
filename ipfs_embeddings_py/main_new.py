@@ -443,7 +443,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
     len_dataset_stream = dataset_stream["dataset"].num_rows
     len_model_dataset_cids = len(dataset_stream["all_cid_list"][embed_model])
     ## use the  number of the len_dataset_stream to determine the number of shards, such that no shard is larger than 4096, and that the number of shards is a power of 2
-    num_threads = 32
+    num_threads = 20
     tokenize_batch_size = 8
     num_shards = 1024
     batch_size = 2048  # Adjust batch size based on your needs
@@ -603,10 +603,11 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 del macro_batch
                 del args
                 tokens_list.extend([
-                    [row for row in batch]
-                    for batch in tokenized_texts
+                    [[row for row in batch]
+                    for batch in processed_thread]
+                    for processed_thread in tokenized_texts
                 ])
-    tokens_list = [item for sublist in tokens_list for item in sublist]
+    del pool
     min_length = min(len(this_cid_list["hashed_dataset"]), len(tokens_list))
     tokenized_text_datasets = datasets.Dataset.from_dict({
         "cid": this_cid_list["hashed_dataset"][:min_length],
