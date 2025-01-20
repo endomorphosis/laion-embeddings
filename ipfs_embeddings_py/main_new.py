@@ -602,11 +602,7 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 tokenized_texts = pool.starmap(tokenize_batch, args)
                 del macro_batch
                 del args
-                tokens_list.extend([
-                    [[row for row in batch]
-                    for batch in processed_thread]
-                    for processed_thread in tokenized_texts
-                ])
+                tokens_list.extend(row for mini_batch in tokenized_texts for row in mini_batch)
     del pool
     min_length = min(len(this_cid_list["hashed_dataset"]), len(tokens_list))
     tokenized_text_datasets = datasets.Dataset.from_dict({
