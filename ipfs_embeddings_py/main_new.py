@@ -605,14 +605,10 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 tokens_list.extend(row for mini_batch in tokenized_texts for row in mini_batch)
     del pool
     min_length = min(len(this_cid_list["hashed_dataset"]), len(tokens_list))
-    tokenized_text_datasets = datasets.Dataset.from_dict({
-        "cid": this_cid_list["hashed_dataset"][:min_length],
-        "tokens": tokens_list[:min_length]
-    })
+    tokenized_text_datasets = datasets.Dataset.from_dict(dict(zip(this_cid_list["hashed_dataset"][0:min_length], tokens_list[0:min_length])))
     tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
     del shard_cids_list
     with Pool(processes=num_threads) as pool:
-
         ## check here for OOM problems
         tokenized_text_shards = []
         for i in range(num_threads):
