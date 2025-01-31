@@ -602,13 +602,38 @@ def chunk_producer(dataset, split, column, method=None, tokenizer=None, chunk_si
                 tokenized_texts = pool.starmap(tokenize_batch, args)
                 del macro_batch
                 del args
-                tokens_list.extend(row for mini_batch in tokenized_texts for row in mini_batch)
+                tokens_list.extend([row for thread in tokenized_texts for row in thread])
+                tokens_list_len = len(tokens_list)
+                this_cid_list_len = len(this_cid_list["hashed_dataset"])
+                min_length = min(this_cid_list_len, tokens_list_len)
+                max_length_column = max([len(item) for item in tokens_list])
+                max_length_key = max([len(list(this_cid_list["hashed_dataset"][i])) for i in range(min_length)])
+                first_row_value = " " * max_length_column
+                first_row_key = " " * max_length_key
+                padded_data = {first_row_key: first_row_value}
+                tokenized_text_datasets = datasets.Dataset.from_dict(padded_data)
+                # data = dict({this_cid_list["hashed_dataset"][i]: tokens_list[i] for i in range(min_length)})
+                padded_tokens = [np.pad(tokens, (0, max_length_column - len(tokens)), mode='constant') for tokens in tokens_list[:min_length]]
+                data = dict(zip(this_cid_list["hashed_dataset"][0:min_length], padded_tokens))
+                tokenized_text_datasets = datasets.Dataset.from_dict(data)
+                tokenized_text_datasets = datasets.Dataset.from_dict(dict({this_cid_list["hashed_dataset"][i]: tokens_list[i] for i in range(min_length)}))
+                tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))         
     del pool
     min_length = min(len(this_cid_list["hashed_dataset"]), len(tokens_list))
-    tokenized_text_datasets = datasets.Dataset.from_dict(dict(zip(this_cid_list["hashed_dataset"][0:min_length], tokens_list[0:min_length])))
+    tokenized_text_datasets = datasets.Dataset.from_dict(dict({this_cid_list["hashed_dataset"][i]: tokens_list[i] for i in range(min_length)}))
     tokenized_text_datasets.to_parquet(os.path.join(dst_path, "checkpoints", "tokens_" + embed_model.replace("/", "___") + ".parquet"))
+     # tokenized_text_datasets = datasets.Dataset.from_dict(dict({
+    #     "cid": this_cid_list["hashed_dataset"][0:min_length],
+    #     "tokens": tokens_list[0:min_length]
+    # }))
+    # tokenized_text_datasets = datasets.Dataset.from_dict(dict({
+    #     "cid": this_cid_list["hashed_dataset"][0:min_length],
+    #     "tokens": tokens_list[0:min_length]
+    # }))
+    
     del shard_cids_list
     with Pool(processes=num_threads) as pool:
+
         ## check here for OOM problems
         tokenized_text_shards = []
         for i in range(num_threads):
