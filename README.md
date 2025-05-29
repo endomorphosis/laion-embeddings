@@ -75,6 +75,9 @@ curl 127.0.0.1:9999/create \
 - **Sparse Embeddings**: TF-IDF and BM25 scoring support
 - **FastAPI Interface**: RESTful API for all operations
 - **Real-time Search**: High-performance semantic search
+- **Robust Tokenization**: Validated token batch processing workflow
+- **Production-Ready**: Safe error handling and timeout protection
+- **Comprehensive Testing**: Extensive test infrastructure for reliability
 
 ## 📁 Project Structure
 

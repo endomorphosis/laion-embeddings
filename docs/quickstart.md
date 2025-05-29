@@ -2,6 +2,12 @@
 
 Get up and running with LAION Embeddings in just a few minutes!
 
+## Recent Updates (May 28, 2025)
+
+- **Validated Tokenization Workflow**: Complete end-to-end validation of token processing pipeline
+- **Enhanced Testing Infrastructure**: Comprehensive test suite for production-ready workflows
+- **Robust Error Handling**: Safe processing functions with fallback mechanisms
+
 ## Prerequisites
 
 Make sure you have completed the [installation process](installation.md) before proceeding.
@@ -105,7 +111,52 @@ Example response:
 }
 ```
 
-## 4. Working with Models
+## 4. Validate Tokenization Workflow (New)
+
+Before processing large datasets, validate that the tokenization workflow is working correctly:
+
+### Basic Validation
+
+```bash
+# Run basic tokenization validation
+python test/basic_validation.py
+```
+
+Expected output:
+```
+Starting basic validation tests...
+✓ Testing safe_tokenizer_encode()
+✓ Testing safe_tokenizer_decode()  
+✓ Testing safe_chunker_chunk()
+✓ Testing safe_get_cid()
+✓ Testing complete workflow sequence
+All basic validation tests passed!
+```
+
+### Comprehensive Workflow Testing
+
+```bash
+# Run comprehensive test suite
+python test/comprehensive_test_suite.py
+```
+
+This validates:
+- **Text → Tokenization**: Safe encoding with error handling
+- **Tokenization → Chunking**: Content chunking with size validation
+- **Chunking → CID**: Content identifier generation
+- **CID → Batch**: Batch processing with validation
+- **Batch → Embeddings**: Complete embedding generation
+
+### File-Based Testing
+
+```bash
+# Test with actual files
+python test/file_based_test.py
+```
+
+This tests the workflow with various file types and sizes to ensure robust processing.
+
+## 5. Working with Models
 
 ### List Available Models
 
@@ -135,7 +186,7 @@ Supported endpoint types:
 - `local` - Local inference
 - `cuda` - GPU-accelerated
 
-## 5. Example Workflows
+## 6. Example Workflows
 
 ### Workflow 1: Index a Custom Dataset
 
@@ -184,7 +235,7 @@ Supported endpoint types:
      }'
    ```
 
-## 6. Monitoring and Logs
+## 7. Monitoring and Logs
 
 ### Check Server Logs
 ```bash
@@ -207,7 +258,7 @@ nvidia-smi
 ipfs stats bw
 ```
 
-## 7. Configuration Tips
+## 8. Configuration Tips
 
 ### Performance Optimization
 
@@ -238,7 +289,7 @@ export PYTHONHASHSEED=0
 export OMP_NUM_THREADS=4
 ```
 
-## 8. Next Steps
+## 9. Next Steps
 
 Now that you have the basics working:
 

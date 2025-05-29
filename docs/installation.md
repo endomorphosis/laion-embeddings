@@ -198,6 +198,27 @@ curl -X POST "http://localhost:9999/create_embeddings" \
   }'
 ```
 
+### 4. Validate Tokenization Workflow (New in May 2025)
+
+Test the complete tokenization workflow validation:
+
+```bash
+# Run basic tokenization validation
+python test/basic_validation.py
+
+# Run comprehensive workflow tests
+python test/comprehensive_test_suite.py
+
+# Run file-based validation tests
+python test/file_based_test.py
+```
+
+Expected output should show successful validation of:
+- Text tokenization (encoding/decoding)
+- Content chunking with size validation
+- CID generation and verification
+- Complete workflow sequence validation
+
 ## Troubleshooting
 
 ### Common Issues

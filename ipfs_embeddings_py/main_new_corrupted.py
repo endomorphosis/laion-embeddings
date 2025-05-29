@@ -144,7 +144,6 @@ except Exception as e:
     print(f"Warning: Could not initialize chunker: {e}")
     this_chunker = None
 
-# Safe helper functions
 def safe_get_cid(file_data):
     """Safely generate a CID with fallback to hash-based approach"""
     # Try different ways to access the get_cid function
@@ -539,143 +538,7 @@ def safe_model_replace(model_name, old_str, new_str):
     except:
         return "unknown_model"
 
-def safe_len_comparison(len1, len2):
-    """Safely compare two lengths, returning tuple of (len1, len2)"""
-    try:
-        len1_val = int(len1) if len1 is not None else 0
-    except:
-        len1_val = 0
-    
-    try:
-        len2_val = int(len2) if len2 is not None else 0
-    except:
-        len2_val = 0
-    
-    return (len1_val, len2_val)
-
-def safe_metadata_models_access(metadata, index=0):
-    """Safely access metadata models with fallback"""
-    if metadata is None or not isinstance(metadata, dict):
-        return "thenlper/gte-small"  # Default model
-    
-    if "models" not in metadata:
-        return "thenlper/gte-small"
-    
-    models = metadata["models"]
-    if models is None or not isinstance(models, list) or len(models) == 0:
-        return "thenlper/gte-small"
-    
-    if index >= len(models):
-        index = 0
-    
-    return models[index] if models[index] is not None else "thenlper/gte-small"
-
-def safe_list_subscript(lst, index, default=None):
-    """Safely access list element by index"""
-    if lst is None or not hasattr(lst, '__getitem__'):
-        return default
-    
-    try:
-        if index < len(lst):
-            return lst[index]
-    except Exception as e:
-        print(f"Warning: list subscript failed: {e}")
-    
-    return default
-
-def safe_dict_subscript(dictionary, key, default=None):
-    """Safely access dictionary element by key"""
-    if dictionary is None or not isinstance(dictionary, dict):
-        return default
-    
-    try:
-        return dictionary.get(key, default)
-    except Exception as e:
-        print(f"Warning: dict subscript failed: {e}")
-        return default
-
-def safe_in_operator(item, container):
-    """Safely check if item is in container"""
-    if container is None:
-        return False
-    
-    try:
-        return item in container
-    except Exception as e:
-        print(f"Warning: 'in' operator failed: {e}")
-        return False
-
-def safe_del_variable(var_dict, var_name):
-    """Safely delete a variable from local/global scope"""
-    try:
-        if var_name in var_dict:
-            del var_dict[var_name]
-    except Exception as e:
-        print(f"Warning: Failed to delete variable {var_name}: {e}")
-
-def safe_async_queue_get(queue):
-    """Safely get item from async queue"""
-    if queue is None:
-        return None
-    try:
-        return queue.get()
-    except Exception as e:
-        print(f"Warning: async queue.get() failed: {e}")
-        return None
-
-def safe_queue_operations(queue, operation, item=None):
-    """Centralized safe queue operations handler"""
-    if queue is None:
-        if operation in ['empty', 'full']:
-            return True
-        elif operation in ['get', 'get_nowait']:
-            return None
-        elif operation in ['put', 'put_nowait']:
-            return False
-        elif operation in ['qsize']:
-            return 0
-        else:
-            return None
-    
-    try:
-        if operation == 'empty':
-            return queue.empty() if hasattr(queue, 'empty') else True
-        elif operation == 'full':
-            return queue.full() if hasattr(queue, 'full') else True
-        elif operation == 'get':
-            return queue.get() if hasattr(queue, 'get') else None
-        elif operation == 'get_nowait':
-            return queue.get_nowait() if hasattr(queue, 'get_nowait') else None
-        elif operation == 'put' and item is not None:
-            if hasattr(queue, 'put'):
-                queue.put(item)
-                return True
-            return False
-        elif operation == 'put_nowait' and item is not None:
-            if hasattr(queue, 'put_nowait'):
-                queue.put_nowait(item)
-                return True
-            return False
-        elif operation == 'task_done':
-            if hasattr(queue, 'task_done'):
-                queue.task_done()
-            return None
-        elif operation == 'qsize':
-            return queue.qsize() if hasattr(queue, 'qsize') else 0
-        else:
-            return None
-    except Exception as e:
-        print(f"Warning: queue operation {operation} failed: {e}")
-        if operation in ['empty', 'full']:
-            return True
-        elif operation in ['get', 'get_nowait']:
-            return None
-        elif operation in ['put', 'put_nowait']:
-            return False
-        elif operation in ['qsize']:
-            return 0
-        else:
-            return None
+# Remove duplicate function definitions - keeping only the first versions above
 
 def safe_init_module(module, resources=None, metadata=None):
     """Safely initialize a module with resources and metadata"""
@@ -689,9 +552,7 @@ def safe_init_module(module, resources=None, metadata=None):
     except Exception as e:
         print(f"Warning: Could not initialize module {module}: {e}")
         return None
-
 def index_cid(samples):
-    """Generate CIDs for samples"""
     results = []
     if samples is None:
         raise ValueError("samples must be a list")
@@ -706,7 +567,6 @@ def index_cid(samples):
     return results
 
 def init_datasets(model, dataset, split, column, dst_path):
-    """Initialize datasets with safe handling"""
     columns = []
     init_hashed_datasets = None
     init_load_combined = None
@@ -773,36 +633,43 @@ def init_datasets(model, dataset, split, column, dst_path):
         this_cid_set = set(this_cid_list)
         this_all_cid_list["hashed_dataset"] = this_cid_list
         this_all_cid_set["hashed_dataset"] = this_cid_set
+        pass
+    elif len_cid_set == len_datasets_list:
+        this_cid_set = this_ipfs_datasets.all_cid_set["hashed_dataset"]
+        this_cid_list = list(this_cid_set)
+        this_all_cid_list["hashed_dataset"] = this_cid_list
+        this_all_cid_set["hashed_dataset"] = this_cid_set
+        pass
+    else:   
+        this_cid_list = []
+        this_cid_set = set()
+        for i in range(len_datasets_list):
+            this_cid = safe_get_cid(this_dataset[i])
+            this_cid_list.append(this_cid)
+            this_cid_set.add(this_cid)
+        this_all_cid_list["hashed_dataset"] = this_cid_list
+        this_all_cid_set["hashed_dataset"] = this_cid_set
         
-    return {
-        'dataset': this_dataset,
-        'hashed_dataset': this_hashed_dataset,
-        'cid_list': this_all_cid_list,
-        'cid_set': this_all_cid_set,
-        'len_datasets_list': len_datasets_list,
-        'len_cid_list': len_cid_list,
-        'len_cid_set': len_cid_set,
-        'init_load_combined': init_load_combined,
-        'init_load_clusters': init_load_clusters,
-        'init_load_checkpoints': init_load_checkpoints
+    # Update the global cid_cache with this dataset's CIDs
+    if "hashed_dataset" not in cid_cache:
+        cid_cache["hashed_dataset"] = this_cid_list
+    else:
+        cid_cache["hashed_dataset"].extend(this_cid_list)
+    cid_set.extend(this_cid_set)
+    all_cid_set.update(this_all_cid_set)
+    model_cid_set[model] = this_cid_set
+    batch_sizes[model] = len_datasets_list
+    metadata[model] = {
+        "dataset": dataset,
+        "split": split,
+        "column": column,
+        "dst_path": dst_path,
+        "len_datasets_list": len_datasets_list,
+        "len_cid_list": len_cid_list,
+        "len_cid_set": len_cid_set,
+        "init_load_combined": init_load_combined,
+        "init_load_clusters": init_load_clusters,
+        "init_load_checkpoints": init_load_checkpoints
     }
-
-# Main execution
-if __name__ == "__main__":
-    print("IPFS Embeddings Main - Ready for processing")
-    print("All safe helper functions initialized successfully")
     
-    # Example usage
-    try:
-        # Test safe functions
-        test_data = "Hello, world!"
-        test_cid = safe_get_cid(test_data)
-        print(f"Test CID generated: {test_cid}")
-        
-        # Test index_cid function
-        test_samples = ["sample1", "sample2", "sample3"]
-        test_cids = index_cid(test_samples)
-        print(f"Test CIDs: {test_cids}")
-        
-    except Exception as e:
-        print(f"Error during testing: {e}")
+    return None

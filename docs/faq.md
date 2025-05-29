@@ -1,5 +1,17 @@
 # Frequently Asked Questions (FAQ)
 
+## Recent Updates (May 28, 2025)
+
+### What's new in the tokenization workflow?
+The project now includes comprehensive validation for the complete tokenization pipeline, ensuring robust text processing from input to embeddings generation. This includes safe_* functions with error handling and fallback mechanisms.
+
+### How do I validate my installation?
+Run the new validation tests to ensure everything is working correctly:
+```bash
+python test/basic_validation.py
+python test/comprehensive_test_suite.py
+```
+
 ## General Questions
 
 ### What is LAION Embeddings?
@@ -94,6 +106,45 @@ See the [Create Embeddings Guide](components/create-embeddings.md) for details.
 - **Sparse embeddings**: High-dimensional vectors with mostly zero values, often used for keyword matching
 
 See the [Sparse Embeddings Guide](components/sparse-embeddings.md) for more information.
+
+## Tokenization Workflow
+
+### What is the tokenization workflow validation?
+The tokenization workflow validation ensures that the complete text processing pipeline works correctly:
+1. **Text → Tokenization**: Safe encoding/decoding with error handling
+2. **Tokenization → Chunking**: Content chunking with size validation  
+3. **Chunking → CID**: Content identifier generation
+4. **CID → Batch**: Batch processing with validation
+5. **Batch → Embeddings**: Complete embedding generation
+
+### How do I test the tokenization workflow?
+Run these validation commands:
+```bash
+# Basic validation
+python test/basic_validation.py
+
+# Comprehensive testing
+python test/comprehensive_test_suite.py
+
+# File-based tests
+python test/file_based_test.py
+```
+
+### What are safe_* functions?
+Safe functions are enhanced versions of core processing functions that include:
+- Robust error handling
+- Input validation
+- Fallback mechanisms
+- Detailed error reporting
+
+Examples: `safe_tokenizer_encode()`, `safe_chunker_chunk()`, `safe_get_cid()`
+
+### What should I do if tokenization validation fails?
+1. Check the specific error message in the output
+2. Verify your Python environment and dependencies
+3. Test with smaller text samples
+4. Check available memory and resources
+5. See the [Troubleshooting Guide](troubleshooting/README.md#tokenization-workflow-failures)
 
 ## Performance
 

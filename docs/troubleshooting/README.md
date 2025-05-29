@@ -2,7 +2,31 @@
 
 This guide helps you diagnose and resolve common issues with the LAION Embeddings project.
 
+## Recent Updates (May 28, 2025)
+
+- **Tokenization Workflow Validation**: New diagnostic tools for testing the complete tokenization pipeline
+- **Enhanced Error Handling**: Improved error messages with specific failure points
+- **Validation Test Suite**: Comprehensive tests for diagnosing workflow issues
+- **Safe Function Diagnostics**: Tools for testing safe_* function implementations
+
 ## Quick Diagnostics
+
+### Tokenization Workflow Validation
+
+Before troubleshooting other issues, validate the core tokenization workflow:
+
+```bash
+# Run basic validation
+python test/basic_validation.py
+
+# Run comprehensive test suite
+python test/comprehensive_test_suite.py
+
+# Run file-based tests
+python test/file_based_test.py
+```
+
+If these tests fail, check the detailed output for specific error points in the pipeline.
 
 ### Health Check Script
 
@@ -117,7 +141,74 @@ if __name__ == "__main__":
 
 ## Common Issues
 
-### 1. Service Won't Start
+### 1. Tokenization Workflow Failures
+
+**Symptoms:**
+- Validation tests fail
+- Tokenization encoding/decoding errors
+- CID generation failures
+- Chunk processing errors
+
+**Diagnostic Steps:**
+
+```bash
+# Run basic validation to identify failure point
+python test/basic_validation.py
+
+# Check specific function failures
+python -c "
+from ipfs_embeddings_py.chunker import chunker_py
+chunker = chunker_py()
+result = chunker.safe_tokenizer_encode('test text')
+print('Tokenization result:', result)
+"
+
+# Validate CID generation
+python -c "
+from ipfs_embeddings_py.ipfs_multiformats import ipfs_multiformats_py
+multiformats = ipfs_multiformats_py()
+result = multiformats.safe_get_cid('test content')
+print('CID result:', result)
+"
+```
+
+**Common Solutions:**
+
+**Tokenizer Issues:**
+```python
+# Check tokenizer availability
+from transformers import AutoTokenizer
+try:
+    tokenizer = AutoTokenizer.from_pretrained("thenlper/gte-small")
+    print("Tokenizer loaded successfully")
+except Exception as e:
+    print(f"Tokenizer error: {e}")
+```
+
+**Memory Issues with Large Texts:**
+```python
+# Test with smaller chunks
+from ipfs_embeddings_py.chunker import chunker_py
+chunker = chunker_py()
+
+# Use smaller chunk sizes for testing
+result = chunker.safe_chunker_chunk("long text...", chunk_size=128)
+```
+
+**CID Generation Issues:**
+```bash
+# Check IPFS dependencies
+pip install multiformats
+
+# Verify hash functions
+python -c "
+import hashlib
+text = 'test'
+print('SHA256:', hashlib.sha256(text.encode()).hexdigest())
+"
+```
+
+### 2. Service Won't Start
 
 **Symptoms:**
 - Service fails to start
@@ -153,7 +244,7 @@ source venv/bin/activate  # Linux/Mac
 venv\Scripts\activate     # Windows
 ```
 
-### 2. Model Loading Failures
+### 3. Model Loading Failures
 
 **Symptoms:**
 - Models fail to load
@@ -193,7 +284,7 @@ export CUDA_VISIBLE_DEVICES=""
 python main.py
 ```
 
-### 3. Embedding Creation Errors
+### 4. Embedding Creation Errors
 
 **Symptoms:**
 - API returns 500 errors
@@ -262,7 +353,7 @@ max_length = 512
 texts = [text[:max_length] for text in original_texts]
 ```
 
-### 4. IPFS Integration Issues
+### 5. IPFS Integration Issues
 
 **Symptoms:**
 - IPFS connection errors
@@ -308,7 +399,7 @@ def debug_ipfs():
 debug_ipfs()
 ```
 
-### 5. Performance Issues
+### 6. Performance Issues
 
 **Symptoms:**
 - Slow response times
@@ -389,7 +480,7 @@ def cleanup_memory():
         torch.cuda.synchronize()
 ```
 
-### 6. Docker Issues
+### 7. Docker Issues
 
 **Symptoms:**
 - Container won't start
@@ -432,7 +523,7 @@ docker run --memory=8g laion-embeddings
 docker run --gpus all laion-embeddings
 ```
 
-### 7. Configuration Issues
+### 8. Configuration Issues
 
 **Symptoms:**
 - Settings not applied

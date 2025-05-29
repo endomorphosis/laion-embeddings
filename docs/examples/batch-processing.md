@@ -1,15 +1,22 @@
 # Batch Processing Example
 
-This example demonstrates efficient batch processing of large text datasets using the LAION Embeddings API.
+This example demonstrates efficient batch processing of large text datasets using the LAION Embeddings API with validated tokenization workflows.
 
 ## Overview
 
 You'll learn how to:
-- Process large datasets efficiently
+- Process large datasets efficiently with validated tokenization
 - Optimize batch sizes for your hardware
-- Handle memory management
-- Monitor processing progress
-- Save and load embeddings
+- Handle memory management with robust error handling
+- Monitor processing progress through the complete workflow
+- Save and load embeddings with CID validation
+
+## Recent Updates (May 28, 2025)
+
+- **Validated Tokenization Workflow**: All batch processing now uses the validated token processing pipeline
+- **Enhanced Error Handling**: Robust error handling with fallback mechanisms for safe processing
+- **CID Validation**: Each processed batch includes validated Content IDentifier generation
+- **Performance Optimizations**: Improved batch processing with optimized token workflows
 
 ## Prerequisites
 

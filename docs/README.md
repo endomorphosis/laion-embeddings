@@ -15,6 +15,9 @@ LAION Embeddings is a distributed, scalable embeddings search engine built on IP
 - **Sparse Embeddings**: Support for sparse embeddings and sharding
 - **FastAPI Interface**: RESTful API for all operations
 - **Real-time Search**: High-performance semantic search capabilities
+- **Robust Tokenization**: Safe tokenization workflow with validated token batch processing
+- **Production-Ready**: Comprehensive error handling and timeout protection
+- **Test Infrastructure**: Extensive test suites for reliability validation
 
 ## Documentation Structure
 
@@ -100,6 +103,14 @@ For support, please:
 3. Open an issue on GitHub
 4. Join our community discussions
 
+## Recent Updates
+
+- **May 28, 2025**: Enhanced tokenization workflow validation and test infrastructure
+- **May 27, 2025**: Comprehensive documentation overhaul
+- **Token Processing**: Validated that token batches are generated before embedding batches
+- **Test Infrastructure**: Added robust timeout-protected test suites
+- **Error Handling**: Improved safe function implementations for production reliability
+
 ---
 
-*Last updated: May 27, 2025*
+*Last updated: May 28, 2025*

@@ -2,6 +2,13 @@
 
 This guide covers development workflows, testing procedures, and deployment strategies for the LAION Embeddings project.
 
+## Recent Updates (May 28, 2025)
+
+- **Tokenization Workflow Validation**: Complete end-to-end validation of the token processing pipeline
+- **Enhanced Testing Infrastructure**: Comprehensive test suite for tokenization, chunking, and CID generation
+- **Production-Ready Error Handling**: Robust error handling with fallback mechanisms across all safe_* functions
+- **Performance Optimizations**: Improved batch processing with validated token workflows
+
 ## Getting Started
 
 ### Development Environment Setup
@@ -223,14 +230,21 @@ tests/
 │   ├── test_embeddings.py
 │   ├── test_datasets.py
 │   ├── test_multiformats.py
+│   ├── test_tokenization.py       # NEW: Tokenization workflow tests
 │   └── test_storage_backends.py
 ├── integration/                   # Integration tests
 │   ├── test_end_to_end.py
 │   ├── test_api_endpoints.py
+│   ├── test_tokenization_workflow.py  # NEW: Full workflow validation
 │   └── test_storage_integration.py
 ├── performance/                   # Performance tests
 │   ├── test_embedding_speed.py
+│   ├── test_tokenization_performance.py  # NEW: Token processing performance
 │   └── test_search_performance.py
+├── validation/                    # NEW: Workflow validation tests
+│   ├── basic_validation.py       # Basic tokenization validation
+│   ├── comprehensive_test_suite.py  # Complete workflow testing
+│   └── file_based_test.py        # File-based validation tests
 ├── fixtures/                      # Test data and fixtures
 │   ├── sample_datasets.py
 │   └── mock_embeddings.py
@@ -246,6 +260,15 @@ pytest
 # Run specific test file
 pytest tests/unit/test_embeddings.py
 
+# Run tokenization workflow validation
+pytest tests/validation/ -v
+
+# Run basic tokenization validation
+python test/basic_validation.py
+
+# Run comprehensive workflow tests
+python test/comprehensive_test_suite.py
+
 # Run with coverage
 pytest --cov=ipfs_embeddings_py --cov-report=html
 
@@ -255,6 +278,7 @@ pytest tests/performance/ -v
 # Run tests with specific markers
 pytest -m "not slow"  # Skip slow tests
 pytest -m "integration"  # Run only integration tests
+pytest -m "tokenization"  # Run only tokenization tests
 ```
 
 ### Test Configuration
@@ -446,6 +470,120 @@ class TestPerformance:
         assert len(results) == 10
 ```
 
+### Tokenization Workflow Testing
+
+The project includes comprehensive testing for the tokenization workflow, validating the complete sequence: 
+Text → Tokenization → Chunking → CID → Batch → Embeddings.
+
+#### Basic Tokenization Validation
+
+```python
+import pytest
+from ipfs_embeddings_py.chunker import chunker_py
+from ipfs_embeddings_py.ipfs_multiformats import ipfs_multiformats_py
+
+@pytest.mark.tokenization
+class TestTokenizationWorkflow:
+    def test_safe_tokenizer_encode(self):
+        """Test safe tokenization encoding with error handling"""
+        chunker = chunker_py()
+        
+        # Test normal case
+        text = "This is a test sentence."
+        result = chunker.safe_tokenizer_encode(text)
+        
+        assert result is not None
+        assert isinstance(result, dict)
+        assert 'tokens' in result
+        assert 'success' in result
+        assert result['success'] is True
+    
+    def test_safe_tokenizer_decode(self):
+        """Test safe tokenization decoding with validation"""
+        chunker = chunker_py()
+        
+        # First encode
+        text = "This is a test sentence."
+        encoded = chunker.safe_tokenizer_encode(text)
+        
+        # Then decode
+        decoded = chunker.safe_tokenizer_decode(encoded['tokens'])
+        
+        assert decoded is not None
+        assert decoded['success'] is True
+        assert decoded['text'].strip() == text.strip()
+    
+    def test_safe_chunker_chunk(self):
+        """Test safe chunking with error handling"""
+        chunker = chunker_py()
+        
+        text = "This is a longer text that should be chunked into smaller pieces for processing."
+        chunks = chunker.safe_chunker_chunk(text, chunk_size=256)
+        
+        assert chunks is not None
+        assert isinstance(chunks, dict)
+        assert 'chunks' in chunks
+        assert 'success' in chunks
+        assert chunks['success'] is True
+        assert len(chunks['chunks']) > 0
+    
+    def test_safe_get_cid(self):
+        """Test safe CID generation with validation"""
+        multiformats = ipfs_multiformats_py()
+        
+        text = "Test content for CID generation"
+        cid_result = multiformats.safe_get_cid(text)
+        
+        assert cid_result is not None
+        assert isinstance(cid_result, dict)
+        assert 'cid' in cid_result
+        assert 'success' in cid_result
+        assert cid_result['success'] is True
+        assert isinstance(cid_result['cid'], str)
+    
+    def test_complete_workflow_sequence(self):
+        """Test the complete tokenization workflow sequence"""
+        chunker = chunker_py()
+        multiformats = ipfs_multiformats_py()
+        
+        # Input text
+        text = "Complete workflow test with multiple processing steps."
+        
+        # Step 1: Tokenization
+        encoded = chunker.safe_tokenizer_encode(text)
+        assert encoded['success'] is True
+        
+        # Step 2: Chunking
+        chunks = chunker.safe_chunker_chunk(text, chunk_size=256)
+        assert chunks['success'] is True
+        
+        # Step 3: CID generation for each chunk
+        for chunk in chunks['chunks']:
+            cid_result = multiformats.safe_get_cid(chunk)
+            assert cid_result['success'] is True
+            assert len(cid_result['cid']) > 0
+        
+        # Step 4: Decoding validation
+        decoded = chunker.safe_tokenizer_decode(encoded['tokens'])
+        assert decoded['success'] is True
+```
+
+#### Running Workflow Validation Tests
+
+```bash
+# Run basic validation
+python test/basic_validation.py
+
+# Run comprehensive test suite
+python test/comprehensive_test_suite.py
+
+# Run specific tokenization tests
+pytest -m tokenization -v
+
+# Run validation tests with coverage
+pytest tests/validation/ --cov=ipfs_embeddings_py --cov-report=html
+```
+
 ### Test Markers
 
 `pytest.ini`:
@@ -455,6 +593,7 @@ markers =
     unit: Unit tests
     integration: Integration tests
     performance: Performance tests
+    tokenization: Tokenization workflow tests
     slow: Tests that take a long time to run
     requires_gpu: Tests that require GPU
     requires_network: Tests that require network access

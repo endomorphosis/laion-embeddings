@@ -2,6 +2,13 @@
 
 This document provides comprehensive documentation for all LAION Embeddings API endpoints.
 
+## Recent Updates (May 28, 2025)
+
+- **Enhanced Error Handling**: All endpoints now include robust error handling with validated tokenization workflows
+- **Workflow Validation**: New validation endpoints for testing tokenization pipelines
+- **CID Validation**: Content identifiers are now validated throughout the processing pipeline
+- **Production-Ready Processing**: All text processing includes safe_* function implementations
+
 ## Base URL
 
 ```
@@ -24,6 +31,7 @@ Content-Type: application/json
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Health check |
+| `/validate_workflow` | POST | Validate tokenization workflow |
 | `/load` | POST | Load dataset and KNN index |
 | `/search` | POST | Search embeddings |
 | `/create_embeddings` | POST | Create embeddings for a dataset |
@@ -49,6 +57,71 @@ Check the health status of the API server.
   "endpoints_available": true,
   "models_loaded": ["thenlper/gte-small"],
   "ipfs_connected": true
+}
+```
+
+### Validate Tokenization Workflow
+
+**POST** `/validate_workflow`
+
+Validate the complete tokenization workflow to ensure all components are working correctly.
+
+**Request Body:**
+```json
+{
+  "text": "Sample text for validation",
+  "model": "thenlper/gte-small",
+  "chunk_size": 256,
+  "validate_full_pipeline": true
+}
+```
+
+**Parameters:**
+- `text` (string, required): Test text for validation
+- `model` (string, optional): Model to use for validation (default: "thenlper/gte-small")
+- `chunk_size` (integer, optional): Chunk size for testing (default: 256)
+- `validate_full_pipeline` (boolean, optional): Whether to validate the complete pipeline (default: true)
+
+**Response:**
+```json
+{
+  "status": "success",
+  "validation_results": {
+    "tokenization": {
+      "encode_success": true,
+      "decode_success": true,
+      "token_count": 12
+    },
+    "chunking": {
+      "success": true,
+      "chunk_count": 1,
+      "chunks_validated": true
+    },
+    "cid_generation": {
+      "success": true,
+      "cid": "bafkreigh2akiscaildcqabsyg3dfr6chu732xdkw6lg3cw4o6nchcd3k7u",
+      "cid_validated": true
+    },
+    "workflow_sequence": {
+      "success": true,
+      "processing_time_ms": 45
+    }
+  },
+  "message": "All workflow components validated successfully"
+}
+```
+
+**Error Response:**
+```json
+{
+  "status": "error",
+  "validation_results": {
+    "tokenization": {
+      "encode_success": false,
+      "error": "Tokenization failed: Invalid input"
+    }
+  },
+  "message": "Workflow validation failed"
 }
 ```
 
