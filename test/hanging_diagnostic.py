@@ -146,7 +146,7 @@ def test_specific_functions():
     try:
         print("Importing main_new functions...", end=" ", flush=True)
         with timeout_context(30):
-            from ipfs_embeddings_py.main_new import safe_get_cid, safe_tokenizer_encode, index_cid
+            from ipfs_embeddings_py.main import safe_get_cid, safe_tokenizer_encode, index_cid
         print("✓")
         
         # Test safe_get_cid

@@ -1,0 +1,289 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.3.5, pluggy-1.5.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/barberb/laion-embeddings-1
+configfile: pytest.ini
+plugins: anyio-4.9.0, timeout-2.3.1, asyncio-0.20.3
+asyncio: mode=Mode.STRICT
+collecting ... collected 5 items
+
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_add_vectors_distributed FAILED [ 20%]
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_search_distributed FAILED [ 40%]
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_load_from_manifest FAILED [ 60%]
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_shard_creation FAILED [ 80%]
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_error_handling_in_search FAILED [100%]
+
+=================================== FAILURES ===================================
+___________ TestDistributedVectorIndex.test_add_vectors_distributed ____________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x781db0c12420>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x781d748578f0>
+mock_ipfs_storage = <Mock id='132067904542320'>
+
+    @pytest.mark.asyncio
+    async def test_add_vectors_distributed(self, distributed_index, mock_ipfs_storage):
+        """Test adding vectors to distributed index."""
+        embeddings = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]]
+        texts = ['text1', 'text2', 'text3', 'text4']
+        metadata = [{'id': i} for i in range(4)]
+    
+>       manifest_hash = await distributed_index.add_vectors_distributed(
+            embeddings, texts, metadata
+        )
+
+test/test_ipfs_vector_service.py:211: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/ipfs_vector_service.py:563: in add_vectors_distributed
+    return await self.add_vectors(vectors, metadata=metadata)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.ipfs_vector_service.DistributedVectorIndex object at 0x781d748578f0>
+vectors = array([[0.1, 0.2],
+       [0.3, 0.4],
+       [0.5, 0.6],
+       [0.7, 0.8]], dtype=float32)
+texts = None
+metadata = [{'id': 0, 'text': 'text1'}, {'id': 1, 'text': 'text2'}, {'id': 2, 'text': 'text3'}, {'id': 3, 'text': 'text4'}]
+ids = None
+
+    async def add_vectors(
+        self,
+        vectors: np.ndarray,
+        texts: Optional[List[str]] = None,
+        metadata: Optional[List[Dict[str, Any]]] = None,
+        ids: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Add vectors to the distributed index."""
+        # Convert vectors to numpy array if needed
+        if not isinstance(vectors, np.ndarray):
+            vectors = np.array(vectors, dtype=np.float32)
+    
+        # Make sure vectors is 2D
+        if vectors.ndim == 1:
+            vectors = vectors.reshape(1, -1)
+    
+        # Set dimension if not already set
+        if not hasattr(self.vector_config, 'dimension'):
+            self.vector_config.dimension = vectors.shape[1]
+        elif hasattr(self.vector_config, 'dimension') and self.vector_config.dimension is None:
+            self.vector_config.dimension = vectors.shape[1]
+    
+        if vectors.shape[1] != self.vector_config.dimension:
+>           raise ValueError(
+                f"Vector dimension {vectors.shape[1]} does not match index dimension {self.vector_config.dimension}"
+            )
+E           ValueError: Vector dimension 2 does not match index dimension <Mock name='mock.dimension' id='132067857454752'>
+
+services/ipfs_vector_service.py:328: ValueError
+______________ TestDistributedVectorIndex.test_search_distributed ______________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x781db372e330>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x781d71baec30>
+mock_vector_service = <Mock id='132067857456336'>
+mock_ipfs_storage = <Mock id='132067857693776'>
+
+    @pytest.mark.asyncio
+    async def test_search_distributed(self, distributed_index, mock_vector_service, mock_ipfs_storage):
+        """Test searching across distributed shards."""
+        # Setup existing shards
+        distributed_index.shard_metadata = {
+            'shard_0': {'ipfs_hash': 'QmShard123', 'vector_count': 2}
+        }
+    
+        query_embedding = [0.1, 0.2]
+>       results = await distributed_index.search_distributed(query_embedding, k=5)
+
+test/test_ipfs_vector_service.py:231: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/ipfs_vector_service.py:567: in search_distributed
+    return await self.search_vectors(query_vector, k, search_shards)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.ipfs_vector_service.DistributedVectorIndex object at 0x781d71baec30>
+query_vector = array([[0.1, 0.2]], dtype=float32), k = 5, search_shards = None
+
+    async def search_vectors(
+        self,
+        query_vector: np.ndarray,
+        k: int = 10,
+        search_shards: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Search across distributed vector shards."""
+        # Convert query vector to numpy array if needed
+        if not isinstance(query_vector, np.ndarray):
+            query_vector = np.array(query_vector, dtype=np.float32).reshape(1, -1)
+    
+        # Check query vector dimension
+        if query_vector.ndim == 1:
+            query_vector = query_vector.reshape(1, -1)
+    
+        if query_vector.shape[1] != self.vector_config.dimension:
+>           raise ValueError(
+                f"Query vector dimension {query_vector.shape[1]} does not match index dimension {self.vector_config.dimension}"
+            )
+E           ValueError: Query vector dimension 2 does not match index dimension <Mock name='mock.dimension' id='132067857761872'>
+
+services/ipfs_vector_service.py:405: ValueError
+______________ TestDistributedVectorIndex.test_load_from_manifest ______________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x781d74856a80>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x781d71bfb2f0>
+mock_ipfs_storage = <Mock id='132067857772960'>
+
+    @pytest.mark.asyncio
+    async def test_load_from_manifest(self, distributed_index, mock_ipfs_storage):
+        """Test loading distributed index from manifest."""
+        manifest_hash = 'QmManifest123'
+    
+>       await distributed_index.load_from_manifest(manifest_hash)
+
+test/test_ipfs_vector_service.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/ipfs_vector_service.py:509: in load_from_manifest
+    manifest = await self.storage.retrieve_index_manifest(manifest_hash)
+services/ipfs_vector_service.py:246: in retrieve_index_manifest
+    return await self.retrieve_index_metadata(cid)
+services/ipfs_vector_service.py:235: in retrieve_index_metadata
+    return self.client.get_json(cid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.ipfs_vector_service.MockIPFSClient object at 0x781d71bf30b0>
+cid = 'QmManifest123', kwargs = {}
+
+    def get_json(self, cid, **kwargs):
+        """Mock get_json method."""
+        if cid not in self._storage:
+>           raise Exception(f"CID {cid} not found")
+E           Exception: CID QmManifest123 not found
+
+services/ipfs_vector_service.py:76: Exception
+------------------------------ Captured log call -------------------------------
+ERROR    services.ipfs_vector_service:ipfs_vector_service.py:237 Failed to retrieve index metadata QmManifest123: CID QmManifest123 not found
+ERROR    services.ipfs_vector_service:ipfs_vector_service.py:524 Failed to load from manifest QmManifest123: CID QmManifest123 not found
+________________ TestDistributedVectorIndex.test_shard_creation ________________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x781d74856b10>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x781d71bf3fe0>
+
+    @pytest.mark.asyncio
+    async def test_shard_creation(self, distributed_index):
+        """Test automatic shard creation based on shard_size."""
+        embeddings = [[0.1, 0.2]] * 5  # 5 vectors
+        texts = [f'text{i}' for i in range(5)]
+    
+        # With shard_size=2, should create 3 shards (2, 2, 1)
+>       await distributed_index.add_vectors_distributed(embeddings, texts)
+
+test/test_ipfs_vector_service.py:260: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/ipfs_vector_service.py:563: in add_vectors_distributed
+    return await self.add_vectors(vectors, metadata=metadata)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.ipfs_vector_service.DistributedVectorIndex object at 0x781d71bf3fe0>
+vectors = array([[0.1, 0.2],
+       [0.1, 0.2],
+       [0.1, 0.2],
+       [0.1, 0.2],
+       [0.1, 0.2]], dtype=float32)
+texts = None
+metadata = [{'text': 'text0'}, {'text': 'text1'}, {'text': 'text2'}, {'text': 'text3'}, {'text': 'text4'}]
+ids = None
+
+    async def add_vectors(
+        self,
+        vectors: np.ndarray,
+        texts: Optional[List[str]] = None,
+        metadata: Optional[List[Dict[str, Any]]] = None,
+        ids: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Add vectors to the distributed index."""
+        # Convert vectors to numpy array if needed
+        if not isinstance(vectors, np.ndarray):
+            vectors = np.array(vectors, dtype=np.float32)
+    
+        # Make sure vectors is 2D
+        if vectors.ndim == 1:
+            vectors = vectors.reshape(1, -1)
+    
+        # Set dimension if not already set
+        if not hasattr(self.vector_config, 'dimension'):
+            self.vector_config.dimension = vectors.shape[1]
+        elif hasattr(self.vector_config, 'dimension') and self.vector_config.dimension is None:
+            self.vector_config.dimension = vectors.shape[1]
+    
+        if vectors.shape[1] != self.vector_config.dimension:
+>           raise ValueError(
+                f"Vector dimension {vectors.shape[1]} does not match index dimension {self.vector_config.dimension}"
+            )
+E           ValueError: Vector dimension 2 does not match index dimension <Mock name='mock.dimension' id='132067853262128'>
+
+services/ipfs_vector_service.py:328: ValueError
+___________ TestDistributedVectorIndex.test_error_handling_in_search ___________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x781d74856c90>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x781d717ae6c0>
+mock_ipfs_storage = <Mock id='132067852667936'>
+
+    @pytest.mark.asyncio
+    async def test_error_handling_in_search(self, distributed_index, mock_ipfs_storage):
+        """Test error handling during distributed search."""
+        # Setup shard that will fail
+        distributed_index.shard_metadata = {
+            'failing_shard': {'ipfs_hash': 'QmFailingShard', 'vector_count': 2}
+        }
+    
+        # Make retrieval fail for this shard
+        mock_ipfs_storage.retrieve_vector_shard.side_effect = Exception("Retrieval failed")
+    
+        query_embedding = [0.1, 0.2]
+>       results = await distributed_index.search_distributed(query_embedding, k=5)
+
+test/test_ipfs_vector_service.py:276: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/ipfs_vector_service.py:567: in search_distributed
+    return await self.search_vectors(query_vector, k, search_shards)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.ipfs_vector_service.DistributedVectorIndex object at 0x781d717ae6c0>
+query_vector = array([[0.1, 0.2]], dtype=float32), k = 5, search_shards = None
+
+    async def search_vectors(
+        self,
+        query_vector: np.ndarray,
+        k: int = 10,
+        search_shards: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Search across distributed vector shards."""
+        # Convert query vector to numpy array if needed
+        if not isinstance(query_vector, np.ndarray):
+            query_vector = np.array(query_vector, dtype=np.float32).reshape(1, -1)
+    
+        # Check query vector dimension
+        if query_vector.ndim == 1:
+            query_vector = query_vector.reshape(1, -1)
+    
+        if query_vector.shape[1] != self.vector_config.dimension:
+>           raise ValueError(
+                f"Query vector dimension {query_vector.shape[1]} does not match index dimension {self.vector_config.dimension}"
+            )
+E           ValueError: Query vector dimension 2 does not match index dimension <Mock name='mock.dimension' id='132068959992576'>
+
+services/ipfs_vector_service.py:405: ValueError
+=============================== warnings summary ===============================
+test/test_ipfs_vector_service.py:370
+  /home/barberb/laion-embeddings-1/test/test_ipfs_vector_service.py:370: PytestUnknownMarkWarning: Unknown pytest.mark.performance - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.performance
+
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_add_vectors_distributed
+  /home/barberb/.local/lib/python3.12/site-packages/faiss/loader.py:49: DeprecationWarning: numpy.core._multiarray_umath is deprecated and has been renamed to numpy._core._multiarray_umath. The numpy._core namespace contains private NumPy internals and its use is discouraged, as NumPy internals can change without warning in any release. In practice, most real-world usage of numpy.core is to access functionality in the public NumPy API. If that is the case, use the public NumPy API. If not, you are using NumPy internals. If you would still like to access an internal attribute, use numpy._core._multiarray_umath.__cpu_features__.
+    from numpy.core._multiarray_umath import __cpu_features__
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_add_vectors_distributed
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_search_distributed
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_load_from_manifest
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_shard_creation
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_error_handling_in_search
+======================== 5 failed, 2 warnings in 0.42s =========================

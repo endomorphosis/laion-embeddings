@@ -13,6 +13,11 @@ import math
 import gc
 import time
 import numpy as np
+import psutil
+import logging
+from typing import List, Dict, Optional, Union, Tuple, Any
+from pathlib import Path
+from dataclasses import dataclass
 from aiohttp import ClientSession, ClientTimeout
 import multiprocessing
 from multiprocessing import Pool
@@ -25,7 +30,327 @@ import qdrant_kit
 import elasticsearch_kit
 import faiss_kit
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 from datasets import Dataset, concatenate_datasets, load_dataset
+
+# ==============================================================================
+# ADAPTIVE BATCH PROCESSING OPTIMIZATION
+# ==============================================================================
+
+@dataclass
+class PerformanceMetrics:
+    """Performance metrics for batch processing optimization"""
+    batch_size: int
+    processing_time: float
+    memory_usage_mb: float
+    throughput: float  # items per second
+    success_rate: float
+    timestamp: float = None
+
+    def __post_init__(self):
+        if self.timestamp is None:
+            self.timestamp = time.time()
+
+class MemoryMonitor:
+    """Monitor system memory usage for optimal batch sizing"""
+    
+    def __init__(self):
+        self.process = psutil.Process()
+    
+    def get_memory_usage_mb(self) -> float:
+        """Get current memory usage in MB"""
+        return self.process.memory_info().rss / 1024 / 1024
+    
+    def get_available_memory_mb(self) -> float:
+        """Get available system memory in MB"""
+        return psutil.virtual_memory().available / 1024 / 1024
+    
+    def get_memory_percent(self) -> float:
+        """Get memory usage percentage"""
+        return psutil.virtual_memory().percent
+
+class AdaptiveBatchProcessor:
+    """
+    Adaptive batch processor that optimizes batch sizes based on hardware capabilities
+    and performance history. Implements the P1 priority improvement from the codebase plan.
+    """
+    
+    def __init__(self, max_memory_percent: float = 80.0, min_batch_size: int = 1, max_batch_size: int = 512):
+        self.max_memory_percent = max_memory_percent
+        self.min_batch_size = min_batch_size
+        self.max_batch_size = max_batch_size
+        self.optimal_batch_sizes: Dict[str, int] = {}
+        self.performance_history: Dict[str, List[PerformanceMetrics]] = {}
+        self.memory_monitor = MemoryMonitor()
+        self.logger = logging.getLogger(__name__ + ".AdaptiveBatchProcessor")
+        
+    async def find_optimal_batch_size(self, 
+                                    model_name: str, 
+                                    test_function,
+                                    test_data: List[str],
+                                    max_test_batches: int = 5) -> int:
+        """
+        Dynamically find optimal batch size for current hardware and model.
+        
+        Args:
+            model_name: Name of the model for caching optimal batch size
+            test_function: Function to test batch processing performance
+            test_data: Sample data for testing
+            max_test_batches: Maximum number of test batches to try
+            
+        Returns:
+            Optimal batch size for the current configuration
+        """
+        if model_name in self.optimal_batch_sizes:
+            self.logger.info(f"Using cached optimal batch size for {model_name}: {self.optimal_batch_sizes[model_name]}")
+            return self.optimal_batch_sizes[model_name]
+        
+        self.logger.info(f"Finding optimal batch size for {model_name}...")
+        
+        # Start with a conservative batch size
+        current_batch_size = self.min_batch_size
+        best_batch_size = current_batch_size
+        best_throughput = 0.0
+        consecutive_failures = 0
+        
+        while current_batch_size <= self.max_batch_size and consecutive_failures < 3:
+            try:
+                # Prepare test batch
+                test_batch = test_data[:min(current_batch_size, len(test_data))]
+                if len(test_batch) < current_batch_size:
+                    # Repeat data to reach desired batch size
+                    test_batch = (test_batch * ((current_batch_size // len(test_batch)) + 1))[:current_batch_size]
+                
+                # Monitor memory before processing
+                memory_before = self.memory_monitor.get_memory_usage_mb()
+                memory_percent_before = self.memory_monitor.get_memory_percent()
+                
+                # Check if we have enough memory
+                if memory_percent_before > self.max_memory_percent:
+                    self.logger.warning(f"Memory usage too high ({memory_percent_before:.1f}%), stopping batch size increase")
+                    break
+                
+                # Time the batch processing
+                start_time = time.time()
+                result = await test_function(test_batch)
+                processing_time = time.time() - start_time
+                
+                # Monitor memory after processing
+                memory_after = self.memory_monitor.get_memory_usage_mb()
+                memory_usage = memory_after - memory_before
+                
+                # Calculate performance metrics
+                throughput = len(test_batch) / processing_time if processing_time > 0 else 0
+                success_rate = 1.0 if result is not None else 0.0
+                
+                metrics = PerformanceMetrics(
+                    batch_size=current_batch_size,
+                    processing_time=processing_time,
+                    memory_usage_mb=memory_usage,
+                    throughput=throughput,
+                    success_rate=success_rate
+                )
+                
+                # Store performance metrics
+                if model_name not in self.performance_history:
+                    self.performance_history[model_name] = []
+                self.performance_history[model_name].append(metrics)
+                
+                self.logger.info(f"Batch size {current_batch_size}: {throughput:.2f} items/s, {memory_usage:.1f} MB")
+                
+                # Update best batch size if this is better
+                if throughput > best_throughput and success_rate > 0.9:
+                    best_throughput = throughput
+                    best_batch_size = current_batch_size
+                    consecutive_failures = 0
+                else:
+                    consecutive_failures += 1
+                
+                # Double the batch size for next test
+                current_batch_size = min(current_batch_size * 2, self.max_batch_size)
+                
+            except Exception as e:
+                self.logger.warning(f"Batch size {current_batch_size} failed: {e}")
+                consecutive_failures += 1
+                current_batch_size = min(current_batch_size * 2, self.max_batch_size)
+        
+        # Cache the optimal batch size
+        self.optimal_batch_sizes[model_name] = best_batch_size
+        self.logger.info(f"Optimal batch size for {model_name}: {best_batch_size} (throughput: {best_throughput:.2f} items/s)")
+        
+        return best_batch_size
+    
+    def get_adaptive_batch_size(self, model_name: str, queue_size: int) -> int:
+        """
+        Get adaptive batch size based on current conditions.
+        
+        Args:
+            model_name: Name of the model
+            queue_size: Current queue size
+            
+        Returns:
+            Recommended batch size
+        """
+        # Start with optimal batch size if available
+        base_batch_size = self.optimal_batch_sizes.get(model_name, self.min_batch_size)
+        
+        # Adjust based on current memory usage
+        memory_percent = self.memory_monitor.get_memory_percent()
+        if memory_percent > self.max_memory_percent:
+            # Reduce batch size if memory is high
+            memory_factor = (100 - memory_percent) / (100 - self.max_memory_percent)
+            base_batch_size = max(self.min_batch_size, int(base_batch_size * memory_factor))
+        
+        # Adjust based on queue size
+        if queue_size < base_batch_size:
+            return min(queue_size, base_batch_size)
+        
+        return base_batch_size
+    
+    def cleanup_memory(self):
+        """Clean up memory and trigger garbage collection"""
+        try:
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            self.logger.debug("Memory cleanup completed")
+        except Exception as e:
+            self.logger.warning(f"Memory cleanup failed: {e}")
+
+# Global adaptive batch processor instance
+adaptive_batch_processor = AdaptiveBatchProcessor()
+
+# ==============================================================================
+# ENHANCED ERROR HANDLING AND INPUT VALIDATION
+# ==============================================================================
+
+class ValidationError(Exception):
+    """Custom exception for input validation errors"""
+    pass
+
+class ProcessingError(Exception):
+    """Custom exception for processing errors"""
+    pass
+
+class MemoryError(Exception):
+    """Custom exception for memory-related errors"""
+    pass
+
+def validate_batch_input(batch: Union[List[str], List[Dict]], max_size: int = 10000) -> List[str]:
+    """
+    Validate and sanitize batch input data.
+    
+    Args:
+        batch: Input batch data
+        max_size: Maximum allowed batch size
+        
+    Returns:
+        Validated and sanitized batch data
+        
+    Raises:
+        ValidationError: If input is invalid
+    """
+    if not batch:
+        raise ValidationError("Batch cannot be empty")
+    
+    if len(batch) > max_size:
+        raise ValidationError(f"Batch size {len(batch)} exceeds maximum {max_size}")
+    
+    # Convert to list of strings if needed
+    validated_batch = []
+    for i, item in enumerate(batch):
+        try:
+            if isinstance(item, str):
+                if len(item.strip()) == 0:
+                    logger.warning(f"Empty string found at index {i}, skipping")
+                    continue
+                validated_batch.append(item.strip())
+            elif isinstance(item, dict):
+                # Convert dict to JSON string
+                validated_batch.append(json.dumps(item))
+            else:
+                # Convert other types to string
+                validated_batch.append(str(item))
+        except Exception as e:
+            logger.warning(f"Failed to process item at index {i}: {e}")
+            continue
+    
+    if not validated_batch:
+        raise ValidationError("No valid items found in batch after validation")
+    
+    return validated_batch
+
+def safe_execute_with_retry(func, *args, max_retries: int = 3, delay: float = 1.0, **kwargs):
+    """
+    Execute function with retry logic and error handling.
+    
+    Args:
+        func: Function to execute
+        max_retries: Maximum number of retry attempts
+        delay: Delay between retries in seconds
+        *args, **kwargs: Arguments to pass to function
+        
+    Returns:
+        Function result
+        
+    Raises:
+        ProcessingError: If all retries fail
+    """
+    last_exception = None
+    
+    for attempt in range(max_retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            last_exception = e
+            if attempt < max_retries:
+                logger.warning(f"Attempt {attempt + 1} failed: {e}, retrying in {delay}s...")
+                time.sleep(delay)
+                delay *= 2  # Exponential backoff
+            else:
+                logger.error(f"All {max_retries + 1} attempts failed")
+    
+    raise ProcessingError(f"Failed after {max_retries + 1} attempts: {last_exception}")
+
+async def safe_async_execute_with_retry(func, *args, max_retries: int = 3, delay: float = 1.0, **kwargs):
+    """
+    Execute async function with retry logic and error handling.
+    
+    Args:
+        func: Async function to execute
+        max_retries: Maximum number of retry attempts
+        delay: Delay between retries in seconds
+        *args, **kwargs: Arguments to pass to function
+        
+    Returns:
+        Function result
+        
+    Raises:
+        ProcessingError: If all retries fail
+    """
+    last_exception = None
+    
+    for attempt in range(max_retries + 1):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            last_exception = e
+            if attempt < max_retries:
+                logger.warning(f"Attempt {attempt + 1} failed: {e}, retrying in {delay}s...")
+                await asyncio.sleep(delay)
+                delay *= 2  # Exponential backoff
+            else:
+                logger.error(f"All {max_retries + 1} attempts failed")
+    
+    raise ProcessingError(f"Failed after {max_retries + 1} attempts: {last_exception}")
+
+# ==============================================================================
+# END ENHANCED ERROR HANDLING AND INPUT VALIDATION
+# ==============================================================================
 try:
     from .ipfs_multiformats import ipfs_multiformats_py
     from .ipfs_multiformats import *
@@ -146,75 +471,102 @@ except Exception as e:
 
 # Safe helper functions
 def safe_get_cid(file_data):
-    """Safely generate a CID with fallback to hash-based approach"""
-    # Try different ways to access the get_cid function
-    try:
-        # Try direct module access with explicit safe calling
-        if 'ipfs_multiformats' in globals() and ipfs_multiformats is not None:
-            # Check if it's a function itself rather than having get_cid attribute
-            if callable(ipfs_multiformats):
-                try:
-                    return ipfs_multiformats(file_data)
-                except Exception as e:
-                    print(f"Warning: calling ipfs_multiformats directly failed: {e}")
-            
-            # Try calling get_cid as a method
-            if hasattr(ipfs_multiformats, 'get_cid') and callable(getattr(ipfs_multiformats, 'get_cid')):
-                try:
-                    # Use explicit method call with getattr to avoid attribute access errors
-                    get_cid_func = getattr(ipfs_multiformats, 'get_cid')
-                    return get_cid_func(file_data)
-                except Exception as e:
-                    print(f"Warning: ipfs_multiformats.get_cid failed: {e}")
-    except Exception as e:
-        print(f"Warning: accessing ipfs_multiformats failed: {e}")
+    """
+    Safely generate a CID with enhanced error handling and validation.
     
-    try:
-        # Try the ipfs_multiformats_py module with explicit safe calling
-        if 'ipfs_multiformats_py' in globals() and ipfs_multiformats_py is not None:
-            # Check if it's a function itself
-            if callable(ipfs_multiformats_py):
-                try:
-                    return ipfs_multiformats_py(file_data)
-                except Exception as e:
-                    print(f"Warning: calling ipfs_multiformats_py directly failed: {e}")
-            
-            # Try calling get_cid as a method
-            if hasattr(ipfs_multiformats_py, 'get_cid') and callable(getattr(ipfs_multiformats_py, 'get_cid')):
-                try:
-                    # Use explicit method call
-                    get_cid_py_func = getattr(ipfs_multiformats_py, 'get_cid')
-                    return get_cid_py_func(file_data)
-                except Exception as e:
-                    print(f"Warning: ipfs_multiformats_py.get_cid failed: {e}")
-    except Exception as e:
-        print(f"Warning: accessing ipfs_multiformats_py failed: {e}")
+    Args:
+        file_data: Data to generate CID for (string, dict, or other serializable type)
+        
+    Returns:
+        str: Generated CID string
+        
+    Raises:
+        ValidationError: If input data is invalid
+    """
+    # Input validation
+    if file_data is None:
+        raise ValidationError("Cannot generate CID for None data")
     
-    # Try module-level multiformats import
-    try:
-        if 'multiformats' in globals() and multiformats is not None:
-            if hasattr(multiformats, 'get_cid') and callable(getattr(multiformats, 'get_cid')):
-                try:
-                    get_cid_func = getattr(multiformats, 'get_cid')
-                    return get_cid_func(file_data)
-                except Exception as e:
-                    print(f"Warning: multiformats.get_cid failed: {e}")
-    except Exception as e:
-        print(f"Warning: accessing multiformats failed: {e}")
-    
-    # Fallback to a simple hash-based CID generation
-    import hashlib
-    import json
+    # Normalize input data
     try:
         if isinstance(file_data, dict):
-            file_data = json.dumps(file_data, sort_keys=True)
+            normalized_data = json.dumps(file_data, sort_keys=True)
+        elif isinstance(file_data, (list, tuple)):
+            normalized_data = json.dumps(list(file_data), sort_keys=True)
         elif not isinstance(file_data, str):
-            file_data = str(file_data)
-        return "baf" + hashlib.sha256(file_data.encode('utf-8', errors='ignore')).hexdigest()[:32]
+            normalized_data = str(file_data)
+        else:
+            normalized_data = file_data
+            
+        # Validate that we have meaningful data
+        if len(normalized_data.strip()) == 0:
+            raise ValidationError("Cannot generate CID for empty data")
+            
     except Exception as e:
-        print(f"Warning: hash-based CID generation failed: {e}")
-        # Ultimate fallback - return a placeholder CID
-        return "bafybeifi6kicddkqn24zbypkdpdqdvudtnb5qwul3jxkgvf2dh6wvxdxku"
+        raise ValidationError(f"Failed to normalize input data: {e}")
+    
+    # Try different CID generation methods with retry logic
+    def try_ipfs_multiformats():
+        """Try IPFS multiformats CID generation"""
+        if 'ipfs_multiformats' in globals() and ipfs_multiformats is not None:
+            if callable(ipfs_multiformats):
+                return ipfs_multiformats(normalized_data)
+            elif hasattr(ipfs_multiformats, 'get_cid') and callable(getattr(ipfs_multiformats, 'get_cid')):
+                get_cid_func = getattr(ipfs_multiformats, 'get_cid')
+                return get_cid_func(normalized_data)
+        return None
+    
+    def try_ipfs_multiformats_py():
+        """Try IPFS multiformats_py CID generation"""
+        if 'ipfs_multiformats_py' in globals() and ipfs_multiformats_py is not None:
+            if callable(ipfs_multiformats_py):
+                return ipfs_multiformats_py(normalized_data)
+            elif hasattr(ipfs_multiformats_py, 'get_cid') and callable(getattr(ipfs_multiformats_py, 'get_cid')):
+                get_cid_py_func = getattr(ipfs_multiformats_py, 'get_cid')
+                return get_cid_py_func(normalized_data)
+        return None
+    
+    def try_multiformats():
+        """Try multiformats module CID generation"""
+        if 'multiformats' in globals() and multiformats is not None:
+            if hasattr(multiformats, 'get_cid') and callable(getattr(multiformats, 'get_cid')):
+                get_cid_func = getattr(multiformats, 'get_cid')
+                return get_cid_func(normalized_data)
+        return None
+    
+    def fallback_hash_cid():
+        """Generate hash-based CID as fallback"""
+        import hashlib
+        try:
+            hash_value = hashlib.sha256(normalized_data.encode('utf-8', errors='ignore')).hexdigest()
+            return "baf" + hash_value[:32]
+        except Exception as e:
+            logger.warning(f"Hash-based CID generation failed: {e}")
+            # Ultimate fallback - deterministic placeholder based on data length
+            data_hash = str(abs(hash(normalized_data))) if normalized_data else "0"
+            return f"bafybeifi6kicddkqn24zbypkdpdqdvudtnb5qwul3jxkgvf{data_hash[:8]:0>8}"
+    
+    # Try CID generation methods in order of preference
+    cid_methods = [
+        ("ipfs_multiformats", try_ipfs_multiformats),
+        ("ipfs_multiformats_py", try_ipfs_multiformats_py),
+        ("multiformats", try_multiformats),
+        ("hash_fallback", fallback_hash_cid)
+    ]
+    
+    for method_name, method_func in cid_methods:
+        try:
+            result = safe_execute_with_retry(method_func, max_retries=1)
+            if result is not None:
+                logger.debug(f"CID generated using {method_name}: {result}")
+                return result
+        except Exception as e:
+            logger.debug(f"CID generation method {method_name} failed: {e}")
+            continue
+    
+    # If all methods fail, this should not happen due to fallback, but just in case
+    logger.error("All CID generation methods failed")
+    return "bafybeifi6kicddkqn24zbypkdpdqdvudtnb5qwul3jxkgvf2dh6wvxdxku"
 
 def safe_tokenizer_encode(tokenizer, text):
     """Safely encode text with tokenizer"""
@@ -476,7 +828,7 @@ def safe_module_call(module, method_name, *args, **kwargs):
     """Safely call a method on a module, with fallback"""
     if module is None:
         return None
-    
+
     # Check if the method exists
     method = None
     try:
@@ -486,7 +838,7 @@ def safe_module_call(module, method_name, *args, **kwargs):
                 return method(*args, **kwargs)
     except Exception as e:
         print(f"Warning: {method_name} call on {module} failed: {e}")
-    
+
     return None
 
 def safe_dataset_column_names(dataset):
@@ -690,20 +1042,137 @@ def safe_init_module(module, resources=None, metadata=None):
         print(f"Warning: Could not initialize module {module}: {e}")
         return None
 
-def index_cid(samples):
-    """Generate CIDs for samples"""
-    results = []
+def index_cid(samples, use_adaptive_batching: bool = True, batch_size: Optional[int] = None):
+    """
+    Generate CIDs for samples with adaptive batch processing optimization.
+    
+    Args:
+        samples: Input samples (string, list of strings, or list of dicts)
+        use_adaptive_batching: Whether to use adaptive batch processing
+        batch_size: Fixed batch size (if not using adaptive batching)
+        
+    Returns:
+        List[str]: Generated CIDs for each sample
+        
+    Raises:
+        ValidationError: If input samples are invalid
+    """
+    # Input validation
     if samples is None:
-        raise ValueError("samples must be a list")
+        raise ValidationError("Samples cannot be None")
+    
+    # Normalize samples to list
     if isinstance(samples, str):
         samples = [samples]
-    if isinstance(samples, list):
-        for this_sample in samples:
-            this_sample_cid = safe_get_cid(this_sample)
-            results.append(this_sample_cid)
+    elif not isinstance(samples, list):
+        raise ValidationError("Samples must be a string or list")
+    
+    # Validate batch input
+    validated_samples = validate_batch_input(samples, max_size=50000)
+    
+    if not validated_samples:
+        return []
+    
+    # Use adaptive batch processing if enabled
+    if use_adaptive_batching and len(validated_samples) > 10:
+        return _process_cid_batch_adaptive(validated_samples)
     else:
-        raise ValueError("samples must be a list or string")
+        return _process_cid_batch_simple(validated_samples, batch_size)
+
+def _process_cid_batch_simple(samples: List[str], batch_size: Optional[int] = None) -> List[str]:
+    """Process CID generation with simple batching"""
+    results = []
+    effective_batch_size = batch_size or min(100, len(samples))
+    
+    for i in range(0, len(samples), effective_batch_size):
+        batch = samples[i:i + effective_batch_size]
+        batch_results = []
+        
+        for sample in batch:
+            try:
+                cid = safe_get_cid(sample)
+                batch_results.append(cid)
+            except Exception as e:
+                logger.warning(f"Failed to generate CID for sample at index {i + len(batch_results)}: {e}")
+                # Use fallback CID based on sample content
+                fallback_cid = f"bafyerror{abs(hash(sample))}"[:32]
+                batch_results.append(fallback_cid)
+        
+        results.extend(batch_results)
+        
+        # Memory cleanup for large batches
+        if len(results) % 1000 == 0:
+            adaptive_batch_processor.cleanup_memory()
+    
     return results
+
+def _process_cid_batch_adaptive(samples: List[str]) -> List[str]:
+    """Process CID generation with adaptive batch processing"""
+    try:
+        # Define test function for adaptive batch processor
+        def test_cid_batch(test_batch):
+            """Test function for finding optimal batch size"""
+            test_results = []
+            for item in test_batch:
+                test_results.append(safe_get_cid(item))
+            return test_results
+        
+        # Find optimal batch size
+        optimal_batch_size = asyncio.run(
+            adaptive_batch_processor.find_optimal_batch_size(
+                model_name="cid_generation",
+                test_function=test_cid_batch,
+                test_data=samples[:min(50, len(samples))]  # Use sample for testing
+            )
+        )
+        
+        logger.info(f"Using adaptive batch size: {optimal_batch_size}")
+        
+        # Process with optimal batch size
+        results = []
+        for i in range(0, len(samples), optimal_batch_size):
+            batch = samples[i:i + optimal_batch_size]
+            
+            # Check memory usage and adjust if needed
+            current_batch_size = adaptive_batch_processor.get_adaptive_batch_size(
+                "cid_generation", len(batch)
+            )
+            
+            if current_batch_size < len(batch):
+                # Process in smaller chunks if memory is constrained
+                batch = batch[:current_batch_size]
+                logger.info(f"Reduced batch size to {current_batch_size} due to memory constraints")
+            
+            # Process batch with retry logic
+            try:
+                batch_results = safe_execute_with_retry(
+                    test_cid_batch, 
+                    batch, 
+                    max_retries=2
+                )
+                results.extend(batch_results)
+            except ProcessingError as e:
+                logger.warning(f"Batch processing failed, falling back to individual processing: {e}")
+                # Fallback to individual processing
+                for sample in batch:
+                    try:
+                        cid = safe_get_cid(sample)
+                        results.append(cid)
+                    except Exception as sample_e:
+                        logger.warning(f"Individual CID generation failed: {sample_e}")
+                        fallback_cid = f"bafyerror{abs(hash(sample))}"[:32]
+                        results.append(fallback_cid)
+            
+            # Progress logging
+            if len(results) % 1000 == 0:
+                logger.info(f"Processed {len(results)}/{len(samples)} CIDs")
+                adaptive_batch_processor.cleanup_memory()
+        
+        return results
+        
+    except Exception as e:
+        logger.warning(f"Adaptive batch processing failed, falling back to simple processing: {e}")
+        return _process_cid_batch_simple(samples)
 
 def init_datasets(model, dataset, split, column, dst_path):
     """Initialize datasets with safe handling"""
@@ -806,3 +1275,231 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"Error during testing: {e}")
+        
+    # Example usage of tokenize_batch
+    try:
+        from transformers import AutoTokenizer
+        
+        # Load a sample tokenizer
+        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        
+        # Test tokenize_batch function
+        test_batch = ["Hello, world!", "This is a test.", "Tokenize me!"]
+        tokenization_results = tokenize_batch(test_batch, tokenizer=tokenizer, use_adaptive_batching=True)
+        print(f"Tokenization results: {tokenization_results}")
+        
+    except Exception as e:
+        print(f"Error during tokenization testing: {e}")
+
+# Additional Safe Helper Functions for Enhanced Processing
+
+def safe_tokenizer_encode(tokenizer: Optional[Any], text: Optional[str], **kwargs) -> List[int]:
+    """
+    Safely encode text using a tokenizer with fallback mechanisms.
+    
+    Args:
+        tokenizer: Tokenizer instance to use
+        text: Text to encode
+        **kwargs: Additional arguments for tokenizer
+        
+    Returns:
+        List of token IDs
+    """
+    if text is None:
+        return []
+    
+    if tokenizer is None:
+        logger.warning("No tokenizer provided, using character-based fallback")
+        # Simple character-based encoding as fallback
+        return [ord(c) for c in str(text)[:100]]  # Limit to prevent huge lists
+    
+    try:
+        result = safe_execute_with_retry(
+            lambda: tokenizer.encode(str(text), **kwargs),
+            max_retries=2,
+            initial_delay=0.01
+        )
+        return result if isinstance(result, list) else []
+    except Exception as e:
+        logger.warning(f"Tokenizer encoding failed: {e}, using fallback")
+        return [ord(c) for c in str(text)[:100]]
+
+
+def safe_tokenizer_decode(tokenizer: Optional[Any], tokens: Optional[List[int]], **kwargs) -> str:
+    """
+    Safely decode tokens using a tokenizer with fallback mechanisms.
+    
+    Args:
+        tokenizer: Tokenizer instance to use
+        tokens: List of token IDs to decode
+        **kwargs: Additional arguments for tokenizer
+        
+    Returns:
+        Decoded text string
+    """
+    if tokens is None or not tokens:
+        return ""
+    
+    if tokenizer is None:
+        logger.warning("No tokenizer provided, using character-based fallback")
+        # Simple character-based decoding as fallback
+        try:
+            return ''.join(chr(min(max(t, 32), 126)) for t in tokens if isinstance(t, int))
+        except Exception:
+            return str(tokens)
+    
+    try:
+        result = safe_execute_with_retry(
+            lambda: tokenizer.decode(tokens, **kwargs),
+            max_retries=2,
+            initial_delay=0.01
+        )
+        return result if isinstance(result, str) else str(tokens)
+    except Exception as e:
+        logger.warning(f"Tokenizer decoding failed: {e}, using fallback")
+        try:
+            return ''.join(chr(min(max(t, 32), 126)) for t in tokens if isinstance(t, int))
+        except Exception:
+            return str(tokens)
+
+
+def safe_chunker_chunk(chunker: Optional[Any], 
+                      content: str, 
+                      tokenizer: Optional[Any] = None,
+                      method: str = "fixed",
+                      *args, **kwargs) -> List[Any]:
+    """
+    Safely chunk content using a chunker with fallback mechanisms.
+    
+    Args:
+        chunker: Chunker instance to use
+        content: Content to chunk
+        tokenizer: Optional tokenizer for token-based chunking
+        method: Chunking method
+        *args, **kwargs: Additional arguments for chunker
+        
+    Returns:
+        List of chunks
+    """
+    if not content:
+        return []
+    
+    if chunker is None:
+        logger.warning("No chunker provided, using simple text splitting")
+        # Simple text chunking fallback
+        chunk_size = args[0] if args else 100
+        words = content.split()
+        chunks = []
+        for i in range(0, len(words), chunk_size):
+            chunk_words = words[i:i + chunk_size]
+            chunks.append(' '.join(chunk_words))
+        return chunks
+    
+    try:
+        # Try using the chunker with provided method
+        if hasattr(chunker, 'chunk'):
+            result = safe_execute_with_retry(
+                lambda: chunker.chunk(content, tokenizer, method, *args, **kwargs),
+                max_retries=2,
+                initial_delay=0.01
+            )
+            return result if isinstance(result, list) else [content]
+        elif hasattr(chunker, 'split_text'):
+            result = safe_execute_with_retry(
+                lambda: chunker.split_text(content),
+                max_retries=2,
+                initial_delay=0.01
+            )
+            return result if isinstance(result, list) else [content]
+        else:
+            logger.warning("Chunker doesn't have expected methods, using fallback")
+            return [content]
+            
+    except Exception as e:
+        logger.warning(f"Chunker failed: {e}, using simple splitting")
+        # Simple sentence-based chunking fallback
+        sentences = content.split('. ')
+        chunk_size = args[0] if args else 3
+        chunks = []
+        for i in range(0, len(sentences), chunk_size):
+            chunk_sentences = sentences[i:i + chunk_size]
+            chunks.append('. '.join(chunk_sentences))
+        return chunks
+
+
+def safe_get_num_rows(dataset: Any) -> int:
+    """
+    Safely get the number of rows from a dataset.
+    
+    Args:
+        dataset: Dataset object
+        
+    Returns:
+        Number of rows, or 0 if cannot be determined
+    """
+    if dataset is None:
+        return 0
+    
+    try:
+        # Try common attributes for row count
+        if hasattr(dataset, '__len__'):
+            return len(dataset)
+        elif hasattr(dataset, 'num_rows'):
+            return dataset.num_rows
+        elif hasattr(dataset, 'shape'):
+            return dataset.shape[0]
+        elif hasattr(dataset, 'count'):
+            return dataset.count()
+        else:
+            logger.warning("Dataset type not recognized for row counting")
+            return 0
+    except Exception as e:
+        logger.warning(f"Failed to get dataset row count: {e}")
+        return 0
+
+
+def enhanced_batch_processor_status() -> Dict[str, Any]:
+    """
+    Get comprehensive status of the adaptive batch processor.
+    
+    Returns:
+        Dictionary with processor status and performance metrics
+    """
+    try:
+        memory_info = adaptive_batch_processor.memory_monitor.get_memory_info()
+        
+        return {
+            'processor_status': {
+                'max_batch_size': adaptive_batch_processor.max_batch_size,
+                'max_memory_percent': adaptive_batch_processor.max_memory_percent,
+                'optimal_batch_sizes': dict(adaptive_batch_processor.optimal_batch_sizes),
+                'performance_history_length': {
+                    model: len(history) 
+                    for model, history in adaptive_batch_processor.performance_history.items()
+                }
+            },
+            'memory_status': {
+                'current_usage_mb': memory_info.get('used_mb', 0),
+                'current_usage_percent': memory_info.get('percent', 0),
+                'available_mb': memory_info.get('available_mb', 0),
+                'total_mb': memory_info.get('total_mb', 0)
+            },
+            'processing_capabilities': {
+                'adaptive_batching_available': True,
+                'memory_monitoring_available': True,
+                'performance_tracking_available': True,
+                'error_recovery_available': True
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to get processor status: {e}")
+        return {
+            'processor_status': {'error': str(e)},
+            'memory_status': {'error': str(e)},
+            'processing_capabilities': {
+                'adaptive_batching_available': False,
+                'memory_monitoring_available': False,
+                'performance_tracking_available': False,
+                'error_recovery_available': False
+            }
+        }

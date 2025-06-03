@@ -1,2 +1,1 @@
-python3 -m fastapi run main.py
-
+scripts/run.sh

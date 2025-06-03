@@ -25,22 +25,22 @@ class search_embeddings:
         self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
         if "tei_endpoints" in resources.keys():
             for endpoint in resources["tei_endpoints"]:
-                self.ipfs_embeddings_py.add_tei_endpoint(endpoint[0], endpoint[1], endpoint[2])
+                self.ipfs_embeddings_py.add_endpoint(endpoint[0], endpoint[1], endpoint[2], "tei_endpoints")
         else:
-            self.ipfs_embeddings_py.add_tei_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
+            self.ipfs_embeddings_py.add_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1, "tei_endpoints")
         if "openvino_endpoints" in resources.keys():
             for endpoint in resources["openvino_endpoints"]:
-                self.ipfs_embeddings_py.add_openvino_endpoint(endpoint[0], endpoint[1], endpoint[2])
+                self.ipfs_embeddings_py.add_endpoint(endpoint[0], endpoint[1], endpoint[2], "openvino_endpoints")
         else:
             pass
         if "local_endpoints" in resources.keys():
             for endpoint in resources["local_endpoints"]:
-                self.ipfs_embeddings_py.add_local_endpoint(endpoint[0], endpoint[1], endpoint[2])
+                self.ipfs_embeddings_py.add_endpoint(endpoint[0], endpoint[1], endpoint[2], "local_endpoints")
         else:
             pass
         if "libp2p_endpoints" in resources.keys():
             for endpoint in resources["libp2p_endpoints"]:
-                self.ipfs_embeddings_py.add_libp2p_endpoint(endpoint[0], endpoint[1], endpoint[2])
+                self.ipfs_embeddings_py.add_endpoint(endpoint[0], endpoint[1], endpoint[2], "libp2p_endpoints")
         else:
             pass
         
@@ -57,23 +57,6 @@ class search_embeddings:
                 print("Qdrant failed to start, fallback to faiss")
         else:
             self.qdrant_found = True
-        self.add_tei_endpoint = self.add_tei_endpoint
-        self.add_openvino_endpoint = self.add_openvino_endpoint
-        self.add_local_endpoint = self.add_local_endpoint
-        self.add_libp2p_endpoint = self.add_libp2p_endpoint
-
-    def add_tei_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_tei_endpoint(model, endpoint, ctx_length)
-    
-    def add_openvino_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_openvino_endpoint(model, endpoint, ctx_length)
-    
-    def add_local_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_local_endpoint(model, endpoint, ctx_length)
-
-    def add_libp2p_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_libp2p_endpoint(model, endpoint, ctx_length)
-    
     def rm_cache(self):
         homedir = os.path.expanduser("~")
         cache_dir = homedir + "/.cache/huggingface/datasets/"

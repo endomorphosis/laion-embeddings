@@ -1,0 +1,85 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.3.5, pluggy-1.5.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/barberb/laion-embeddings-1
+configfile: pytest.ini
+plugins: anyio-4.9.0, timeout-2.3.1, asyncio-0.20.3
+asyncio: mode=Mode.STRICT
+collecting ... collected 1 item
+
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_add_vectors_distributed FAILED
+
+=================================== FAILURES ===================================
+___________ TestDistributedVectorIndex.test_add_vectors_distributed ____________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x7dc0bccc9b50>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x7dc07de730b0>
+mock_ipfs_storage = <Mock id='138265699701328'>
+
+    @pytest.mark.asyncio
+    async def test_add_vectors_distributed(self, distributed_index, mock_ipfs_storage):
+        """Test adding vectors to distributed index."""
+        embeddings = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]]
+        texts = ['text1', 'text2', 'text3', 'text4']
+        metadata = [{'id': i} for i in range(4)]
+    
+>       manifest_hash = await distributed_index.add_vectors_distributed(
+            embeddings, texts, metadata
+        )
+
+test/test_ipfs_vector_service.py:211: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/ipfs_vector_service.py:547: in add_vectors_distributed
+    return await self.add_vectors(vectors, metadata=metadata)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.ipfs_vector_service.DistributedVectorIndex object at 0x7dc07de730b0>
+vectors = array([[0.1, 0.2],
+       [0.3, 0.4],
+       [0.5, 0.6],
+       [0.7, 0.8]], dtype=float32)
+texts = None
+metadata = [{'id': 0, 'text': 'text1'}, {'id': 1, 'text': 'text2'}, {'id': 2, 'text': 'text3'}, {'id': 3, 'text': 'text4'}]
+ids = None
+
+    async def add_vectors(
+        self,
+        vectors: np.ndarray,
+        texts: Optional[List[str]] = None,
+        metadata: Optional[List[Dict[str, Any]]] = None,
+        ids: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Add vectors to the distributed index."""
+        # Convert vectors to numpy array if needed
+        if not isinstance(vectors, np.ndarray):
+            vectors = np.array(vectors, dtype=np.float32)
+    
+        # Make sure vectors is 2D
+        if vectors.ndim == 1:
+            vectors = vectors.reshape(1, -1)
+    
+        # Set dimension if not already set
+        if not hasattr(self.vector_config, 'dimension'):
+            self.vector_config.dimension = vectors.shape[1]
+    
+        if vectors.shape[1] != self.vector_config.dimension:
+>           raise ValueError(
+                f"Vector dimension {vectors.shape[1]} does not match index dimension {self.vector_config.dimension}"
+            )
+E           ValueError: Vector dimension 2 does not match index dimension <Mock name='mock.dimension' id='138265699496832'>
+
+services/ipfs_vector_service.py:322: ValueError
+=============================== warnings summary ===============================
+test/test_ipfs_vector_service.py:370
+  /home/barberb/laion-embeddings-1/test/test_ipfs_vector_service.py:370: PytestUnknownMarkWarning: Unknown pytest.mark.performance - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.performance
+
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_add_vectors_distributed
+  /home/barberb/.local/lib/python3.12/site-packages/faiss/loader.py:49: DeprecationWarning: numpy.core._multiarray_umath is deprecated and has been renamed to numpy._core._multiarray_umath. The numpy._core namespace contains private NumPy internals and its use is discouraged, as NumPy internals can change without warning in any release. In practice, most real-world usage of numpy.core is to access functionality in the public NumPy API. If that is the case, use the public NumPy API. If not, you are using NumPy internals. If you would still like to access an internal attribute, use numpy._core._multiarray_umath.__cpu_features__.
+    from numpy.core._multiarray_umath import __cpu_features__
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_add_vectors_distributed
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+======================== 1 failed, 2 warnings in 0.33s =========================

@@ -22,6 +22,8 @@ llama-index
 torch
 haystack
 faiss-cpu
+scikit-learn
+ipfshttpclient
 pysbd
 optimum
 optimum[openvino]
@@ -30,3 +32,29 @@ toml
 torchvision
 einops
 timm
+
+# Authentication and security
+PyJWT
+passlib[bcrypt]
+python-multipart
+
+# Performance monitoring
+psutil
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+pytest-benchmark
+httpx
+
+# Development tools
+black
+isort
+mypy
+flake8
+pre-commit
+
+# Security
+bandit
+safety

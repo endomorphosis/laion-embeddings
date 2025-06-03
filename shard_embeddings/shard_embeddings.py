@@ -1,17 +1,19 @@
 try:
-    from ..ipfs_embeddings_py import ipfs_embeddings_py
-except:
+    from ..ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+except ImportError:
     try:    
-        from ipfs_embeddings_py import ipfs_embeddings_py
-    except: 
-        import ipfs_embeddings_py 
+        from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+    except ImportError: 
+        # Fallback if direct import fails, assuming it's in the global scope or similar
+        # This might not be ideal, but handles cases where the package structure is flat
+        import ipfs_embeddings_py
 
 class shard_embeddings:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
-        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
-        self.kmeans_cluster_split = self.ipfs_embeddings_py.kmeans_cluster_split
+        self.ipfs_embeddings_py = ipfs_embeddings_py(resources, metadata)
+        self.kmeans_cluster_split = self.ipfs_embeddings_py.faiss_kit.kmeans_cluster_split_dataset
         return None
     
     async def __call__(self, metadata=None):

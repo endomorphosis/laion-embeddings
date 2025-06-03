@@ -1,0 +1,79 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.3.5, pluggy-1.5.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/barberb/laion-embeddings-1
+configfile: pytest.ini
+plugins: anyio-4.9.0, timeout-2.3.1, asyncio-0.20.3
+asyncio: mode=Mode.STRICT
+collecting ... collected 2 items
+
+test/test_ipfs_vector_service.py::TestIPFSIntegration::test_round_trip_vector_storage PASSED [ 50%]
+test/test_ipfs_vector_service.py::TestIPFSIntegration::test_manifest_consistency FAILED [100%]
+
+=================================== FAILURES ===================================
+________________ TestIPFSIntegration.test_manifest_consistency _________________
+
+self = <test.test_ipfs_vector_service.TestIPFSIntegration object at 0x7c7149b6ecc0>
+mock_ipfshttpclient = <MagicMock name='ipfshttpclient' id='136825968399024'>
+
+    @pytest.mark.asyncio
+    async def test_manifest_consistency(self, mock_ipfshttpclient):
+        """Test manifest consistency across operations."""
+        from services.ipfs_vector_service import IPFSVectorStorage, DistributedVectorIndex
+    
+        # Setup mocks
+        mock_vector_service = Mock()
+        mock_vector_service.create_index = Mock(return_value=Mock())
+        mock_vector_service.add_embeddings = AsyncMock(return_value=[0, 1])
+    
+        manifest_storage = {}
+        def mock_store_manifest(manifest):
+            manifest_hash = f"QmManifest{len(manifest_storage)}"
+            manifest_storage[manifest_hash] = manifest
+            return manifest_hash
+    
+        def mock_get_manifest(hash_val):
+            return manifest_storage[hash_val]
+    
+        mock_client = Mock()
+        mock_client.version = Mock(return_value={'Version': '0.12.0'})
+        mock_client.add_json = Mock(side_effect=lambda x: 'QmShard123')
+        mock_client.get_json = Mock(side_effect=mock_get_manifest)
+        mock_ipfshttpclient.connect.return_value = mock_client
+    
+        # Test
+        config = {'api_url': '/ip4/127.0.0.1/tcp/5001'}
+        storage = IPFSVectorStorage(config)
+        storage.store_index_manifest = AsyncMock(side_effect=mock_store_manifest)
+        storage.retrieve_index_manifest = AsyncMock(side_effect=mock_get_manifest)
+    
+        distributed_index = DistributedVectorIndex(mock_vector_service, storage, shard_size=2)
+    
+        # Add vectors and get manifest
+        embeddings = [[0.1, 0.2], [0.3, 0.4]]
+        texts = ['text1', 'text2']
+    
+        manifest_hash = await distributed_index.add_vectors_distributed(embeddings, texts)
+    
+        # Load from manifest and verify consistency
+        new_index = DistributedVectorIndex(mock_vector_service, storage, shard_size=2)
+        await new_index.load_from_manifest(manifest_hash)
+    
+>       assert len(new_index.shard_metadata) == len(distributed_index.shard_metadata)
+E       AttributeError: 'DistributedVectorIndex' object has no attribute 'shard_metadata'. Did you mean: 'index_metadata'?
+
+test/test_ipfs_vector_service.py:367: AttributeError
+=============================== warnings summary ===============================
+test/test_ipfs_vector_service.py:370
+  /home/barberb/laion-embeddings-1/test/test_ipfs_vector_service.py:370: PytestUnknownMarkWarning: Unknown pytest.mark.performance - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.performance
+
+test/test_ipfs_vector_service.py::TestIPFSIntegration::test_round_trip_vector_storage
+  /home/barberb/.local/lib/python3.12/site-packages/faiss/loader.py:49: DeprecationWarning: numpy.core._multiarray_umath is deprecated and has been renamed to numpy._core._multiarray_umath. The numpy._core namespace contains private NumPy internals and its use is discouraged, as NumPy internals can change without warning in any release. In practice, most real-world usage of numpy.core is to access functionality in the public NumPy API. If that is the case, use the public NumPy API. If not, you are using NumPy internals. If you would still like to access an internal attribute, use numpy._core._multiarray_umath.__cpu_features__.
+    from numpy.core._multiarray_umath import __cpu_features__
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/test_ipfs_vector_service.py::TestIPFSIntegration::test_manifest_consistency
+=================== 1 failed, 1 passed, 2 warnings in 0.43s ====================
+TestIPFSIntegration exit code: 1

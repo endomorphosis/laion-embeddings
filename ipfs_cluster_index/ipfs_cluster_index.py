@@ -1,28 +1,45 @@
 
 try:
-    from ipfs_kit_py import ipfs_kit_py
-except:
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
+except ImportError:
     try:    
-        from ipfs_kit_py import *
-    except:
+        from ipfs_kit_py import ipfs_kit
+    except ImportError:
         pass
     
 import datasets
 from datasets import *
 try:
-    from ..ipfs_embeddings_py import ipfs_embeddings_py
-except Exception as e:
+    from ..ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+except ImportError:
     try:
-        from ipfs_embeddings_py import ipfs_embeddings_py
-    except Exception as e:  
+        from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+    except ImportError:  
         pass
+
+try:
+    from ipfs_kit_py.storacha_kit_py import storacha_kit_py
+except ImportError:
+    try:
+        from storacha_kit_py import storacha_kit_py
+    except ImportError:
+        pass
+
+try:
+    from ipfs_embeddings_py.ipfs_parquet_to_car import ipfs_parquet_to_car_py
+except ImportError:
+    try:
+        from ipfs_parquet_to_car import ipfs_parquet_to_car_py
+    except ImportError:
+        pass
+
 class ipfs_cluster_index:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
-        self.ipfs_kit_py = ipfs_kit_py.ipfs_kit(resources, metadata)
-        self.storacha_kit_py = ipfs_kit_py.storacha_kit(resources, metadata)
-        self.parquet_to_car_py = ipfs_embeddings_py.ipfs_parquet_to_car(resources, metadata)
+        self.ipfs_kit_py = ipfs_kit(resources, metadata)
+        self.storacha_kit_py = storacha_kit_py(resources, metadata)
+        self.parquet_to_car_py = ipfs_parquet_to_car_py(resources, metadata)
         return None
     
     def export_cid_list(self, dst_path):

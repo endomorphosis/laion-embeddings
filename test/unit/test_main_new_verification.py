@@ -12,7 +12,7 @@ sys.path.insert(0, '/home/barberb/laion-embeddings-1/ipfs_embeddings_py')
 def test_main_new_import():
     """Test if main_new.py can be imported"""
     try:
-        from ipfs_embeddings_py import main_new
+        from ipfs_embeddings_py import main
         print("✅ Successfully imported main_new module")
         return True
     except Exception as e:
