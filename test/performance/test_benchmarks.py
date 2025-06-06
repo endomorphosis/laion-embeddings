@@ -11,6 +11,9 @@ from main import app
 import psutil
 import os
 
+# Corrected import
+from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+
 # Create test client
 client = TestClient(app)
 

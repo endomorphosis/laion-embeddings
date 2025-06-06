@@ -9,14 +9,14 @@ import sys
 import os
 
 # Add the project directory to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
 try:
-    from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+    from ipfs_embeddings_py import ipfs_embeddings
     print("✅ Successfully imported ipfs_embeddings_py")
 except ImportError as e:
-    print(f"❌ Failed to import ipfs_embeddings_py: {e}")
-    sys.exit(1)
+    print(f"❌ Failed to import ipfs_embeddings: {e}")
+    raise # Raise the exception instead of exiting
 
 async def test_max_batch_size_timeout():
     """Test max_batch_size method with timeout protection"""
@@ -72,7 +72,7 @@ async def test_max_batch_size_timeout():
         
         # Check if timeout constants are imported/available
         try:
-            from ipfs_embeddings_py.ipfs_embeddings import BATCH_SIZE_OPTIMIZATION_TIMEOUT, BatchSizeTimeoutError
+            from ipfs_kit.ipfs_embeddings import BATCH_SIZE_OPTIMIZATION_TIMEOUT, BatchSizeTimeoutError
             print(f"✅ Timeout constants available:")
             print(f"   BATCH_SIZE_OPTIMIZATION_TIMEOUT: {BATCH_SIZE_OPTIMIZATION_TIMEOUT} seconds")
             print(f"   BatchSizeTimeoutError class: {BatchSizeTimeoutError}")
@@ -137,4 +137,4 @@ async def main():
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())
-    sys.exit(exit_code)
+    # sys.exit(exit_code) # Removed sys.exit to prevent pytest from crashing

@@ -65,7 +65,7 @@ class TestMainNewTokenizationWithTimeout(TimeoutTestCase):
         """Test safe tokenizer encoding with timeout protection"""
         def test_encoding():
             try:
-                from ipfs_embeddings_py.main import safe_tokenizer_encode
+                from ipfs_kit.main import safe_tokenizer_encode
                 
                 # Mock tokenizer that could potentially hang
                 mock_tokenizer = Mock()
@@ -106,7 +106,7 @@ class TestMainNewTokenizationWithTimeout(TimeoutTestCase):
         """Test safe tokenizer decoding with timeout protection"""
         def test_decoding():
             try:
-                from ipfs_embeddings_py.main import safe_tokenizer_decode
+                from ipfs_kit.main import safe_tokenizer_decode
                 
                 # Mock tokenizer
                 mock_tokenizer = Mock()
@@ -143,7 +143,7 @@ class TestMainNewBatchProcessingWithTimeout(TimeoutTestCase):
         """Test CID generation with timeout protection"""
         def test_cid():
             try:
-                from ipfs_embeddings_py.main import safe_get_cid, index_cid
+                from ipfs_kit.main import safe_get_cid, index_cid
                 
                 # Test single CID generation
                 test_data = "Hello, world!"
@@ -176,7 +176,7 @@ class TestMainNewBatchProcessingWithTimeout(TimeoutTestCase):
         """Test dataset initialization with timeout protection"""
         def test_init():
             try:
-                from ipfs_embeddings_py.main import init_datasets
+                from ipfs_kit.main import init_datasets
                 
                 # This function often hangs due to network requests
                 # Test with mock parameters
@@ -217,7 +217,7 @@ class TestMainNewChunkingWithTimeout(TimeoutTestCase):
         """Test safe chunker with timeout protection"""
         def test_chunking():
             try:
-                from ipfs_embeddings_py.main import safe_chunker_chunk
+                from ipfs_kit.main import safe_chunker_chunk
                 
                 # Mock chunker and tokenizer
                 mock_chunker = Mock()
@@ -344,10 +344,10 @@ class TestImportTimeouts(TimeoutTestCase):
             try:
                 # These imports sometimes hang due to dependency loading
                 import_tests = [
-                    "ipfs_embeddings_py.main_new",
-                    "ipfs_embeddings_py.ipfs_embeddings",
-                    "ipfs_embeddings_py.chunker",
-                    "ipfs_embeddings_py.ipfs_datasets"
+                    "ipfs_kit.main_new",
+                    "ipfs_kit.ipfs_embeddings",
+                    "ipfs_kit.chunker",
+                    "ipfs_kit.ipfs_datasets"
                 ]
                 
                 successful_imports = 0

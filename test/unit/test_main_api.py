@@ -8,6 +8,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from main import app, InputValidator
+from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py # Corrected import
 
 client = TestClient(app)
 

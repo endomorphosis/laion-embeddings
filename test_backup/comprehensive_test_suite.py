@@ -32,11 +32,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import main components
 try:
-    from ipfs_embeddings_py.main_new import init_datasets, safe_get_cid, index_cid
+    from ipfs_kit.main_new import init_datasets, safe_get_cid, index_cid
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
     from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
     from ipfs_embeddings_py.ipfs_datasets import ipfs_datasets_py
-    from ipfs_embeddings_py.chunker import chunker
-    from ipfs_embeddings_py.ipfs_multiformats import ipfs_multiformats_py
+    from ipfs_kit.chunker import chunker
+    from ipfs_kit.ipfs_multiformats import ipfs_multiformats_py
     from search_embeddings.search_embeddings import search_embeddings
     from create_embeddings.create_embeddings import create_embeddings
     from shard_embeddings.shard_embeddings import shard_embeddings
@@ -126,7 +128,7 @@ class TestCoreComponents(unittest.TestCase):
     def test_safe_get_cid(self):
         """Test CID generation functionality"""
         try:
-            from ipfs_embeddings_py.main_new import safe_get_cid
+            from ipfs_kit.main_new import safe_get_cid
             
             # Test with string data
             test_data = "Hello, world!"
@@ -151,7 +153,7 @@ class TestCoreComponents(unittest.TestCase):
     def test_index_cid(self):
         """Test CID indexing functionality"""
         try:
-            from ipfs_embeddings_py.main_new import index_cid
+            from ipfs_kit.main_new import index_cid
             
             test_samples = ["sample1", "sample2", "sample3"]
             cids = index_cid(test_samples)
@@ -171,7 +173,7 @@ class TestCoreComponents(unittest.TestCase):
     def test_init_datasets(self):
         """Test dataset initialization functionality"""
         try:
-            from ipfs_embeddings_py.main_new import init_datasets
+            from ipfs_kit.main_new import init_datasets
             
             result = init_datasets(
                 model="thenlper/gte-small",
@@ -489,7 +491,7 @@ class TestErrorHandling(unittest.TestCase):
         try:
             # Test CID generation with empty input
             try:
-                from ipfs_embeddings_py.main_new import safe_get_cid
+                from ipfs_kit.main_new import safe_get_cid
                 cid = safe_get_cid("")
                 # Should handle empty string gracefully
                 print("✓ Empty input handling test passed")

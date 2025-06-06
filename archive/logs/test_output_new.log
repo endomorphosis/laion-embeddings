@@ -1,0 +1,11 @@
+INFO:__main__:Testing MCP server startup...
+ERROR:__main__:❌ Server startup test failed: invalid syntax (__init__.py, line 1)
+Traceback (most recent call last):
+  File "/home/barberb/laion-embeddings-1/test_mcp_server_startup.py", line 26, in test_server_startup
+    from src.mcp_server.fastapi_integration import create_fastapi_app
+  File "/home/barberb/laion-embeddings-1/src/mcp_server/fastapi_integration.py", line 17, in <module>
+    from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+  File "/home/barberb/laion-embeddings-1/ipfs_embeddings_py/__init__.py", line 1
+    from .ipfs_embeddings from ipfs_kit_py import ipfs_kit
+                          ^^^^
+SyntaxError: invalid syntax

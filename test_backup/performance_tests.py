@@ -22,6 +22,7 @@ import gc
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
     from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
     from ipfs_embeddings_py.main_new import safe_get_cid, index_cid
 except ImportError as e:

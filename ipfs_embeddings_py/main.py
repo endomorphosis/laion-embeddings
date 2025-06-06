@@ -93,8 +93,10 @@ from multiprocessing import Process
 import concurrent.futures
 import concurrent
 import json
-from ipfs_datasets import ipfs_datasets_py
-from ipfs_accelerate_py import ipfs_accelerate_py
+from ipfs_embeddings_py.ipfs_datasets import ipfs_datasets_py
+from ipfs_kit_py.ipfs_kit import ipfs_kit
+from ipfs_kit_py.ipfs_kit import ipfs_kit
+import ipfs_accelerate_py
 import multiformats
 from queue import Queue
 

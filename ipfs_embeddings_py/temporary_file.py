@@ -814,5 +814,5 @@ if __name__ == "__main__":
         ]
     }
     ipfs_accelerate_py = ipfs_accelerate_py(resources, metadata)
-    asyncio.run(ipfs_accelerate_py.__test__(resources, metadata))
+    asyncio.run(ipfs_kit.__test__(resources, metadata))
     print("test complete")

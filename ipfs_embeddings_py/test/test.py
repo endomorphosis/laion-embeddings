@@ -1,6 +1,7 @@
 
 from datasets import load_dataset
-import ipfs_embeddings_py.ipfs_embeddings as ipfs_embeddings
+from ipfs_kit_py.ipfs_kit import ipfs_kit
+from ipfs_embeddings_py import ipfs_embeddings as ipfs_embeddings
 
 class test_ipfs_embeddings:
     def __init__(self):

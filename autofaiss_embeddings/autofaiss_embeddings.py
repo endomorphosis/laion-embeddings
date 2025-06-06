@@ -1,4 +1,5 @@
-from ..ipfs_embeddings_py import ipfs_embeddings_py
+from ..ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+from ipfs_kit_py.ipfs_kit import ipfs_kit
  
 class autofaiss_embeddings:
     def __init__(self, resources=None, metadata=None):
@@ -12,14 +13,14 @@ class autofaiss_embeddings:
         test_auto_faiss_chunks = None
         test_auto_faiss_shards = None
         try:
-            test_auto_faiss = self.ipfs_embeddings_py.autofaiss_chunks()
+            test_auto_faiss = self.ipfs_kit.autofaiss_chunks()
         except Exception as e:
             test_auto_faiss = e
             print(e)
             raise e
         
         try:
-            test_auto_faiss_shards = self.ipfs_embeddings_py.autofaiss_shards()
+            test_auto_faiss_shards = self.ipfs_kit.autofaiss_shards()
         except Exception as e:
             test_auto_faiss_shards = e
             print(e)
@@ -33,5 +34,3 @@ if __name__ == "main":
     resources = {}
     test_auto_faiss = autofaiss_embeddings(resources, metadata)
     test_auto_faiss.test()
- 
-    

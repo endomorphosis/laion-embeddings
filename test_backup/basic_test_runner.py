@@ -53,11 +53,11 @@ def test_basic_functionality():
     print("=" * 60)
     
     module_tests = [
-        ("ipfs_embeddings_py.ipfs_embeddings", None),
-        ("ipfs_embeddings_py.main_new", None),
-        ("ipfs_embeddings_py.chunker", None),
-        ("ipfs_embeddings_py.ipfs_datasets", None),
-        ("ipfs_embeddings_py.ipfs_multiformats", None),
+        ("ipfs_kit.ipfs_embeddings", None),
+        ("ipfs_kit.main_new", None),
+        ("ipfs_kit.chunker", None),
+        ("ipfs_kit.ipfs_datasets", None),
+        ("ipfs_kit.ipfs_multiformats", None),
     ]
     
     for module, path in module_tests:
@@ -144,6 +144,7 @@ def test_ipfs_embeddings_class():
     print("=" * 60)
     
     try:
+        from ipfs_kit_py.ipfs_kit import ipfs_kit
         from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
         
         # Test basic metadata and resources
@@ -183,22 +184,22 @@ def test_ipfs_embeddings_class():
             required_attrs = ['resources', 'metadata', 'tei_endpoints', 'local_endpoints']
             for attr in required_attrs:
                 if hasattr(embeddings, attr):
-                    print(f"✓ ipfs_embeddings_py.{attr}: Present")
+                    print(f"✓ ipfs_kit.{attr}: Present")
                 else:
-                    print(f"✗ ipfs_embeddings_py.{attr}: Missing")
+                    print(f"✗ ipfs_kit.{attr}: Missing")
             
             # Test status method
             if hasattr(embeddings, 'status'):
                 status = embeddings.status()
-                print(f"✓ ipfs_embeddings_py.status(): {type(status).__name__}")
+                print(f"✓ ipfs_kit.status(): {type(status).__name__}")
             else:
-                print("✗ ipfs_embeddings_py.status(): Method not found")
+                print("✗ ipfs_kit.status(): Method not found")
                 
         except Exception as e:
             print(f"✗ ipfs_embeddings_py initialization: {e}")
             
     except ImportError as e:
-        print(f"✗ Could not import ipfs_embeddings_py: {e}")
+        print(f"✗ Could not from ipfs_kit_py import ipfs_kit: {e}")
 
 def test_existing_test_files():
     """Run existing test files to see what works"""

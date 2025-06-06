@@ -94,7 +94,8 @@ except Exception as e:
 
 
 from multiprocessing import Process
-from ipfs_datasets import ipfs_datasets_py
+from ipfs_embeddings_py.ipfs_datasets import ipfs_datasets_py
+from ipfs_kit_py.ipfs_kit import ipfs_kit
 
 # ==============================================================================
 # ADAPTIVE BATCH PROCESSING OPTIMIZATION
@@ -705,7 +706,7 @@ class ipfs_embeddings_py:
         self.qdrant_kit_py = qdrant_kit_py(resources, metadata)
         self.elasticsearch_kit = elasticsearch_kit(resources, metadata)
         self.faiss_kit = faiss_kit_py(resources, metadata)
-        self.ipfs_accelerate_py = ipfs_accelerate_py.ipfs_accelerate_py(resources, metadata)
+        self.ipfs_accelerate_py = ipfs_kit.ipfs_accelerate_py(resources, metadata)
         self.process_new_dataset_shard = self.ipfs_datasets.process_new_dataset_shard
         self.process_index_shard = self.ipfs_datasets.process_index_shard
         self.ipfs_parquet_to_car = self.ipfs_datasets.ipfs_parquet_to_car_py
@@ -809,7 +810,7 @@ class ipfs_embeddings_py:
         return results
     
     async def init_endpoints(self, models, endpoint_list=None):
-        results = await self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
+        results = await self.ipfs_kit.init_endpoints(models, endpoint_list)
         return results
 
     def load_index(self, index):
@@ -1442,7 +1443,7 @@ class ipfs_embeddings_py:
         return results
     
     async def init_endpoints(self, models, endpoint_list=None):
-        results = await self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
+        results = await self.ipfs_kit.init_endpoints(models, endpoint_list)
         return results
 
     def load_index(self, index):

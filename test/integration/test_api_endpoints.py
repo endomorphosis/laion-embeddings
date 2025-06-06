@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from main import app
 from test.fixtures.sample_data import SAMPLE_DATASETS, SAMPLE_MODELS
+from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py # Corrected import
 
 client = TestClient(app)
 

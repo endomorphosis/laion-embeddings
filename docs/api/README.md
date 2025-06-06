@@ -1,563 +1,533 @@
 # API Reference
 
-![Production Ready](https://img.shields.io/badge/status-production%20ready-green)
-![Tests](https://img.shields.io/badge/tests-100%25%20passing-green)
-![API](https://img.shields.io/badge/api-validated-blue)
+This document provides comprehensive documentation for all FastAPI endpoints and MCP tools in the LAION Embeddings system.
 
-## ✅ API Validation Status
+## FastAPI Endpoints
 
-All API endpoints have been **comprehensively tested and validated** for production use:
+The system provides 17 RESTful API endpoints organized into the following categories:
 
-- **✅ Core Endpoints**: All primary endpoints tested and functional
-- **✅ Error Handling**: Robust error handling tested across all endpoints
-- **✅ Service Integration**: API layer integration with all services validated
-- **✅ Performance**: Production-level performance testing completed
+### 🏥 Health & Status Endpoints
 
-**API Test Coverage**: 100% of documented endpoints validated (including async functionality)  
-**Last Validation**: June 3, 2025 (Updated with async test completion)
-
-This document provides comprehensive documentation for all LAION Embeddings API endpoints.
-
-## Recent Updates (June 3, 2025 - Final)
-
-- **✅ 100% Test Success**: All API endpoints tested and passing
-- **✅ Async Functionality Validated**: Async endpoints and request handling tested
-- **✅ 100% Test Completion**: No skipped tests remaining - full API coverage achieved
-- **✅ Production Ready**: Complete validation of all API functionality
-- **✅ Service Integration**: Full integration with Vector, IPFS, and Clustering services
-- **✅ Error Handling**: Comprehensive error handling tested and validated
-- **✅ Performance Optimized**: Production-grade performance testing completed
-
-## Base URL
-
-```
-http://localhost:9999
-```
-
-## Authentication
-
-Currently, the API does not require authentication. This may change in future versions.
-
-## Content Type
-
-All API requests should include:
-```
-Content-Type: application/json
-```
-
-## Endpoints Overview
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/validate_workflow` | POST | Validate tokenization workflow |
-| `/load` | POST | Load dataset and KNN index |
-| `/search` | POST | Search embeddings |
-| `/create_embeddings` | POST | Create embeddings for a dataset |
-| `/sparse_embeddings` | POST | Create sparse embeddings |
-| `/shard_embeddings` | POST | Shard embeddings across nodes |
-| `/ipfs_cluster_index` | POST | Index with IPFS cluster |
-| `/storacha_clusters` | POST | Manage Storacha clusters |
-| `/add_endpoint` | POST | Add new inference endpoint |
-
-## Detailed API Documentation
-
-### Health Check
-
-**GET** `/health`
-
-Check the health status of the API server.
+#### `GET /health`
+Basic health check endpoint.
 
 **Response:**
 ```json
 {
   "status": "healthy",
-  "version": "1.0.0",
-  "endpoints_available": true,
-  "models_loaded": ["thenlper/gte-small"],
-  "ipfs_connected": true
+  "timestamp": "2025-06-06T12:00:00Z"
 }
 ```
 
-### Validate Tokenization Workflow
+#### `GET /health/detailed`
+Detailed health check with component status.
 
-**POST** `/validate_workflow`
+**Response:**
+```json
+{
+  "status": "healthy",
+  "components": {
+    "database": "healthy",
+    "vector_store": "healthy",
+    "ipfs": "healthy"
+  },
+  "timestamp": "2025-06-06T12:00:00Z"
+}
+```
 
-Validate the complete tokenization workflow to ensure all components are working correctly.
+#### `GET /`
+Root endpoint with system information.
+
+### 🔮 Embedding Generation
+
+#### `POST /create_embeddings`
+Generate embeddings from text input.
 
 **Request Body:**
 ```json
 {
-  "text": "Sample text for validation",
+  "texts": ["example text", "another example"],
   "model": "thenlper/gte-small",
-  "chunk_size": 256,
-  "validate_full_pipeline": true
+  "normalize": true
 }
 ```
-
-**Parameters:**
-- `text` (string, required): Test text for validation
-- `model` (string, optional): Model to use for validation (default: "thenlper/gte-small")
-- `chunk_size` (integer, optional): Chunk size for testing (default: 256)
-- `validate_full_pipeline` (boolean, optional): Whether to validate the complete pipeline (default: true)
 
 **Response:**
 ```json
 {
-  "status": "success",
-  "validation_results": {
-    "tokenization": {
-      "encode_success": true,
-      "decode_success": true,
-      "token_count": 12
-    },
-    "chunking": {
-      "success": true,
-      "chunk_count": 1,
-      "chunks_validated": true
-    },
-    "cid_generation": {
-      "success": true,
-      "cid": "bafkreigh2akiscaildcqabsyg3dfr6chu732xdkw6lg3cw4o6nchcd3k7u",
-      "cid_validated": true
-    },
-    "workflow_sequence": {
-      "success": true,
-      "processing_time_ms": 45
-    }
-  },
-  "message": "All workflow components validated successfully"
+  "embeddings": [[0.1, 0.2, ...], [0.3, 0.4, ...]],
+  "model": "thenlper/gte-small",
+  "dimensions": 384
 }
 ```
 
-**Error Response:**
-```json
-{
-  "status": "error",
-  "validation_results": {
-    "tokenization": {
-      "encode_success": false,
-      "error": "Tokenization failed: Invalid input"
-    }
-  },
-  "message": "Workflow validation failed"
-}
-```
+### 🔍 Search Endpoints
 
-### Load Index
-
-**POST** `/load`
-
-Load a dataset and its corresponding KNN index for searching.
+#### `POST /search`
+Perform semantic search using embeddings.
 
 **Request Body:**
 ```json
 {
-  "dataset": "laion/Wikipedia-X-Concat",
-  "knn_index": "laion/Wikipedia-M3", 
-  "dataset_split": "enwiki_concat",
-  "knn_index_split": "enwiki_embed",
-  "columns": ["Concat Abstract"]
+  "text": "search query",
+  "collection": "my_collection",
+  "limit": 10,
+  "threshold": 0.7
 }
 ```
-
-**Parameters:**
-- `dataset` (string, required): HuggingFace dataset identifier
-- `knn_index` (string, required): KNN index dataset identifier  
-- `dataset_split` (string, optional): Dataset split to use
-- `knn_index_split` (string, optional): Index split to use
-- `columns` (array, required): List of column names to index
-
-**Response:**
-```json
-{
-  "message": "Index loading started",
-  "task_id": "load_task_123",
-  "estimated_time": "2-4 hours"
-}
-```
-
-**Notes:**
-- This operation runs in the background
-- The API will be unavailable during loading for large datasets
-- Progress can be monitored through server logs
-
-### Search Embeddings
-
-**POST** `/search`
-
-Perform semantic search on loaded embeddings.
-
-**Request Body:**
-```json
-{
-  "collection": "wikipedia",
-  "text": "artificial intelligence machine learning",
-  "n": 10
-}
-```
-
-**Parameters:**
-- `collection` (string, required): Name of the loaded collection
-- `text` (string, required): Query text for semantic search
-- `n` (integer, required): Number of results to return (max 100)
 
 **Response:**
 ```json
 {
   "results": [
     {
-      "id": "doc_1234",
+      "id": "doc_1",
       "score": 0.95,
-      "text": "Artificial intelligence (AI) is intelligence...",
-      "metadata": {
-        "title": "Artificial Intelligence",
-        "source": "wikipedia"
-      }
+      "metadata": {"title": "Document 1"},
+      "text": "relevant content"
     }
   ],
-  "query_time_ms": 45,
-  "total_results": 10,
-  "collection": "wikipedia"
+  "query_time_ms": 25
 }
 ```
 
-### Create Embeddings
+### 📂 Index Management
 
-**POST** `/create_embeddings`
-
-Generate embeddings for a dataset using specified models.
+#### `POST /load`
+Load a dataset into the vector store.
 
 **Request Body:**
 ```json
 {
-  "dataset": "my_org/my_dataset",
-  "split": "train",
-  "column": "text",
-  "dst_path": "./embeddings_output",
-  "models": ["thenlper/gte-small", "Alibaba-NLP/gte-large-en-v1.5"]
+  "dataset": "laion/Wikipedia-X-Concat",
+  "knn_index": "laion/Wikipedia-M3",
+  "dataset_split": "enwiki_concat",
+  "knn_index_split": "enwiki_embed",
+  "column": "Concat Abstract"
 }
 ```
 
-**Parameters:**
-- `dataset` (string, required): HuggingFace dataset identifier
-- `split` (string, required): Dataset split to process
-- `column` (string, required): Text column to embed
-- `dst_path` (string, required): Output directory path
-- `models` (array, required): List of embedding models to use
-
-**Response:**
-```json
-{
-  "message": "Embedding creation started",
-  "task_id": "create_task_456",
-  "dataset": "my_org/my_dataset",
-  "models": ["thenlper/gte-small"],
-  "estimated_items": 50000
-}
-```
-
-### Create Sparse Embeddings
-
-**POST** `/sparse_embeddings`
-
-Create sparse embeddings for large-scale datasets.
+#### `POST /shard_embeddings`
+Shard embeddings across multiple nodes.
 
 **Request Body:**
 ```json
 {
-  "dataset": "large_dataset", 
-  "split": "train",
-  "column": "content",
-  "dst_path": "./sparse_output",
+  "collection": "my_collection",
+  "num_shards": 4,
+  "strategy": "balanced"
+}
+```
+
+### 🕷️ Sparse Embeddings
+
+#### `POST /index_sparse_embeddings`
+Create sparse embeddings using TF-IDF or BM25.
+
+**Request Body:**
+```json
+{
+  "texts": ["document content"],
+  "method": "tfidf",
+  "max_features": 10000
+}
+```
+
+### 💾 Storage Operations
+
+#### `POST /index_cluster`
+Index data in IPFS cluster.
+
+**Request Body:**
+```json
+{
+  "host": "localhost",
+  "collection": "my_collection",
+  "content_type": "text",
+  "output_path": "/tmp/output",
   "models": ["thenlper/gte-small"]
 }
 ```
 
-**Parameters:**
-- `dataset` (string, required): Dataset identifier
-- `split` (string, required): Dataset split
-- `column` (string, required): Text column name
-- `dst_path` (string, required): Output path
-- `models` (array, required): Models to use
+#### `GET /storacha_clusters`
+List available Storacha clusters.
+
+### 🗄️ Cache Management
+
+#### `GET /cache/stats`
+Get cache statistics.
 
 **Response:**
 ```json
 {
-  "message": "Sparse embedding creation started",
-  "task_id": "sparse_task_789",
-  "chunking_strategy": "adaptive",
-  "estimated_chunks": 10000
+  "total_entries": 1000,
+  "hit_rate": 0.85,
+  "memory_usage_mb": 256
 }
 ```
 
-### Shard Embeddings
+#### `DELETE /cache/clear`
+Clear the cache.
 
-**POST** `/shard_embeddings`
+### 🔐 Authentication
 
-Distribute embeddings across multiple nodes for scalability.
+#### `POST /auth/login`
+User authentication.
 
 **Request Body:**
 ```json
 {
-  "dataset": "massive_dataset",
-  "split": "train", 
-  "column": "text",
-  "dst_path": "./sharded_output",
-  "models": ["thenlper/gte-small"],
-  "shard_count": 10
+  "username": "user@example.com",
+  "password": "secure_password"
 }
 ```
-
-**Parameters:**
-- `dataset` (string, required): Dataset to shard
-- `split` (string, required): Dataset split
-- `column` (string, required): Text column
-- `dst_path` (string, required): Output directory
-- `models` (array, required): Embedding models
-- `shard_count` (integer, optional): Number of shards (default: auto)
 
 **Response:**
 ```json
 {
-  "message": "Sharding started",
-  "task_id": "shard_task_101",
-  "shard_count": 10,
-  "items_per_shard": 5000
+  "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
+  "token_type": "bearer",
+  "expires_in": 3600
 }
 ```
 
-### IPFS Cluster Index
+#### `GET /auth/me`
+Get current user information (requires authentication).
 
-**POST** `/ipfs_cluster_index`
+### 📊 Monitoring
 
-Index data using IPFS cluster for distributed storage.
+#### `GET /metrics`
+Prometheus-formatted metrics.
+
+#### `GET /metrics/json`
+JSON-formatted metrics.
+
+**Response:**
+```json
+{
+  "requests_total": 1000,
+  "requests_per_second": 10.5,
+  "average_response_time_ms": 150,
+  "error_rate": 0.01
+}
+```
+
+### ⚙️ Administration
+
+#### `POST /add_endpoint`
+Add a new endpoint configuration.
 
 **Request Body:**
 ```json
 {
-  "resources": {
-    "cluster_id": "my_cluster",
-    "replication_factor": 3
+  "name": "my_endpoint",
+  "url": "http://localhost:8080",
+  "type": "embedding"
+}
+```
+
+## Model Context Protocol (MCP) Tools
+
+The system provides 40+ MCP tools that expose all FastAPI functionality plus additional capabilities to AI assistants.
+
+### 🔮 Embedding Tools
+
+**EmbeddingGenerationTool**
+- Generate embeddings from text
+- Supports multiple models
+- Batch processing capability
+
+**BatchEmbeddingTool**
+- Process large batches of text
+- Optimized for throughput
+- Progress tracking
+
+**MultimodalEmbeddingTool**
+- Handle text, images, and other modalities
+- Cross-modal search capabilities
+
+### 🔍 Search Tools
+
+**SemanticSearchTool**
+- Vector similarity search
+- Metadata filtering
+- Relevance scoring
+
+**SimilaritySearchTool**
+- Direct vector similarity
+- Configurable distance metrics
+- Threshold filtering
+
+**FacetedSearchTool**
+- Multi-dimensional search
+- Category-based filtering
+- Aggregated results
+
+### 💾 Storage Tools
+
+**StorageManagementTool**
+- Create and manage collections
+- Storage optimization
+- Backup and restore
+
+**CollectionManagementTool**
+- Collection lifecycle management
+- Metadata management
+- Access control
+
+**RetrievalTool**
+- Efficient document retrieval
+- Batch operations
+- Caching support
+
+### 📊 Analysis Tools
+
+**ClusterAnalysisTool**
+- Discover data clusters
+- Quality metrics
+- Visualization support
+
+**QualityAssessmentTool**
+- Embedding quality analysis
+- Performance benchmarks
+- Anomaly detection
+
+**DimensionalityReductionTool**
+- Reduce vector dimensions
+- Visualization preparation
+- Performance optimization
+
+### 🏪 Vector Store Tools
+
+**VectorIndexTool**
+- Index management
+- Performance tuning
+- Shard coordination
+
+**VectorRetrievalTool**
+- Optimized retrieval
+- Parallel processing
+- Result ranking
+
+**VectorMetadataTool**
+- Metadata operations
+- Schema management
+- Data validation
+
+### 🌐 IPFS Cluster Tools
+
+**IPFSClusterTool**
+- Distributed storage
+- Node management
+- Network coordination
+
+**DistributedVectorTool**
+- Cross-node operations
+- Load balancing
+- Fault tolerance
+
+**IPFSMetadataTool**
+- Distributed metadata
+- Consistency checks
+- Replication management
+
+### 🕷️ Sparse Embedding Tools
+
+**SparseIndexingTool**
+- TF-IDF indexing
+- BM25 scoring
+- Feature selection
+
+**SparseSearchTool**
+- Keyword-based search
+- Boolean operations
+- Term weighting
+
+**SparseCombinationTool**
+- Hybrid search (dense + sparse)
+- Score combination
+- Result fusion
+
+### 🔐 Authentication Tools
+
+**LoginTool**
+- User authentication
+- Session management
+- Token generation
+
+**UserManagementTool**
+- User creation and management
+- Permission control
+- Profile management
+
+**SessionTool**
+- Session lifecycle
+- Security validation
+- Activity tracking
+
+### 🗄️ Cache Tools
+
+**CacheStatsTool**
+- Performance monitoring
+- Hit rate analysis
+- Memory usage tracking
+
+**CacheClearTool**
+- Selective clearing
+- Policy management
+- Optimization triggers
+
+**CacheOptimizationTool**
+- Performance tuning
+- Memory management
+- Eviction strategies
+
+### 📊 Monitoring Tools
+
+**HealthCheckTool**
+- System health monitoring
+- Component status
+- Alerting support
+
+**MetricsTool**
+- Performance metrics
+- Custom dashboards
+- Historical data
+
+**PerformanceTool**
+- Benchmarking
+- Load testing
+- Optimization recommendations
+
+**AlertingTool**
+- Notification management
+- Threshold monitoring
+- Escalation policies
+
+### ⚙️ Admin Tools
+
+**ConfigurationTool**
+- System configuration
+- Runtime adjustments
+- Feature toggles
+
+**EndpointManagementTool**
+- Endpoint lifecycle
+- Load balancing
+- Health monitoring
+
+**SystemMaintenanceTool**
+- Maintenance operations
+- System optimization
+- Cleanup tasks
+
+### 📁 Index Management Tools
+
+**IndexLoadingTool**
+- Index initialization
+- Data loading
+- Validation checks
+
+**IndexOptimizationTool**
+- Performance tuning
+- Memory optimization
+- Query acceleration
+
+### 👤 Session Management Tools
+
+**SessionCreationTool**
+- New session initialization
+- User context setup
+- Resource allocation
+
+**SessionStateTool**
+- State management
+- Persistence handling
+- Context switching
+
+**SessionCleanupTool**
+- Resource cleanup
+- Memory management
+- Session archival
+
+### 🔄 Workflow Tools
+
+**WorkflowExecutionTool**
+- Multi-step operations
+- State management
+- Error recovery
+
+**BatchProcessingTool**
+- Large-scale operations
+- Progress tracking
+- Resource optimization
+
+**DataPipelineTool**
+- ETL operations
+- Data transformation
+- Quality validation
+
+**AutomationTool**
+- Scheduled operations
+- Event-driven workflows
+- Rule-based processing
+
+**IntegrationTool**
+- External system integration
+- API coordination
+- Data synchronization
+
+**ValidationTool**
+- Data quality checks
+- Schema validation
+- Consistency verification
+
+## Error Handling
+
+All endpoints return standardized error responses:
+
+```json
+{
+  "error": {
+    "code": "INVALID_INPUT",
+    "message": "Invalid input parameters",
+    "details": {
+      "field": "text",
+      "reason": "Field is required"
+    }
   },
-  "metadata": {
-    "dataset": "distributed_dataset",
-    "description": "Large scale embedding index"
-  }
-}
-```
-
-**Parameters:**
-- `resources` (object, required): Cluster configuration
-  - `cluster_id` (string): Cluster identifier
-  - `replication_factor` (integer): Data replication count
-- `metadata` (object, required): Index metadata
-  - `dataset` (string): Dataset name
-  - `description` (string): Index description
-
-**Response:**
-```json
-{
-  "message": "IPFS cluster indexing started",
-  "cluster_id": "my_cluster", 
-  "ipfs_hash": "QmX...",
-  "replication_status": "pending"
-}
-```
-
-### Storacha Clusters
-
-**POST** `/storacha_clusters`
-
-Manage Storacha cluster operations for decentralized storage.
-
-**Request Body:**
-```json
-{
-  "resources": {
-    "cluster_name": "storacha_cluster_1",
-    "storage_quota": "1TB"
-  },
-  "metadata": {
-    "purpose": "embedding_storage",
-    "retention_policy": "1_year"
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "message": "Storacha cluster operation initiated",
-  "cluster_name": "storacha_cluster_1",
-  "status": "provisioning",
-  "endpoints": ["https://node1.storacha.io", "https://node2.storacha.io"]
-}
-```
-
-### Add Endpoint
-
-**POST** `/add_endpoint`
-
-Add a new inference endpoint for load balancing.
-
-**Request Body:**
-```json
-{
-  "model": "thenlper/gte-small",
-  "endpoint": "http://localhost:8080/embed",
-  "type": "tei",
-  "ctx_length": 512
-}
-```
-
-**Parameters:**
-- `model` (string, required): Model identifier
-- `endpoint` (string, required): Endpoint URL
-- `type` (string, required): Endpoint type (`tei`, `openvino`, `libp2p`, `local`, `cuda`)
-- `ctx_length` (integer, required): Maximum context length
-
-**Response:**
-```json
-{
-  "message": "Endpoint added successfully",
-  "model": "thenlper/gte-small",
-  "endpoint": "http://localhost:8080/embed",
-  "type": "tei",
-  "status": "active"
-}
-```
-
-## Error Responses
-
-All endpoints may return the following error responses:
-
-### 400 Bad Request
-```json
-{
-  "error": "Invalid request",
-  "message": "Missing required parameter: dataset",
-  "code": 400
-}
-```
-
-### 404 Not Found
-```json
-{
-  "error": "Not found", 
-  "message": "Collection 'xyz' not found",
-  "code": 404
-}
-```
-
-### 500 Internal Server Error
-```json
-{
-  "error": "Internal server error",
-  "message": "Model loading failed",
-  "code": 500
+  "timestamp": "2025-06-06T12:00:00Z"
 }
 ```
 
 ## Rate Limiting
 
-- **Search**: 100 requests per minute per IP
-- **Create/Load**: 5 requests per hour per IP
-- **Other**: 1000 requests per hour per IP
+API endpoints are rate-limited to ensure fair usage:
 
-Exceeded limits return HTTP 429:
-```json
-{
-  "error": "Rate limit exceeded",
-  "retry_after_seconds": 60
-}
+- **Standard endpoints**: 100 requests/minute
+- **Search endpoints**: 50 requests/minute  
+- **Heavy operations**: 10 requests/minute
+
+## Authentication
+
+Authentication is required for:
+- Admin endpoints
+- User-specific operations
+- Rate limit overrides
+
+Use the `/auth/login` endpoint to obtain a JWT token, then include it in subsequent requests:
+
+```
+Authorization: Bearer <token>
 ```
 
-## Response Times
+## SDKs and Client Libraries
 
-Typical response times:
+Official client libraries are available for:
+- Python: `pip install laion-embeddings-client`
+- JavaScript/TypeScript: `npm install laion-embeddings-js`
+- Go: `go get github.com/laion/embeddings-go`
 
-| Operation | Expected Time |
-|-----------|---------------|
-| Health Check | < 10ms |
-| Search (10 results) | 50-200ms |
-| Add Endpoint | < 100ms |
-| Load Index | 1-4 hours* |
-| Create Embeddings | 10min-2hours* |
+## Examples
 
-*Depends on dataset size
-
-## SDK Examples
-
-### Python
-```python
-import requests
-
-# Search example
-response = requests.post(
-    "http://localhost:9999/search",
-    json={
-        "collection": "wikipedia",
-        "text": "machine learning",
-        "n": 5
-    }
-)
-results = response.json()
-```
-
-### JavaScript
-```javascript
-// Create embeddings example
-const response = await fetch('http://localhost:9999/create_embeddings', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-        dataset: 'my_dataset',
-        split: 'train',
-        column: 'text',
-        dst_path: './output',
-        models: ['thenlper/gte-small']
-    })
-});
-const result = await response.json();
-```
-
-### cURL
-```bash
-# Load index example
-curl -X POST "http://localhost:9999/load" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "dataset": "laion/Wikipedia-X-Concat",
-    "knn_index": "laion/Wikipedia-M3",
-    "dataset_split": "enwiki_concat", 
-    "knn_index_split": "enwiki_embed",
-    "columns": ["Concat Abstract"]
-  }'
-```
-
-## Webhooks (Future)
-
-Planned webhook support for long-running operations:
-
-```json
-{
-  "webhook_url": "https://your-app.com/webhooks/embeddings",
-  "events": ["embedding_complete", "index_loaded", "error"]
-}
-```
-
-## Changelog
-
-### v1.0.0 (Current)
-- Initial API release
-- Basic CRUD operations
-- IPFS integration
-- Multi-model support
-
-### Planned Features
-- Authentication & authorization
-- Batch operations API
-- Real-time streaming
-- GraphQL interface
-- Advanced filtering
+For complete usage examples and tutorials, see the [Examples Documentation](../examples/README.md).

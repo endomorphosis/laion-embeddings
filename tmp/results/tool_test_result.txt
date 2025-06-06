@@ -1,0 +1,3 @@
+Tool test result: 0/9 new tools found
+Total tools: 0
+INCOMPLETE: Some tools missing

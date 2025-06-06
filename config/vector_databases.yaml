@@ -1,0 +1,328 @@
+# Vector Database Configuration
+# This file defines the unified configuration for all supported vector databases
+
+# Default vector database to use
+default: "qdrant"
+
+# Vector database configurations
+databases:
+  qdrant:
+    enabled: true
+    host: "localhost"
+    port: 6333
+    collection_name: "laion_embeddings"
+    vector_size: 512
+    distance: "cosine"
+    timeout: 30
+    prefer_grpc: false
+    https: false
+    api_key: null
+    prefix: null
+    
+    # Qdrant-specific settings
+    settings:
+      replication_factor: 1
+      write_consistency_factor: 1
+      on_disk_payload: true
+      hnsw_config:
+        m: 16
+        ef_construct: 100
+        full_scan_threshold: 10000
+      
+    # Index configuration
+    index:
+      name: "laion_embeddings"
+      vectors_config:
+        size: 512
+        distance: "Cosine"
+      optimizers_config:
+        deleted_threshold: 0.2
+        vacuum_min_vector_number: 1000
+        default_segment_number: 0
+        max_segment_size: null
+        memmap_threshold: null
+        indexing_threshold: 20000
+        flush_interval_sec: 5
+        max_optimization_threads: null
+
+  elasticsearch:
+    enabled: true
+    host: "localhost"
+    port: 9200
+    index_name: "laion_embeddings"
+    vector_field: "embedding"
+    text_field: "text"
+    metadata_field: "metadata"
+    timeout: 30
+    max_retries: 3
+    
+    # Elasticsearch-specific settings
+    settings:
+      number_of_shards: 1
+      number_of_replicas: 0
+      max_result_window: 10000
+      
+    # Index mapping
+    mapping:
+      properties:
+        embedding:
+          type: "dense_vector"
+          dims: 512
+          index: true
+          similarity: "cosine"
+        text:
+          type: "text"
+          analyzer: "standard"
+        metadata:
+          type: "object"
+          enabled: true
+        timestamp:
+          type: "date"
+          
+    # Search configuration
+    search:
+      knn:
+        k: 10
+        num_candidates: 100
+      hybrid:
+        text_weight: 0.7
+        vector_weight: 0.3
+
+  pgvector:
+    enabled: true
+    connection_string: "postgresql://user:password@localhost:5432/vector_db"
+    table_name: "embeddings"
+    vector_column: "embedding"
+    dimension: 512
+    distance_strategy: "cosine"
+    pool_size: 10
+    max_overflow: 20
+    pool_timeout: 30
+    pool_recycle: 3600
+    
+    # PostgreSQL-specific settings
+    settings:
+      maintenance_work_mem: "256MB"
+      effective_cache_size: "1GB"
+      shared_preload_libraries: "vector"
+      
+    # Index configuration
+    index:
+      type: "ivfflat"
+      lists: 100
+      probes: 10
+      ef_construction: 64
+      ef_search: 40
+      
+    # Table schema
+    schema:
+      id: "SERIAL PRIMARY KEY"
+      embedding: "vector(512)"
+      text: "TEXT"
+      metadata: "JSONB"
+      created_at: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+      updated_at: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+
+  faiss:
+    enabled: true
+    index_type: "IndexHNSWFlat"  # Options: IndexFlatIP, IndexFlatL2, IndexIVFFlat, IndexHNSWFlat
+    dimension: 512
+    metric_type: "METRIC_INNER_PRODUCT"  # Options: METRIC_L2, METRIC_INNER_PRODUCT
+    storage_path: "data/faiss_indexes"
+    
+    # FAISS-specific settings
+    settings:
+      nlist: 100  # For IVF indexes
+      nprobe: 10  # For IVF indexes
+      M: 16       # For HNSW indexes
+      efConstruction: 200  # For HNSW indexes
+      efSearch: 50         # For HNSW indexes
+      
+    # Index configuration
+    index:
+      train_size: 10000
+      add_batch_size: 1000
+      search_batch_size: 100
+      normalize_vectors: true
+      
+    # Storage options
+    storage:
+      save_interval: 1000  # Save every N additions
+      backup_enabled: true
+      backup_interval: 3600  # Backup every hour
+      compression: true
+
+  ipfs:
+    enabled: true
+    storage_type: "ipfs_ipld"  # Using IPFS with IPLD for structured data
+    dimension: 512
+    ipfs_gateway: "localhost:5001"
+    sharding_enabled: true
+    max_shard_size: 10000  # vectors per shard
+    
+    # IPFS-specific settings
+    settings:
+      pin_content: true
+      replication_factor: 3
+      car_format: true  # Use CAR files for batch operations
+      compression: "zstd"
+      metadata_format: "dag-pb"
+      
+    # IPLD schema configuration
+    ipld:
+      schema_version: "1.0.0"
+      vector_codec: "dag-pb"
+      metadata_codec: "dag-json"
+      chunk_size: 262144  # 256KB chunks
+      
+    # Storage paths and options
+    storage:
+      cache_path: "data/ipfs_cache"
+      manifest_ttl: 3600  # seconds
+      auto_gc: true
+      gc_interval: 7200  # seconds
+      
+    # Search configuration
+    search:
+      distributed: true
+      local_cache: true
+      parallel_shards: true
+      max_concurrent_searches: 10
+
+  duckdb:
+    enabled: true
+    storage_type: "duckdb_parquet"
+    dimension: 512
+    database_path: "data/vector_store.duckdb"
+    table_name: "embeddings"
+    
+    # DuckDB-specific settings
+    settings:
+      memory_limit: "2GB"
+      threads: 4
+      enable_object_cache: true
+      enable_httpfs: true  # For remote parquet files
+      
+    # Parquet configuration
+    parquet:
+      row_group_size: 10000
+      compression: "snappy"
+      statistics: true
+      bloom_filter: true
+      column_encoding: "dictionary"
+      
+    # Storage options
+    storage:
+      partition_by: "date"
+      parquet_path: "data/parquet_files"
+      backup_enabled: true
+      incremental_backup: true
+      
+    # Index configuration
+    index:
+      vector_index_type: "hnsw"  # When HNSW extension available
+      distance_metric: "cosine"
+      ef_construction: 128
+      ef_search: 64
+      max_connections: 16
+      
+    # Performance settings
+    performance:
+      batch_size: 1000
+      parallel_readers: 4
+      cache_size: "512MB"
+      buffer_size: "256MB"
+
+# Global settings
+global:
+  # Embedding configuration
+  embedding:
+    model: "sentence-transformers/all-MiniLM-L6-v2"
+    dimension: 512
+    normalize: true
+    batch_size: 32
+    
+  # Search configuration
+  search:
+    default_limit: 10
+    max_limit: 1000
+    similarity_threshold: 0.7
+    enable_hybrid_search: true
+    
+  # Performance settings
+  performance:
+    connection_pool_size: 10
+    max_concurrent_requests: 100
+    request_timeout: 30
+    retry_attempts: 3
+    retry_delay: 1
+    
+  # Monitoring and logging
+  monitoring:
+    enabled: true
+    metrics_interval: 60
+    health_check_interval: 30
+    log_level: "INFO"
+    log_queries: false
+    
+  # Migration settings
+  migration:
+    batch_size: 1000
+    parallel_workers: 4
+    verify_migration: true
+    backup_before_migration: true
+
+# Environment-specific overrides
+environments:
+  development:
+    global:
+      monitoring:
+        log_level: "DEBUG"
+        log_queries: true
+    databases:
+      qdrant:
+        host: "localhost"
+        port: 6333
+      elasticsearch:
+        host: "localhost"
+        port: 9200
+      pgvector:
+        connection_string: "postgresql://dev_user:dev_pass@localhost:5432/dev_vector_db"
+        
+  production:
+    global:
+      monitoring:
+        log_level: "WARNING"
+        log_queries: false
+      performance:
+        connection_pool_size: 20
+        max_concurrent_requests: 500
+    databases:
+      qdrant:
+        host: "qdrant-cluster.example.com"
+        port: 6333
+        https: true
+        api_key: "${QDRANT_API_KEY}"
+      elasticsearch:
+        host: "elasticsearch-cluster.example.com"
+        port: 9200
+      pgvector:
+        connection_string: "${PGVECTOR_CONNECTION_STRING}"
+        pool_size: 20
+        
+  testing:
+    global:
+      monitoring:
+        enabled: false
+      performance:
+        connection_pool_size: 2
+        max_concurrent_requests: 10
+    databases:
+      faiss:
+        storage_path: "test_data/faiss_indexes"
+      qdrant:
+        collection_name: "test_embeddings"
+      elasticsearch:
+        index_name: "test_embeddings"
+      pgvector:
+        table_name: "test_embeddings"

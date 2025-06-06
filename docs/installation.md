@@ -1,309 +1,217 @@
 # Installation Guide
 
-![Production Ready](https://img.shields.io/badge/status-production%20ready-green)
-![Tests](https://img.shields.io/badge/tests-100%25%20passing-green)
-![Docker](https://img.shields.io/badge/docker-ready-blue)
-
-## ✅ Installation Validation Status
-
-This installation has been **fully validated** with comprehensive testing:
-
-- **✅ All Dependencies**: Successfully installed and tested
-- **✅ Core Services**: Vector, IPFS, and Clustering services operational
-- **✅ Integration Tests**: Full service integration validated
-- **✅ Production Ready**: Deployed and tested in production-like environments
-
-**Test Success Rate**: 100% (64/64 tests passing)  
-**Last Validated**: June 3, 2025
-
-This guide will help you install and set up the LAION Embeddings system.
+This guide will help you install and set up the LAION Embeddings search engine with all its dependencies.
 
 ## Prerequisites
 
-### System Requirements
+The following prerequisites are required:
 
-- **Operating System**: Linux (Ubuntu 20.04+ recommended), macOS, or Windows with WSL2
-- **Python**: 3.8 or higher
-- **Memory**: 8GB RAM minimum (16GB+ recommended)
-- **Storage**: 10GB free space minimum
-- **Network**: Internet connection for downloading models and datasets
+- Python 3.9 or higher
+- pip (Python package manager)
+- IPFS daemon (optional, for IPFS vector store)
+- 8GB+ RAM recommended
+- 20GB+ disk space for embeddings storage
 
-### Hardware Requirements
+## Basic Installation
 
-- **CPU**: Multi-core processor (Intel/AMD)
-- **GPU** (Optional): NVIDIA GPU with CUDA support for GPU acceleration
-- **Network**: Stable internet connection for IPFS operations
+### Step 1: Clone the Repository
 
-## Installation Methods
+```bash
+git clone https://github.com/laion-ai/laion-embeddings.git
+cd laion-embeddings
+```
 
-### Method 1: Docker Installation (Recommended)
+### Step 2: Create and Activate a Virtual Environment (Optional but Recommended)
 
-1. **Install Docker**
-   ```bash
-   # Ubuntu/Debian
-   sudo apt update
-   sudo apt install docker.io docker-compose
-   
-   # Start Docker service
-   sudo systemctl start docker
-   sudo systemctl enable docker
-   ```
+```bash
+# Create virtual environment
+python -m venv venv
 
-2. **Clone the Repository**
-   ```bash
-   git clone https://github.com/laion-ai/embeddings.git
-   cd embeddings
-   ```
+# Activate on Linux/Mac
+source venv/bin/activate
 
-3. **Build and Run with Docker**
-   ```bash
-   # Build the Docker image
-   docker build -t laion-embeddings .
-   
-   # Run the container
-   docker run -p 9999:9999 laion-embeddings
-   ```
+# Activate on Windows
+venv\Scripts\activate
+```
 
-### Method 2: Python Virtual Environment
+### Step 3: Install Dependencies
 
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/laion-ai/embeddings.git
-   cd embeddings
-   ```
+```bash
+# Install basic dependencies
+./install_depends.sh
 
-2. **Create Virtual Environment**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+# Alternatively, use pip directly
+pip install -r requirements.txt
+```
 
-3. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+## Vector Store Dependencies
 
-4. **Install Additional Dependencies**
-   ```bash
-   # For GPU support (optional)
-   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-   
-   # For IPFS integration
-   pip install ipfshttpclient
-   ```
+Different vector stores require different dependencies:
 
-### Method 3: Development Installation
+### FAISS (Built-in)
 
-1. **Install in Development Mode**
-   ```bash
-   git clone https://github.com/laion-ai/embeddings.git
-   cd embeddings
-   pip install -e .
-   ```
+FAISS is included in the basic installation.
 
-2. **Install Development Dependencies**
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
+### Qdrant
+
+```bash
+pip install qdrant-client>=1.1.6
+```
+
+### Elasticsearch
+
+```bash
+pip install elasticsearch>=8.0.0
+```
+
+### pgvector
+
+```bash
+pip install psycopg2-binary>=2.9.5 sqlalchemy>=2.0.0
+```
+
+### IPFS/IPLD
+
+```bash
+# Option 1: Using ipfs_kit_py (recommended)
+pip install ipfs_kit_py>=1.0.0
+
+# Option 2: Using ipfshttpclient
+pip install ipfshttpclient>=0.7.0
+```
+
+### DuckDB/Parquet
+
+```bash
+pip install duckdb>=0.9.0 pyarrow>=14.0.1
+```
+
+## IPFS Setup
+
+If you plan to use the IPFS vector store, you'll need a running IPFS daemon:
+
+### Install IPFS
+
+Follow the instructions at [https://docs.ipfs.tech/install/](https://docs.ipfs.tech/install/)
+
+### Start IPFS Daemon
+
+```bash
+ipfs daemon
+```
+
+## Advanced Installation
+
+### Docker Installation
+
+You can use Docker to run the project:
+
+```bash
+# Build the Docker image
+docker build -t laion-embeddings .
+
+# Run the container
+docker run -p 9999:9999 -v $(pwd)/data:/app/data laion-embeddings
+```
+
+### GPU Support
+
+For GPU support, install the appropriate PyTorch version:
+
+```bash
+# For CUDA 11.8
+pip install torch==2.0.0+cu118 -f https://download.pytorch.org/whl/cu118/torch_stable.html
+
+# For CUDA 12.1
+pip install torch==2.0.0+cu121 -f https://download.pytorch.org/whl/cu121/torch_stable.html
+```
 
 ## Configuration
 
-### 1. Environment Variables
+### Vector Database Configuration
 
-Create a `.env` file in the project root:
+The vector database configuration is stored in `config/vector_databases.yaml`. Edit this file to configure your vector stores:
 
-```bash
-# API Configuration
-FASTAPI_HOST=0.0.0.0
-FASTAPI_PORT=9999
-
-# IPFS Configuration
-IPFS_HOST=127.0.0.1
-IPFS_PORT=5001
-
-# Model Configuration
-DEFAULT_MODEL=thenlper/gte-small
-EMBEDDING_DIMENSION=384
-
-# Storage Configuration
-STORAGE_PATH=./data
-CHECKPOINT_PATH=./checkpoints
-
-# GPU Configuration (if available)
-CUDA_VISIBLE_DEVICES=0
-CUDA_MEMORY_FRACTION=0.8
-```
-
-### 2. Model Downloads
-
-The system will automatically download required models on first use. To pre-download models:
-
-```bash
-python -c "
-from transformers import AutoModel, AutoTokenizer
-models = ['thenlper/gte-small', 'Alibaba-NLP/gte-large-en-v1.5']
-for model in models:
-    AutoModel.from_pretrained(model)
-    AutoTokenizer.from_pretrained(model)
-"
-```
-
-### 3. IPFS Setup
-
-#### Option A: Local IPFS Node
-
-1. **Install IPFS**
-   ```bash
-   # Download and install IPFS
-   wget https://dist.ipfs.io/kubo/v0.22.0/kubo_v0.22.0_linux-amd64.tar.gz
-   tar -xvzf kubo_v0.22.0_linux-amd64.tar.gz
-   cd kubo
-   sudo bash install.sh
-   ```
-
-2. **Initialize IPFS**
-   ```bash
-   ipfs init
-   ipfs daemon
-   ```
-
-#### Option B: Remote IPFS Gateway
-
-Configure remote IPFS endpoints in your environment:
-
-```bash
-export IPFS_GATEWAY_URL=https://ipfs.io
-export IPFS_API_URL=https://ipfs.infura.io:5001
+```yaml
+databases:
+  qdrant:
+    enabled: true
+    host: localhost
+    port: 6333
+    # ... other Qdrant settings ...
+    
+  elasticsearch:
+    enabled: false
+    host: localhost
+    port: 9200
+    # ... other Elasticsearch settings ...
+    
+  pgvector:
+    enabled: false
+    connection_string: "postgresql://user:password@localhost:5432/vectors"
+    # ... other pgvector settings ...
+    
+  faiss:
+    enabled: true
+    storage_path: "data/faiss_indexes"
+    # ... other FAISS settings ...
+    
+  ipfs:
+    enabled: false
+    ipfs_gateway: "localhost:5001"
+    # ... other IPFS settings ...
+    
+  duckdb:
+    enabled: false
+    database_path: "data/vectors.duckdb"
+    storage_path: "data/vector_parquet"
+    # ... other DuckDB settings ...
 ```
 
 ## Verification
 
-### 1. Test the Installation
+To verify your installation:
 
 ```bash
-# Start the server
-./run.sh
+# Run a simple check
+python -m pytest test/test_imports.py
 
-# Or manually
-python3 -m fastapi run main.py
+# Run the comprehensive tests
+python run_comprehensive_tests.py
 ```
-
-### 2. Check API Health
-
-```bash
-curl http://localhost:9999/health
-```
-
-Expected response:
-```json
-{
-  "status": "healthy",
-  "version": "1.0.0",
-  "ipfs_connected": true
-}
-```
-
-### 3. Test Embedding Creation
-
-```bash
-curl -X POST "http://localhost:9999/create_embeddings" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "Hello world",
-    "model": "thenlper/gte-small"
-  }'
-```
-
-### 4. Validate Tokenization Workflow (New in May 2025)
-
-Test the complete tokenization workflow validation:
-
-```bash
-# Run basic tokenization validation
-python test/basic_validation.py
-
-# Run comprehensive workflow tests
-python test/comprehensive_test_suite.py
-
-# Run file-based validation tests
-python test/file_based_test.py
-```
-
-Expected output should show successful validation of:
-- Text tokenization (encoding/decoding)
-- Content chunking with size validation
-- CID generation and verification
-- Complete workflow sequence validation
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Port Already in Use**
-   ```bash
-   # Find process using port 9999
-   lsof -i :9999
-   # Kill the process
-   kill -9 <PID>
-   ```
+#### IPFS Connection Issues
 
-2. **CUDA Not Available**
-   ```bash
-   # Check CUDA installation
-   nvidia-smi
-   # Install CUDA toolkit if needed
-   sudo apt install nvidia-cuda-toolkit
-   ```
+If you encounter IPFS connection issues:
 
-3. **Memory Issues**
-   ```bash
-   # Increase swap space
-   sudo fallocate -l 4G /swapfile
-   sudo chmod 600 /swapfile
-   sudo mkswap /swapfile
-   sudo swapon /swapfile
-   ```
+1. Ensure IPFS daemon is running: `ipfs daemon`
+2. Check the IPFS gateway setting in `config/vector_databases.yaml`
+3. Try disabling sharding for testing: set `sharding_enabled: false`
 
-4. **IPFS Connection Issues**
-   ```bash
-   # Check IPFS daemon status
-   ipfs id
-   # Restart IPFS daemon
-   pkill ipfs
-   ipfs daemon
-   ```
+#### DuckDB Errors
 
-### Performance Optimization
+If you see DuckDB errors:
 
-1. **GPU Acceleration**
-   - Ensure NVIDIA drivers are installed
-   - Install CUDA-compatible PyTorch
-   - Set appropriate GPU memory limits
+1. Ensure you have the latest versions: `pip install --upgrade duckdb pyarrow`
+2. Check file permissions on the database path
+3. Try setting `"memory_limit": "4GB"` in the configuration
 
-2. **Memory Management**
-   - Adjust batch sizes based on available RAM
-   - Use memory mapping for large datasets
-   - Configure swap space appropriately
+#### Out of Memory Errors
 
-3. **Network Optimization**
-   - Use local IPFS node for better performance
-   - Configure IPFS with appropriate bandwidth limits
-   - Use CDN for model downloads
+If you encounter memory issues:
+
+1. Reduce batch sizes in configuration
+2. Use sharding for large vector collections
+3. Consider using a disk-based store like DuckDB instead of in-memory stores
 
 ## Next Steps
 
-1. [Configuration Guide](configuration.md) - Configure endpoints and models
-2. [Quick Start](quickstart.md) - Get started with basic operations
-3. [API Reference](api/README.md) - Explore the API documentation
+After installation, check out:
 
-## Support
-
-If you encounter issues during installation:
-
-1. Check the [troubleshooting guide](troubleshooting/common-issues.md)
-2. Review system requirements
-3. Open an issue on GitHub with:
-   - Operating system details
-   - Python version
-   - Error messages
-   - Installation method used
+- [Quick Start Guide](quickstart.md) to get started quickly
+- [Configuration Guide](configuration.md) for detailed configuration options
+- [API Reference](api/README.md) for the API documentation

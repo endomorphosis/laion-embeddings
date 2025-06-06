@@ -9,9 +9,12 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, Response
 from search_embeddings import search_embeddings
 from create_embeddings import create_embeddings
 from shard_embeddings import shard_embeddings
-from sparse_embeddings import sparse_embeddings
+from sparse_embeddings.sparse_embeddings import sparse_embeddings
 from ipfs_cluster_index import ipfs_cluster_index
+# DEPRECATED: storacha_clusters is deprecated, use ipfs_kit_py instead
 from storacha_clusters import storacha_clusters
+import warnings
+warnings.warn("storacha_clusters is deprecated. Use ipfs_kit_py.storacha_kit instead.", DeprecationWarning)
 from pydantic import BaseModel, Field
 import re
 import time

@@ -26,6 +26,7 @@ try:
     from shard_embeddings.shard_embeddings import shard_embeddings
     from sparse_embeddings.sparse_embeddings import sparse_embeddings
     from storacha_clusters.storacha_clusters import storacha_clusters
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
     from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
 except ImportError as e:
     print(f"Warning: Could not import some modules: {e}")

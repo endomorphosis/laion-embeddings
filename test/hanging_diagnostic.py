@@ -110,11 +110,11 @@ def test_ipfs_embeddings_imports():
     print("\nTesting ipfs_embeddings_py imports...")
     
     ipfs_imports = [
-        ("ipfs_embeddings_py.ipfs_multiformats", "from ipfs_embeddings_py import ipfs_multiformats"),
-        ("ipfs_embeddings_py.chunker", "from ipfs_embeddings_py import chunker"),
-        ("ipfs_embeddings_py.ipfs_datasets", "from ipfs_embeddings_py import ipfs_datasets"),
-        ("ipfs_embeddings_py.main_new", "from ipfs_embeddings_py import main_new"),
-        ("ipfs_embeddings_py.ipfs_embeddings", "from ipfs_embeddings_py import ipfs_embeddings"),
+        ("ipfs_kit.ipfs_multiformats", "from ipfs_embeddings_py import ipfs_multiformats"),
+        ("ipfs_kit.chunker", "from ipfs_embeddings_py import chunker"),
+        ("ipfs_kit.ipfs_datasets", "from ipfs_embeddings_py import ipfs_datasets"),
+        ("ipfs_kit.main_new", "from ipfs_embeddings_py import main_new"),
+        ("ipfs_kit.ipfs_embeddings", "from ipfs_embeddings_py import ipfs_embeddings"),
     ]
     
     hanging_import = None
@@ -146,7 +146,7 @@ def test_specific_functions():
     try:
         print("Importing main_new functions...", end=" ", flush=True)
         with timeout_context(30):
-            from ipfs_embeddings_py.main import safe_get_cid, safe_tokenizer_encode, index_cid
+            from ipfs_kit.main import safe_get_cid, safe_tokenizer_encode, index_cid
         print("✓")
         
         # Test safe_get_cid

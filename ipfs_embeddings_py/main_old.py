@@ -92,8 +92,10 @@ from multiprocessing import Process
 import concurrent.futures
 import concurrent
 import json
-from ipfs_datasets import ipfs_datasets_py
-from ipfs_accelerate_py import ipfs_accelerate_py
+from ipfs_kit_py.ipfs_kit import ipfs_kit
+from ipfs_embeddings_py.ipfs_datasets import ipfs_datasets_py
+from ipfs_kit_py.ipfs_kit import ipfs_kit
+import ipfs_accelerate_py
 
 
 class ipfs_embeddings_py:
@@ -150,7 +152,7 @@ class ipfs_embeddings_py:
         self.resources = resources
         self.metadata = metadata
         self.index_dataset = self.index_dataset
-        self.max_batch_size = self.ipfs_accelerate_py.max_batch_size
+        self.max_batch_size = self.ipfs_kit.max_batch_size
         self.producer = self.producer
         self.save_checkpoints_to_disk = self.save_checkpoints_to_disk
         self.save_chunks_to_disk = self.save_chunks_to_disk
@@ -159,8 +161,8 @@ class ipfs_embeddings_py:
         self.async_generator = self.async_generator
         self.kmeans_cluster_split = self.kmeans_cluster_split
         self.endpoint_types = ["tei_endpoints", "openvino_endpoints", "libp2p_endpoints", "local_endpoints"]
-        self.add_endpoint = self.ipfs_accelerate_py.add_endpoint
-        self.rm_endpoint = self.ipfs_accelerate_py.rm_endpoint
+        self.add_endpoint = self.ipfs_kit.add_endpoint
+        self.rm_endpoint = self.ipfs_kit.rm_endpoint
         self.init_endpoints = self.init_endpoints       
         return None
 
@@ -168,7 +170,7 @@ class ipfs_embeddings_py:
         resources = await self.init_endpoints(models, endpoints)
         resources_keys = ["queues", "batch_sizes", "endpoints", "models", "worker"]
         for resource in resources_keys:
-            if resource in list(self.ipfs_accelerate_py.resources.keys()) and resources is not None:
+            if resource in list(self.ipfs_kit.resources.keys()) and resources is not None:
                 this_resource = resources[resource]
                 if type(this_resource) is dict:
                     for key in list(this_resource.keys()):
@@ -176,7 +178,7 @@ class ipfs_embeddings_py:
                 elif type(this_resource) is object:
                     self.resources[resource] = this_resource
         test_endpoints = None
-        test_endpoints = await self.ipfs_accelerate_py.test_endpoints(models)
+        test_endpoints = await self.ipfs_kit.test_endpoints(models)
         return test_endpoints
         
     async def async_generator(self, iterable):
@@ -185,18 +187,18 @@ class ipfs_embeddings_py:
             
     async def max_batch_size(self, model, endpoint, endpoit_handler):
         print("max batch size")
-        return await self.ipfs_accelerate_py.max_batch_size(model, endpoint, endpoit_handler)
+        return await self.ipfs_kit.max_batch_size(model, endpoint, endpoit_handler)
         
     async def chunk_item(self, item, column=None, method=None, tokenizer=None, chunk_size=None, n_sentences=None, step_size=None, embed_model=None):
         # Assuming `item` is a dictionary with required data
         cuda_test = False
         openvino_test = False
-        tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
+        tokenizer_types = list(self.ipfs_kit.resources["tokenizer"][embed_model].keys())
         cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
         openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
-        if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True:
+        if self.ipfs_kit.resources["hwtest"]["cuda"] == True:
             cuda_test = True
-        if self.ipfs_accelerate_py.resources["hwtest"]["openvino"] == True:
+        if self.ipfs_kit.resources["hwtest"]["openvino"] == True:
             openvino_test = True
         if column is None:
             content = json.dumps(item)
@@ -216,28 +218,28 @@ class ipfs_embeddings_py:
         if step_size is None:
             step_size = 256
         if tokenizer is None:
-            if embed_model not in list(self.ipfs_accelerate_py.resources["tokenizer"].keys()):
+            if embed_model not in list(self.ipfs_kit.resources["tokenizer"].keys()):
                 self.tokenizer[embed_model] = {}
             if cuda_test == True:
-                tokenizer_types = list(self.ipfs_accelerate_py.resources["tokenizer"][embed_model].keys())
+                tokenizer_types = list(self.ipfs_kit.resources["tokenizer"][embed_model].keys())
                 cuda_tokenizer_types = [x for x in tokenizer_types if "cuda" in x]
                 random_cuda_tokenizer = random.choice(cuda_tokenizer_types)
                 device = random_cuda_tokenizer
-                tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_cuda_tokenizer]
-                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_cuda_tokenizer]
+                tokenizer = self.ipfs_kit.resources["tokenizer"][embed_model][random_cuda_tokenizer]
+                batch_size = self.ipfs_kit.resources["batch_sizes"][embed_model][random_cuda_tokenizer]
                 if batch_size == 0 or batch_size is None:
                     batch_size = 32
             elif openvino_test == True:
                 openvino_tokenizer_types = [x for x in tokenizer_types if "openvino" in x]
                 random_openvino_tokenizer = random.choice(openvino_tokenizer_types)
                 device = random_openvino_tokenizer
-                tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model][random_openvino_tokenizer]  
-                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model][random_openvino_tokenizer]
+                tokenizer = self.ipfs_kit.resources["tokenizer"][embed_model][random_openvino_tokenizer]  
+                batch_size = self.ipfs_kit.resources["batch_sizes"][embed_model][random_openvino_tokenizer]
                 if batch_size == 0 or batch_size is None:
                     batch_size = 1
             elif "cpu" not in tokenizer_types:
-                tokenizer = self.ipfs_accelerate_py.resources["tokenizer"][embed_model]["cpu"]                
-                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][embed_model]["cpu"]
+                tokenizer = self.ipfs_kit.resources["tokenizer"][embed_model]["cpu"]                
+                batch_size = self.ipfs_kit.resources["batch_sizes"][embed_model]["cpu"]
                 device = "cpu"
                 if batch_size == 0 or batch_size is None:
                     batch_size = 1
@@ -322,8 +324,8 @@ class ipfs_embeddings_py:
     async def queue_size(self, model):
         print("Checking queue size")
         queue_size = 0
-        for endpoint in list(self.ipfs_accelerate_py.resources["batch_sizes"][model].keys()):
-            queue_size += self.ipfs_accelerate_py.resources["batch_sizes"][model][endpoint]
+        for endpoint in list(self.ipfs_kit.resources["batch_sizes"][model].keys()):
+            queue_size += self.ipfs_kit.resources["batch_sizes"][model][endpoint]
         if queue_size == 0:
             queue_size = 1
         return queue_size
@@ -491,11 +493,11 @@ class ipfs_embeddings_py:
         all_tasks = []
         
         # Create producer and consumer tasks
-        for endpoint in list(self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]].keys()):
-            if self.ipfs_accelerate_py.resources["hwtest"]["cuda"] == True and "openvino:" in endpoint:
+        for endpoint in list(self.ipfs_kit.resources["endpoint_handler"][models[0]].keys()):
+            if self.ipfs_kit.resources["hwtest"]["cuda"] == True and "openvino:" in endpoint:
                 continue
-            this_batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][models[0]][endpoint]
-            this_endpoint_handler = self.ipfs_accelerate_py.resources["endpoint_handler"][models[0]][endpoint]
+            this_batch_size = self.ipfs_kit.resources["batch_sizes"][models[0]][endpoint]
+            this_endpoint_handler = self.ipfs_kit.resources["endpoint_handler"][models[0]][endpoint]
             chunk_consumer = asyncio.create_task(self.chunk_consumer(this_batch_size, models[0], endpoint, this_endpoint_handler))
             consumer_tasks.append(chunk_consumer)
             all_tasks.append(chunk_consumer)
@@ -521,8 +523,8 @@ class ipfs_embeddings_py:
         try:
             batch_size = await self.max_batch_size(model_name, endpoint, endpoint_handler)
             queue_size = await self.queue_size(model_name)
-            self.ipfs_accelerate_py.resources["queues"][model_name][endpoint] = asyncio.Queue(batch_size)
-            self.ipfs_accelerate_py.resources["queue"][model_name] = asyncio.Queue(queue_size) 
+            self.ipfs_kit.resources["queues"][model_name][endpoint] = asyncio.Queue(batch_size)
+            self.ipfs_kit.resources["queue"][model_name] = asyncio.Queue(queue_size) 
             self.cid_chunk_queue = asyncio.Queue(queue_size) 
         except Exception as e:
             batch_size = 0
@@ -535,8 +537,8 @@ class ipfs_embeddings_py:
                     batch_size = await self.max_batch_size(model_name, endpoint, endpoint_handler)
                     queue_size = await self.queue_size(model_name)
                     self.cid_chunk_queue = asyncio.Queue(queue_size)
-                    self.ipfs_accelerate_py.resources["queue"][model_name] = asyncio.Queue(queue_size)
-                    self.ipfs_accelerate_py.resources["queues"][model_name][endpoint] = asyncio.Queue(batch_size)
+                    self.ipfs_kit.resources["queue"][model_name] = asyncio.Queue(queue_size)
+                    self.ipfs_kit.resources["queues"][model_name][endpoint] = asyncio.Queue(batch_size)
                 except Exception as e:
                     batch_size = 0
             
@@ -573,9 +575,9 @@ class ipfs_embeddings_py:
             if chunked_item is not None:
                 for i in range(len(chunked_item["items"])):
                     item = chunked_item["items"][i]
-                    while self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full():
+                    while self.ipfs_kit.resources["queues"][model_name][endpoint].full():
                         await asyncio.sleep(0.01)
-                    self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].put_nowait(item)
+                    self.ipfs_kit.resources["queues"][model_name][endpoint].put_nowait(item)
                 await asyncio.sleep(0.01)
             else:
                 pass
@@ -584,10 +586,10 @@ class ipfs_embeddings_py:
         return None
     
     async def endpoint_consumer(self, batch_size, model_name, endpoint, endpoint_handler):                
-        endpoint_queue = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) else False
-        empty = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_accelerate_py.resources["queues"][model_name][endpoint]) else False
-        queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
-        batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]
+        endpoint_queue = True if endpoint in list(self.ipfs_kit.resources["queues"][model_name].keys()) else False
+        empty = True if endpoint in list(self.ipfs_kit.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_kit.resources["queues"][model_name][endpoint]) else False
+        queue_not_empty = not self.ipfs_kit.resources["queues"][model_name][endpoint].empty()
+        batch_size = self.ipfs_kit.resources["batch_sizes"][model_name][endpoint]
         test_ready = all([
             endpoint_queue,
             empty,
@@ -599,12 +601,12 @@ class ipfs_embeddings_py:
             chunk_data = []
             while not test_ready or batch_size == 0:
                 await asyncio.sleep(0.1)
-                batch_size = self.ipfs_accelerate_py.resources["batch_sizes"][model_name][endpoint]
-                endpoint_queue = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) else False
-                empty = True if endpoint in list(self.ipfs_accelerate_py.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_accelerate_py.resources["queues"][model_name][endpoint]) else False
-                queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
-                queue_not_full = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
-                queue_full = self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+                batch_size = self.ipfs_kit.resources["batch_sizes"][model_name][endpoint]
+                endpoint_queue = True if endpoint in list(self.ipfs_kit.resources["queues"][model_name].keys()) else False
+                empty = True if endpoint in list(self.ipfs_kit.resources["queues"][model_name].keys()) and "empty" in dir(self.ipfs_kit.resources["queues"][model_name][endpoint]) else False
+                queue_not_empty = not self.ipfs_kit.resources["queues"][model_name][endpoint].empty()
+                queue_not_full = not self.ipfs_kit.resources["queues"][model_name][endpoint].full()
+                queue_full = self.ipfs_kit.resources["queues"][model_name][endpoint].full()
                 test_ready = all([
                     endpoint_queue,
                     empty,
@@ -624,14 +626,14 @@ class ipfs_embeddings_py:
                         torch.cuda.ipc_collect()
                 gc.collect()
             
-            while self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty():
+            while self.ipfs_kit.resources["queues"][model_name][endpoint].empty():
                 asyncio.sleep(0.1)
             
-            while not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty():
-                item = await self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].get()
+            while not self.ipfs_kit.resources["queues"][model_name][endpoint].empty():
+                item = await self.ipfs_kit.resources["queues"][model_name][endpoint].get()
                 batch.append(item["content"])
                 chunk_data.append(item)
-                self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].task_done()
+                self.ipfs_kit.resources["queues"][model_name][endpoint].task_done()
 
             if len(batch) >= batch_size:
                 results = endpoint_handler(batch)
@@ -687,9 +689,9 @@ class ipfs_embeddings_py:
                         if hasattr(torch.cuda, 'ipc_collect'):
                             torch.cuda.ipc_collect()
                 gc.collect()
-                queue_not_empty = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].empty()
-                queue_not_full = not self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
-                queue_full = self.ipfs_accelerate_py.resources["queues"][model_name][endpoint].full()
+                queue_not_empty = not self.ipfs_kit.resources["queues"][model_name][endpoint].empty()
+                queue_not_full = not self.ipfs_kit.resources["queues"][model_name][endpoint].full()
+                queue_full = self.ipfs_kit.resources["queues"][model_name][endpoint].full()
                 test_ready = all([
                     endpoint_queue,
                     empty,
@@ -925,7 +927,7 @@ class ipfs_embeddings_py:
         return results
     
     async def init_endpoints(self, models, endpoint_list=None):
-        resources = await self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
+        resources = await self.ipfs_kit.init_endpoints(models, endpoint_list)
         resources_keys = list(resources.keys())
         for resource in resources_keys:
             this_resource = resources[resource]
@@ -939,8 +941,8 @@ class ipfs_embeddings_py:
         resources_list = ["queues", "batch_sizes", "endpoints", "models", "worker"]
         new_resources = {}
         for resource in resources_list:
-            if resource in list(self.ipfs_accelerate_py.resources.keys()):
-                new_resources[resource] = self.ipfs_accelerate_py.resources[resource]
+            if resource in list(self.ipfs_kit.resources.keys()):
+                new_resources[resource] = self.ipfs_kit.resources[resource]
         return new_resources
 
     def load_index(self, index):

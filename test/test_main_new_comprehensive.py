@@ -30,7 +30,7 @@ class TestMainNewTokenization(unittest.TestCase):
     def test_safe_tokenizer_encode(self):
         """Test safe tokenizer encoding functionality"""
         try:
-            from ipfs_embeddings_py.main_new import safe_tokenizer_encode
+            from ipfs_kit.main_new import safe_tokenizer_encode
             
             # Mock tokenizer
             mock_tokenizer = Mock()
@@ -63,7 +63,7 @@ class TestMainNewTokenization(unittest.TestCase):
     def test_safe_tokenizer_decode(self):
         """Test safe tokenizer decoding functionality"""
         try:
-            from ipfs_embeddings_py.main_new import safe_tokenizer_decode
+            from ipfs_kit.main_new import safe_tokenizer_decode
             
             # Mock tokenizer
             mock_tokenizer = Mock()
@@ -95,7 +95,7 @@ class TestMainNewTokenization(unittest.TestCase):
     def test_batch_tokenization_pipeline(self):
         """Test that text is tokenized before embedding generation"""
         try:
-            from ipfs_embeddings_py.main_new import safe_tokenizer_encode, safe_chunker_chunk
+            from ipfs_kit.main_new import safe_tokenizer_encode, safe_chunker_chunk
             
             # Create mock tokenizer
             mock_tokenizer = Mock()
@@ -139,7 +139,7 @@ class TestMainNewTokenization(unittest.TestCase):
     def test_chunking_with_tokenization(self):
         """Test that chunking uses tokenization correctly"""
         try:
-            from ipfs_embeddings_py.main_new import safe_chunker_chunk, safe_tokenizer_encode
+            from ipfs_kit.main_new import safe_chunker_chunk, safe_tokenizer_encode
             
             # Create mock tokenizer and chunker
             mock_tokenizer = Mock()
@@ -200,7 +200,7 @@ class TestMainNewBatchProcessing(unittest.TestCase):
     def test_init_datasets_function(self):
         """Test dataset initialization function"""
         try:
-            from ipfs_embeddings_py.main_new import init_datasets
+            from ipfs_kit.main_new import init_datasets
             
             # Test with mock parameters (should handle network failures gracefully)
             result = init_datasets(
@@ -229,7 +229,7 @@ class TestMainNewBatchProcessing(unittest.TestCase):
     def test_cid_generation_batch(self):
         """Test CID generation for batches of data"""
         try:
-            from ipfs_embeddings_py.main_new import safe_get_cid, index_cid
+            from ipfs_kit.main_new import safe_get_cid, index_cid
             
             # Test single CID generation
             test_data = "Hello, world!"
@@ -267,7 +267,7 @@ class TestMainNewBatchProcessing(unittest.TestCase):
     def test_batch_processing_flow(self):
         """Test the complete batch processing flow: tokenization -> chunking -> embedding preparation"""
         try:
-            from ipfs_embeddings_py.main_new import safe_tokenizer_encode, safe_chunker_chunk, safe_get_cid
+            from ipfs_kit.main_new import safe_tokenizer_encode, safe_chunker_chunk, safe_get_cid
             
             # Sample batch of texts
             batch_texts = [
@@ -361,7 +361,7 @@ class TestMainNewSafety(unittest.TestCase):
     def test_safe_functions_with_none_inputs(self):
         """Test that safe functions handle None inputs gracefully"""
         try:
-            from ipfs_embeddings_py.main_new import (
+            from ipfs_kit.main_new import (
                 safe_tokenizer_encode, safe_tokenizer_decode, 
                 safe_get_cid, safe_get_num_rows
             )
@@ -398,7 +398,7 @@ class TestMainNewSafety(unittest.TestCase):
     def test_error_handling_in_batch_processing(self):
         """Test error handling during batch processing"""
         try:
-            from ipfs_embeddings_py.main_new import safe_tokenizer_encode, safe_chunker_chunk
+            from ipfs_kit.main_new import safe_tokenizer_encode, safe_chunker_chunk
             
             # Test with broken tokenizer
             broken_tokenizer = Mock()
@@ -430,7 +430,7 @@ class TestMainNewIntegration(unittest.TestCase):
     def test_tokenization_before_embedding_workflow(self):
         """Test that the workflow follows: Text -> Tokens -> Chunks -> Embeddings preparation"""
         try:
-            from ipfs_embeddings_py.main_new import (
+            from ipfs_kit.main_new import (
                 safe_tokenizer_encode, safe_tokenizer_decode, 
                 safe_chunker_chunk, safe_get_cid
             )

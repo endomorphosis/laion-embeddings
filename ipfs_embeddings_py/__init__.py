@@ -8,3 +8,4 @@ from .chunker import *
 from .elasticsearch_kit import elasticsearch_kit
 from .faiss_kit import faiss_kit_py
 from .schema import Document
+from .ipfs_datasets import ipfs_datasets_py

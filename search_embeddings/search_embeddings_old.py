@@ -1,7 +1,7 @@
 
 import datasets
 import sys
-import ipfs_embeddings_py
+from ipfs_kit_py import ipfs_kit
 import numpy as np
 import os
 import json
@@ -21,13 +21,13 @@ class search_embeddings:
         if len(list(metadata.keys())) > 0:
             for key in metadata.keys():
                 setattr(self, key, metadata[key])
-        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
-        self.qdrant_kit_py = ipfs_embeddings_py.qdrant_kit_py(resources, metadata)
+        self.ipfs_embeddings_py = ipfs_kit.ipfs_embeddings_py(resources, metadata)
+        self.qdrant_kit_py = ipfs_kit.qdrant_kit_py(resources, metadata)
         if "https_endpoints" in resources.keys():
             for endpoint in resources["https_endpoints"]:
-                self.ipfs_embeddings_py.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])
+                self.ipfs_kit.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])
         else:
-            self.ipfs_embeddings_py.add_https_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
+            self.ipfs_kit.add_https_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
         self.join_column = None
         self.qdrant_found = False
         qdrant_port_cmd = "nc -zv localhost 6333"
@@ -44,7 +44,7 @@ class search_embeddings:
         self.add_https_endpoint = self.add_https_endpoint
 
     def add_https_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_https_endpoint(model, endpoint, ctx_length)
+        return self.ipfs_kit.add_https_endpoint(model, endpoint, ctx_length)
     
     
     def rm_cache(self):
@@ -61,9 +61,9 @@ class search_embeddings:
             query = [query]
         elif not isinstance(query, list):
             raise ValueError("Query must be a string or a list of strings")
-        self.ipfs_embeddings_py.index_knn(query, "")
-        selected_endpoint = self.ipfs_embeddings_py.choose_endpoint(self.model)
-        embeddings = await self.ipfs_embeddings_py.index_knn(selected_endpoint, self.model)
+        self.ipfs_kit.index_knn(query, "")
+        selected_endpoint = self.ipfs_kit.choose_endpoint(self.model)
+        embeddings = await self.ipfs_kit.index_knn(selected_endpoint, self.model)
         return embeddings
     
     # def search_embeddings(self, embeddings):
@@ -109,7 +109,7 @@ class search_embeddings:
 
             return search_results
         else:
-            start_faiss = self.ipfs_embeddings_py.start_faiss(collection, query)
+            start_faiss = self.ipfs_kit.start_faiss(collection, query)
             if start_faiss == True:
                 print("Faiss started")
                 datasets_pairs = ["",""]
@@ -120,8 +120,8 @@ class search_embeddings:
                 for i in range(len(datasets)):
                     if i % 2 == 0:
                         datasets_pairs.append(datasets[i-1], datasets[i])
-                    await self.ipfs_embeddings_py.load_faiss(datasets_pairs[0], datasets_pairs[1])
-                    await self.ipfs_embeddings_py.ingest_faiss(column)
+                    await self.ipfs_kit.load_faiss(datasets_pairs[0], datasets_pairs[1])
+                    await self.ipfs_kit.ingest_faiss(column)
                 for collection in collections:
                     results = await self.search(collection, query)
                     search_results[collection] = results
@@ -153,13 +153,13 @@ class search_embeddings:
         return None
         
     async def start_faiss(self, collection, query):
-        return self.ipfs_embeddings_py.start_faiss(collection, query)
+        return self.ipfs_kit.start_faiss(collection, query)
     
     async def load_faiss(self, dataset, knn_index):
-        return self.ipfs_embeddings_py.load_faiss(dataset, knn_index)
+        return self.ipfs_kit.load_faiss(dataset, knn_index)
     
     async def ingest_faiss(self, column):
-        return self.ipfs_embeddings_py.ingest_faiss(column)
+        return self.ipfs_kit.ingest_faiss(column)
     
 if __name__ == '__main__':
     metadata = {

@@ -12,7 +12,7 @@ TESTING = (
 
 if not TESTING:
     try:
-        from ipfs_embeddings_py import ipfs_embeddings_py
+        from ipfs_kit_py.ipfs_kit import ipfs_kit
     except ImportError:
         ipfs_embeddings_py = None
 else:
@@ -35,7 +35,10 @@ if not TESTING:
         sparse_embeddings = None
 
     try:
+        # DEPRECATED: storacha_clusters is deprecated, use ipfs_kit_py instead
         from storacha_clusters import storacha_clusters
+        import warnings
+        warnings.warn("storacha_clusters is deprecated. Use ipfs_kit_py.storacha_kit instead.", DeprecationWarning)
     except ImportError:
         storacha_clusters = None
 

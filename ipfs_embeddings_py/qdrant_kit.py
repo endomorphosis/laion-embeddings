@@ -55,7 +55,7 @@ class qdrant_kit_py:
                             self.knn_index_hash = []
                             self.datasets_hash = []
                             chunk = []
-                            async for item in self.ipfs_embeddings_py.async_generator(self.dataset):
+                            async for item in self.ipfs_kit.async_generator(self.dataset):
                                 chunk.append(item)
                                 if len(chunk) == cores:
                                     self.datasets_hash.extend(pool.map(self.hash_chunk, chunk))
@@ -63,7 +63,7 @@ class qdrant_kit_py:
                             if chunk:
                                 self.datasets_hash.extend(pool.map(self.hash_chunk, chunk))
                             chunk = []
-                            async for item in self.ipfs_embeddings_py.async_generator(self.knn_index):
+                            async for item in self.ipfs_kit.async_generator(self.knn_index):
                                 chunk.append(item)
                                 if len(chunk) == cores:
                                     self.knn_index_hash.extend(pool.map(self.hash_chunk, chunk))

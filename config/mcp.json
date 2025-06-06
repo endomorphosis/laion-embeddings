@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "laion-embeddings": {
+      "command": "python",
+      "args": [
+        "/home/barberb/laion-embeddings-1/mcp_server_enhanced.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/home/barberb/laion-embeddings-1"
+      }
+    }
+  }
+}

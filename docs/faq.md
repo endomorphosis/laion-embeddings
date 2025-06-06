@@ -1,310 +1,288 @@
 # Frequently Asked Questions (FAQ)
 
-![Production Ready](https://img.shields.io/badge/status-production%20ready-green)
-![Tests](https://img.shields.io/badge/tests-100%25%20passing-green)
-![Documentation](https://img.shields.io/badge/documentation-complete-blue)
-
-## ✅ FAQ Validation Status
-
-All FAQ answers have been **validated and tested** with the current production system:
-
-- **✅ All Solutions Tested**: Every solution and code example has been validated
-- **✅ Current Information**: All information reflects the latest production-ready state
-- **✅ Complete Coverage**: FAQ covers all common scenarios and edge cases
-- **✅ Production Validated**: All procedures tested in production environments
-
-**Validation Coverage**: 100% of FAQ content tested  
-**Last Updated**: June 3, 2025
-
-## Recent Updates (June 3, 2025)
-
-### ✅ What's the current status of the project?
-The LAION Embeddings project is **production ready** with 100% test success rate:
-- **64/64 tests passing** across all service layers
-- **Complete service validation**: Vector, IPFS, and Clustering services fully operational
-- **Production deployment ready**: All components tested and validated
-
-### ✅ How do I validate my installation?
-The system now includes comprehensive validation with proven results:
-```bash
-# Run the complete test suite (all tests passing)
-python run_comprehensive_tests.py
-
-# Run specific service tests
-python run_vector_tests_standalone.py  # 20/20 tests passing
-python test/test_ipfs_vector_service.py  # 15/15 tests passing
-python test/test_clustering_service.py   # 19/19 tests passing
-```
-
-### ✅ Is the system production ready?
-**Yes!** The system has achieved full production readiness with:
-- **100% test coverage** across all core services
-- **Validated service integration** between all components
-- **Comprehensive error handling** tested and validated
-- **Performance optimization** completed and tested
-
 ## General Questions
 
 ### What is LAION Embeddings?
-LAION Embeddings is a distributed, scalable embeddings search engine built on IPFS (InterPlanetary File System) technology. It provides FastAPI endpoints for creating, searching, and managing embeddings using multiple ML models and storage backends.
 
-### What embedding models are supported?
-LAION Embeddings supports several embedding models including:
-- gte-small (general text embeddings)
-- gte-large-en-v1.5 (large English model)
-- gte-Qwen2-1.5B-instruct (instruction-tuned model)
+LAION Embeddings is an advanced, production-ready IPFS-based embeddings search engine that provides FastAPI endpoints for creating, searching, and managing embeddings using multiple ML models and storage backends.
 
-For more details, see the [Models Documentation](models/README.md).
+### Which machine learning models are supported?
 
-### What endpoint types are available?
-The system supports multiple endpoint types:
-- TEI (Text Embeddings Inference)
-- OpenVINO (Intel's inference engine)
-- Local CPU endpoints
-- Local CUDA endpoints
-- LibP2P (peer-to-peer)
-- Intel IPEX endpoints
-- Llama.cpp endpoints
+The system supports multiple embedding models, including but not limited to:
+- gte-small
+- gte-large-en-v1.5
+- gte-Qwen2-1.5B-instruct
+- And others configurable through the API
 
-For detailed configuration, see the [Endpoint Management Documentation](endpoints/README.md).
+### How do I start using LAION Embeddings?
 
-## Installation and Setup
+1. Install the system following the [Installation Guide](installation.md)
+2. Start the server with `./run.sh`
+3. Follow the [Quick Start Guide](quickstart.md) for basic usage
 
-### What are the system requirements?
-- Python 3.8+
-- At least 8GB RAM (16GB+ recommended for large models)
-- Optional: CUDA-compatible GPU for acceleration
-- Docker (for containerized deployment)
+## Vector Store Questions
 
-### How do I install LAION Embeddings?
-See the [Installation Guide](installation.md) for detailed instructions including:
-- Docker installation
-- Python virtual environment setup
-- Development environment setup
+### What vector stores does the system support?
 
-### Can I run this without a GPU?
-Yes, the system supports CPU-only inference through various endpoint types. However, GPU acceleration is recommended for better performance with large datasets.
+The system supports multiple vector store backends:
+- FAISS (default)
+- IPFS (distributed storage)
+- DuckDB with Parquet (analytical workloads)
+- HNSW (hierarchical navigable small world graphs)
 
-## Configuration
+### When should I use the IPFS vector store?
 
-### How do I configure endpoints?
-Endpoints can be configured through:
-- Environment variables
-- YAML configuration files
-- Command-line arguments
+Use the IPFS vector store when you need:
+- Distributed storage and retrieval
+- Content-addressed storage
+- Decentralized architecture
+- Data resilience through replication
 
-See the [Configuration Guide](configuration.md) for detailed instructions.
+### When should I use the DuckDB vector store?
 
-### How do I add custom models?
-Custom models can be added by:
-1. Creating a model configuration
-2. Implementing the model interface
-3. Registering the model with the system
+Use the DuckDB vector store when you need:
+- Analytical capabilities alongside vector search
+- SQL-based querying and filtering
+- Efficient storage with Parquet
+- Integration with data warehousing workflows
 
-See the [Custom Models Guide](models/custom-models.md) for details.
+### Can I switch between vector stores without changing my application code?
 
-### What storage backends are supported?
-- IPFS (InterPlanetary File System)
-- Local file system
-- Storacha (Web3.Storage)
-- FAISS for vector indexing
+Yes. The unified vector store interface allows you to switch providers while maintaining the same API calls. You only need to change the configuration or provider parameter when creating the store.
 
-## Usage
+### How do I choose the right vector store for my use case?
 
-### How do I perform a basic search?
-```python
-import requests
+Consider these factors when choosing a vector store:
+- **Scale**: How many vectors will you store?
+- **Query rate**: How many searches per second?
+- **Distribution**: Do you need a distributed system?
+- **Analytical needs**: Do you need SQL-like querying?
+- **Integration**: What systems does your app already use?
 
-response = requests.post("http://localhost:8000/search", json={
-    "query": "your search text",
-    "top_k": 10
-})
-results = response.json()
-```
+## IPFS-Specific Questions
 
-For more examples, see the [Simple Search Guide](examples/simple-search.md).
+### What is the advantage of using IPFS for vector storage?
 
-### How do I create embeddings for my data?
-You can create embeddings through:
-- The API endpoints
-- Batch processing scripts
-- Python client library
-
-See the [Create Embeddings Guide](components/create-embeddings.md) for details.
-
-### What's the difference between dense and sparse embeddings?
-- **Dense embeddings**: Fixed-size vectors that capture semantic meaning
-- **Sparse embeddings**: High-dimensional vectors with mostly zero values, often used for keyword matching
-
-See the [Sparse Embeddings Guide](components/sparse-embeddings.md) for more information.
-
-## Tokenization Workflow
-
-### What is the tokenization workflow validation?
-The tokenization workflow validation ensures that the complete text processing pipeline works correctly:
-1. **Text → Tokenization**: Safe encoding/decoding with error handling
-2. **Tokenization → Chunking**: Content chunking with size validation  
-3. **Chunking → CID**: Content identifier generation
-4. **CID → Batch**: Batch processing with validation
-5. **Batch → Embeddings**: Complete embedding generation
-
-### How do I test the tokenization workflow?
-Run these validation commands:
-```bash
-# Basic validation
-python test/basic_validation.py
-
-# Comprehensive testing
-python test/comprehensive_test_suite.py
-
-# File-based tests
-python test/file_based_test.py
-```
-
-### What are safe_* functions?
-Safe functions are enhanced versions of core processing functions that include:
-- Robust error handling
-- Input validation
-- Fallback mechanisms
-- Detailed error reporting
-
-Examples: `safe_tokenizer_encode()`, `safe_chunker_chunk()`, `safe_get_cid()`
-
-### What should I do if tokenization validation fails?
-1. Check the specific error message in the output
-2. Verify your Python environment and dependencies
-3. Test with smaller text samples
-4. Check available memory and resources
-5. See the [Troubleshooting Guide](troubleshooting/README.md#tokenization-workflow-failures)
-
-## Performance
-
-### How can I optimize performance?
-- Use GPU acceleration when available
-- Optimize batch sizes for your hardware
-- Enable caching
-- Use appropriate endpoint types for your use case
-
-See the [Performance Optimization](troubleshooting/README.md#performance-issues) section.
-
-### What batch sizes should I use?
-Batch sizes depend on:
-- Available memory (GPU/CPU)
-- Model size
-- Input sequence length
-
-Start with smaller batches (8-32) and increase until you hit memory limits.
-
-### How do I monitor system performance?
-The system provides:
-- Health check endpoints
-- Performance metrics
-- Resource utilization monitoring
-
-See the [Troubleshooting Guide](troubleshooting/README.md) for monitoring setup.
-
-## IPFS Integration
-
-### Why use IPFS?
 IPFS provides:
-- Decentralized storage
-- Content addressing (immutable hashes)
-- Deduplication
-- Peer-to-peer distribution
+- Content-addressed storage (immutability)
+- Distributed architecture
+- Built-in data verification
+- Deduplication of identical vectors
+- Peer-to-peer retrieval capabilities
 
-### How do I work with IPFS data?
-The system provides utilities for:
-- Converting data formats (Parquet ↔ CAR)
-- Content addressing
-- Cluster management
+### How does sharding work with IPFS vector store?
 
-See the [IPFS Integration Guide](ipfs/README.md) for details.
+The IPFS vector store implements sharding by:
+1. Partitioning vectors across multiple IPFS directories
+2. Using a configurable sharding strategy (hash, range, etc.)
+3. Maintaining a shard map for routing queries
+4. Executing parallel operations across shards
 
-### What are CIDs?
-Content Identifiers (CIDs) are cryptographic hashes that uniquely identify content in IPFS. They ensure data integrity and enable content addressing.
+### Does the IPFS vector store require an external IPFS node?
 
-## Troubleshooting
+By default, the IPFS vector store connects to local or specified IPFS nodes. You can:
+- Use existing IPFS nodes
+- Let the system start an embedded IPFS node
+- Connect to remote IPFS nodes or gateways
 
-### The server won't start. What should I check?
-1. Verify Python version (3.8+)
-2. Check dependencies are installed
-3. Ensure ports are available (default: 8000)
-4. Check environment variables
-5. Review error logs
+### What IPFS node implementation is compatible?
 
-See the [Troubleshooting Guide](troubleshooting/README.md) for more solutions.
+The system is compatible with:
+- go-ipfs
+- js-ipfs
+- kubo
+- And other standard IPFS implementations
 
-### I'm getting GPU memory errors
-- Reduce batch size
-- Use CPU endpoints
-- Enable gradient checkpointing
-- Use model quantization
+## DuckDB-Specific Questions
 
-### Embeddings generation is slow
-- Use GPU acceleration
-- Optimize batch sizes
-- Enable endpoint pooling
-- Consider model quantization
+### How are vectors stored in DuckDB?
 
-### How do I debug API errors?
-1. Check the API logs
-2. Verify request format
-3. Test with simple examples
-4. Use the diagnostic scripts
+Vectors in DuckDB are stored as:
+- Parquet files with columnar storage
+- Binary vector data in columnar format
+- With optional indexes for fast retrieval
+- Including metadata in structured columns
 
-## Development
+### Can I perform SQL queries alongside vector similarity search?
 
-### How do I contribute to the project?
-1. Fork the repository
-2. Create a feature branch
-3. Follow code standards
-4. Add tests
-5. Submit a pull request
+Yes, the DuckDB vector store supports:
+- Standard vector similarity search
+- SQL filtering conditions
+- Combining vector search with SQL predicates
+- Exporting data for SQL analysis
 
-See the [Development Guide](development.md) for details.
+### What is the performance difference between DuckDB and other vector stores?
 
-### How do I run tests?
-```bash
-# Run all tests
-python -m pytest
+DuckDB vector store typically offers:
+- Better analytical query performance
+- More efficient filtering operations
+- Slightly slower pure KNN search compared to FAISS
+- Better compression with Parquet
 
-# Run specific test file
-python -m pytest test/test_embeddings.py
+### Does DuckDB support vector quantization?
 
-# Run with coverage
-python -m pytest --cov=ipfs_embeddings_py
+Yes, DuckDB supports vector quantization through:
+- Scalar quantization (reduced bit precision)
+- Compressed vector storage
+- Efficient columnar storage
+
+## Performance Questions
+
+### How can I optimize the performance of vector searches?
+
+Key optimization strategies:
+- Use appropriate vector quantization
+- Configure properly sized shards
+- Set appropriate index parameters
+- Use filtering to reduce search space
+- Consider hardware acceleration
+
+### How many vectors can the system handle?
+
+Capacity depends on:
+- Vector store backend (FAISS, IPFS, DuckDB)
+- Available memory and storage
+- Vector dimensionality
+- Use of sharding and quantization
+- Hardware specifications
+
+For reference:
+- Single-node FAISS: millions to tens of millions
+- IPFS distributed: hundreds of millions
+- DuckDB with Parquet: tens to hundreds of millions
+
+### How does vector dimensionality affect performance?
+
+Higher dimensionality:
+- Increases storage requirements
+- Slows down similarity computations
+- May require more sophisticated indexing
+- Benefits more from vector quantization
+
+## Configuration Questions
+
+### How do I configure different vector stores?
+
+Configure vector stores in `config/vector_databases.yaml`:
+
+```yaml
+vector_databases:
+  faiss:
+    index_type: "IVF100,Flat"
+    nprobe: 10
+    
+  ipfs:
+    multiaddr: "/ip4/127.0.0.1/tcp/5001"
+    pin: true
+    sharding:
+      enabled: true
+      shard_count: 4
+      
+  duckdb:
+    database_path: "vectors.duckdb"
+    storage_path: "./vector_data"
+    memory_limit: "4GB"
 ```
 
-### How do I add a new endpoint type?
-1. Implement the endpoint interface
-2. Add configuration options
-3. Update the endpoint manager
-4. Add tests and documentation
+### How do I change the default vector store?
 
-See the [Endpoint Management Documentation](endpoints/README.md) for implementation details.
+Set the default vector store in your configuration:
 
-## Support
+```yaml
+vector_store:
+  default: "ipfs"  # Options: "faiss", "ipfs", "duckdb", "hnsw"
+```
 
-### Where can I get help?
-- Check this FAQ
-- Review the [Troubleshooting Guide](troubleshooting/README.md)
-- Search existing GitHub issues
-- Open a new issue with detailed information
+Or specify when creating:
 
-### How do I report bugs?
-When reporting bugs, include:
-- System information (OS, Python version, GPU)
-- Complete error messages
-- Steps to reproduce
-- Sample data (if applicable)
+```python
+from services.vector_store_factory import create_vector_store
+from services.vector_config import VectorDBType
 
-### Where can I find examples?
-Complete examples are available in the [Examples Section](examples/README.md), including:
-- Simple search operations
-- Batch processing workflows
-- IPFS integration
-- Python client usage
+store = await create_vector_store(db_type=VectorDBType.IPFS)
+```
 
----
+## Implementation Questions
 
-*For more detailed information, please refer to the specific documentation sections linked throughout this FAQ.*
+### How do I add multi-model support to my application?
+
+Use different models for embedding generation:
+
+```python
+async def create_embeddings_multimodel():
+    from services.embedding import get_embedding_model
+    
+    # Get different models
+    model1 = get_embedding_model("thenlper/gte-small")
+    model2 = get_embedding_model("Alibaba-NLP/gte-large-en-v1.5")
+    
+    # Generate embeddings with different models
+    embedding1 = await model1.embed("Your text here")
+    embedding2 = await model2.embed("Your text here")
+    
+    return embedding1, embedding2
+```
+
+### Can I use the system with my custom embedding models?
+
+Yes, you can integrate custom embedding models by:
+1. Creating a wrapper that follows the embedding interface
+2. Registering your model in the embedding factory
+3. Using your model name when calling the API
+
+### How do I implement hybrid search (vector + keyword)?
+
+Implement hybrid search by combining vector similarity with metadata filtering:
+
+```python
+from services.vector_store_base import SearchQuery
+
+# Create a hybrid search query
+query = SearchQuery(
+    vector=your_query_vector,  # Vector for similarity search
+    top_k=100,
+    filter={
+        "text_field": {"$contains": "keyword"},  # Text filtering
+        "category": {"$in": ["category1", "category2"]}  # Metadata filtering
+    }
+)
+
+# Execute hybrid search
+results = await vector_store.search(query)
+```
+
+## Troubleshooting Questions
+
+### What do I do if my IPFS connection fails?
+
+If your IPFS connection fails:
+1. Verify your IPFS node is running: `ipfs id`
+2. Check API access: `curl http://localhost:5001/api/v0/version`
+3. Ensure CORS is configured: `ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin '["*"]'`
+4. Restart your IPFS node: `ipfs daemon`
+
+### What are common DuckDB performance issues?
+
+Common DuckDB performance issues:
+1. **Insufficient memory allocation**: Increase memory_limit parameter
+2. **Poor Parquet configuration**: Adjust row_group_size and page_size
+3. **Missing indexes**: Add indexes for frequently filtered columns
+4. **Large vector dimensions**: Consider using vector quantization
+
+### My vector search returns incorrect results. What should I check?
+
+If vector search results are incorrect:
+1. Verify vector dimensions match between query and stored vectors
+2. Check normalization of vectors (most similarity metrics expect normalized vectors)
+3. Verify index configuration is appropriate for your data
+4. Ensure vector quantization settings aren't too aggressive
+5. Validate that the metric type matches your expectations (cosine, dot, L2)
+
+### How do I debug the system?
+
+To debug the system:
+1. Enable debug logging in configuration
+2. Use the diagnostic endpoints for system information
+3. Check logs in the `logs` directory
+4. Run the test scripts in debug mode
+5. Use monitoring tools for performance metrics

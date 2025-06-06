@@ -18,7 +18,7 @@ from unittest.mock import Mock  # For test compatibility
 
 # Optional imports
 try:
-    import ipfshttpclient
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
     IPFS_AVAILABLE = True
 except ImportError:
     IPFS_AVAILABLE = False

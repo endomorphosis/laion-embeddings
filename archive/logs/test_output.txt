@@ -1,0 +1,14 @@
+INFO: Loading faiss with AVX2 support.
+INFO: Successfully loaded faiss with AVX2 support.
+INFO: Failed to load GPU Faiss: name 'GpuIndexIVFFlat' is not defined. Will not load constructor refs for GPU indexes. This is only an error if you're trying to use GPU Faiss.
+==================================================
+BASIC IMPORT VALIDATION TEST
+==================================================
+✓ MCPConfig import successful
+✓ ServiceFactory import successful
+✓ Core services import successful
+✓ MCP tools import successful
+✓ MCPConfig creation successful: laion-embeddings-mcp
+
+Results: 5/5 tests passed
+🎉 All basic validation tests passed!

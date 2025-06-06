@@ -85,7 +85,7 @@ class ImportTests(unittest.TestCase):
     def test_ipfs_embeddings_imports(self):
         """Test that ipfs_embeddings imports work with fallback handling"""
         try:
-            from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+            from ipfs_kit.ipfs_embeddings from ipfs_kit_py import ipfs_kit
             logger.info("✅ ipfs_embeddings_py imports successfully")
         except ImportError as e:
             self.fail(f"ipfs_embeddings_py import failed: {e}")
@@ -106,12 +106,12 @@ class TimeoutImplementationTests(unittest.TestCase):
         self.mock_resources = {"test": "resource"}
         self.mock_metadata = {"test": "metadata"}
     
-    @patch('ipfs_embeddings_py.ipfs_embeddings.ipfs_datasets_py')
-    @patch('ipfs_embeddings_py.ipfs_embeddings.ipfs_accelerate_py')
+    @patch('ipfs_kit.ipfs_embeddings.ipfs_datasets_py')
+    @patch('ipfs_kit.ipfs_embeddings.ipfs_accelerate_py')
     def test_timeout_constants_defined(self, mock_accelerate, mock_datasets):
         """Test that timeout constants are properly defined"""
         try:
-            from ipfs_embeddings_py.ipfs_embeddings import (
+            from ipfs_kit.ipfs_embeddings import (
                 BATCH_SIZE_OPTIMIZATION_TIMEOUT,
                 NETWORK_REQUEST_TIMEOUT,
                 ADAPTIVE_BATCH_TIMEOUT,
@@ -128,12 +128,12 @@ class TimeoutImplementationTests(unittest.TestCase):
         except ImportError as e:
             self.fail(f"Timeout constants import failed: {e}")
     
-    @patch('ipfs_embeddings_py.ipfs_embeddings.ipfs_datasets_py')
-    @patch('ipfs_embeddings_py.ipfs_embeddings.ipfs_accelerate_py')
+    @patch('ipfs_kit.ipfs_embeddings.ipfs_datasets_py')
+    @patch('ipfs_kit.ipfs_embeddings.ipfs_accelerate_py')
     def test_batch_size_timeout_error_defined(self, mock_accelerate, mock_datasets):
         """Test that BatchSizeTimeoutError is properly defined"""
         try:
-            from ipfs_embeddings_py.ipfs_embeddings import BatchSizeTimeoutError
+            from ipfs_kit.ipfs_embeddings import BatchSizeTimeoutError
             
             # Test that it's a proper exception class
             self.assertTrue(issubclass(BatchSizeTimeoutError, Exception))
@@ -142,12 +142,12 @@ class TimeoutImplementationTests(unittest.TestCase):
         except ImportError as e:
             self.fail(f"BatchSizeTimeoutError import failed: {e}")
     
-    @patch('ipfs_embeddings_py.ipfs_embeddings.ipfs_datasets_py')
-    @patch('ipfs_embeddings_py.ipfs_embeddings.ipfs_accelerate_py')
+    @patch('ipfs_kit.ipfs_embeddings.ipfs_datasets_py')
+    @patch('ipfs_kit.ipfs_embeddings.ipfs_accelerate_py')
     def test_safe_async_execute_with_timeout_defined(self, mock_accelerate, mock_datasets):
         """Test that safe_async_execute_with_timeout function is defined"""
         try:
-            from ipfs_embeddings_py.ipfs_embeddings import safe_async_execute_with_timeout
+            from ipfs_kit.ipfs_embeddings import safe_async_execute_with_timeout
             
             # Test that it's callable
             self.assertTrue(callable(safe_async_execute_with_timeout))
@@ -164,16 +164,16 @@ class MethodSignatureTests(unittest.TestCase):
         self.mock_resources = {"test": "resource"}
         self.mock_metadata = {"test": "metadata"}
     
-    @patch('ipfs_embeddings_py.ipfs_embeddings.ipfs_datasets_py')
-    @patch('ipfs_embeddings_py.ipfs_embeddings.ipfs_accelerate_py')
+    @patch('ipfs_kit.ipfs_embeddings.ipfs_datasets_py')
+    @patch('ipfs_kit.ipfs_embeddings.ipfs_accelerate_py')
     def test_missing_methods_implemented(self, mock_accelerate, mock_datasets):
         """Test that previously missing methods are now implemented"""
         try:
-            from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+            from ipfs_kit.ipfs_embeddings from ipfs_kit_py import ipfs_kit
             
             # Mock the dependencies
             mock_datasets.return_value = Mock()
-            mock_accelerate.ipfs_accelerate_py.return_value = Mock()
+            mock_accelerate.ipfs_kit.return_value = Mock()
             
             embeddings = ipfs_embeddings_py(self.mock_resources, self.mock_metadata)
             

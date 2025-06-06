@@ -95,7 +95,10 @@ except Exception as e:
 
 
 from multiprocessing import Process
-from .ipfs_datasets import ipfs_datasets_py
+from ipfs_kit_py.ipfs_kit import ipfs_kit
+from ipfs_embeddings_py.ipfs_datasets import ipfs_datasets_py
+from .qdrant_kit import qdrant_kit_py
+from .faiss_kit import faiss_kit_py
 
 # ==============================================================================
 # ADAPTIVE BATCH PROCESSING OPTIMIZATION
@@ -726,31 +729,10 @@ class ipfs_embeddings_py:
         except (NameError, AttributeError, TypeError):
             self.chunker = None
             
-        try:
-            if qdrant_kit_py is not None:
-                self.qdrant_kit_py = qdrant_kit_py(resources, metadata)
-            else:
-                self.qdrant_kit_py = None
-        except (NameError, AttributeError, TypeError):
-            self.qdrant_kit_py = None
-            
-        try:
-            if elasticsearch_kit is not None:
-                self.elasticsearch_kit = elasticsearch_kit(resources, metadata)
-            else:
-                self.elasticsearch_kit = None
-        except (NameError, AttributeError, TypeError):
-            self.elasticsearch_kit = None
-            
-        try:
-            if faiss_kit_py is not None:
-                self.faiss_kit = faiss_kit_py(resources, metadata)
-            else:
-                self.faiss_kit = None
-        except (NameError, AttributeError, TypeError):
-            self.faiss_kit = None
-            
-        self.ipfs_accelerate_py = ipfs_accelerate_py.ipfs_accelerate_py(resources, metadata)
+        self.qdrant_kit_py = qdrant_kit_py(resources, metadata)
+        self.elasticsearch_kit = elasticsearch_kit(resources, metadata)
+        self.faiss_kit = faiss_kit_py(resources, metadata)
+        self.ipfs_accelerate_py = ipfs_accelerate_py.ipfs_accelerate_py(resources=resources, metadata=metadata)
         # Create wrapper methods to handle signature differences
         # self.process_new_dataset_shard = self.ipfs_datasets.process_new_dataset_shard
         self.process_index_shard = self.ipfs_datasets.process_index_shard
@@ -834,8 +816,8 @@ class ipfs_embeddings_py:
     
     async def init_endpoints(self, models, endpoint_list=None):
         try:
-            # Since ipfs_accelerate_py.init_endpoints is not async, call it directly
-            results = self.ipfs_accelerate_py.init_endpoints(models, endpoint_list)
+            # Since ipfs_kit.init_endpoints is not async, call it directly
+            results = self.ipfs_kit.init_endpoints(models, endpoint_list)
             return results
         except Exception as e:
             logger.error(f"Error initializing endpoints: {e}")
@@ -1052,7 +1034,7 @@ class ipfs_embeddings_py:
             logger.info(f"Using cached optimal batch size for {operation_key}: {cached_size}")
             
             # Update endpoint status for backwards compatibility
-            if hasattr(self, 'endpoint_status') and endpoint in self.endpoint_status:
+            if hasattr(self, 'endpoint_status'):
                 self.endpoint_status[endpoint] = cached_size
                 
             return cached_size

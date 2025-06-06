@@ -10,7 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.
 
 # Mock necessary modules if they are not available in the test environment
 try:
-    from ipfs_embeddings_py.ipfs_embeddings import IpfsEmbeddings
+    from ipfs_kit.ipfs_embeddings import IpfsEmbeddings
 except ImportError:
     class MockIpfsEmbeddings:
         def __init__(self, ipfs_client=None, model=None, tokenizer=None):
@@ -36,7 +36,7 @@ except ImportError:
     IpfsEmbeddings = MockIpfsEmbeddings
 
 try:
-    from ipfs_accelerate_py.ipfs_accelerate import IpfsAccelerate
+    from ipfs_kit.ipfs_accelerate import IpfsAccelerate
 except ImportError:
     class MockIpfsAccelerate:
         async def test_local_openvino(self):
@@ -50,7 +50,7 @@ except ImportError:
     IpfsAccelerate = MockIpfsAccelerate
 
 try:
-    from ipfs_accelerate_py.install_depends import InstallDepends
+    from ipfs_kit.install_depends import InstallDepends
 except ImportError:
     class MockInstallDepends:
         async def install_openvino(self):

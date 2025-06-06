@@ -24,9 +24,10 @@ except ImportError:
     TORCH_AVAILABLE = False
     print("Warning: PyTorch not available")
 
-try:
-    from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
-    from transformers import AutoTokenizer
+    try:
+        from ipfs_kit_py.ipfs_kit import ipfs_kit
+        from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+        from transformers import AutoTokenizer
     TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TRANSFORMERS_AVAILABLE = False

@@ -65,8 +65,8 @@ def patch_modules():
     modules_to_patch = [
         'ipfs_accelerate_py',
         'ipfs_datasets_py',
-        'ipfs_datasets_py.rag_query_optimizer',
-        'ipfs_accelerate_py.worker',
+        'ipfs_kit.rag_query_optimizer',
+        'ipfs_kit.worker',
     ]
     
     # Special handling for torchvision - mock it without trying to import
@@ -94,9 +94,9 @@ def patch_modules():
         torch_mock = sys.modules['torch']
         torch_mock.library = MagicMock()
     
-    # Special handling for ipfs_datasets_py.rag_query_optimizer
-    if 'ipfs_datasets_py.rag_query_optimizer' in sys.modules:
-        optimizer_mock = sys.modules['ipfs_datasets_py.rag_query_optimizer']
+    # Special handling for ipfs_kit.rag_query_optimizer
+    if 'ipfs_kit.rag_query_optimizer' in sys.modules:
+        optimizer_mock = sys.modules['ipfs_kit.rag_query_optimizer']
         # Add the missing VectorIndexPartitioner class
         class VectorIndexPartitioner(MagicMock):
             def __init__(self, *args, **kwargs):

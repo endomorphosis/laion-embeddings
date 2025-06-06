@@ -87,7 +87,7 @@ from multiprocessing import Process
 import concurrent.futures
 import concurrent
 import json
-from ipfs_embeddings_py.ipfs_datasets import ipfs_datasets_py
+from ipfs_kit.ipfs_datasets from ipfs_kit_py import ipfs_kit
 class ipfs_embeddings_py:
     def __init__(self, resources, metadata):
         self.multiformats = ipfs_multiformats_py(resources, metadata)
@@ -98,7 +98,7 @@ class ipfs_embeddings_py:
         self.qdrant_kit_py = qdrant_kit_py(resources, metadata)
         self.elasticsearch_kit = elasticsearch_kit(resources, metadata)
         self.faiss_kit = faiss_kit_py(resources, metadata)
-        self.ipfs_accelerate = ipfs_accelerate_py.ipfs_accelerate_py(resources, metadata)
+        self.ipfs_accelerate = ipfs_kit.ipfs_accelerate_py(resources, metadata)
         self.process_new_dataset_shard = self.ipfs_datasets.process_new_dataset_shard
         self.process_index_shard = self.ipfs_datasets.process_index_shard
         self.ipfs_parquet_to_car = self.ipfs_datasets.ipfs_parquet_to_car_py
