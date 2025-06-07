@@ -8,7 +8,10 @@ import uuid
 from datetime import datetime, timedelta
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 
-from conftest import create_sample_json_file
+import sys
+sys.path.append('/home/barberb/laion-embeddings-1/tests/test_mcp_tools')
+sys.path.append('/home/barberb/laion-embeddings-1')
+from tests.test_mcp_tools.conftest import create_sample_json_file
 
 
 @pytest.mark.asyncio

@@ -398,6 +398,12 @@ class RetrievalTool(ClaudeMCPTool):
                         "content": f"Mock content for {identifier}",
                         "metadata": {"collection": collection} if include_metadata else None
                     }
+                else:
+                    # Default case for any other retrieval type
+                    result = {
+                        "id": identifier,
+                        "error": f"Unknown retrieval type: {retrieval_type}"
+                    }
 
                 if include_metadata and "metadata" not in result:
                     result["metadata"] = {"collection": collection}

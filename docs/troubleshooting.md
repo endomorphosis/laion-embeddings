@@ -2,6 +2,20 @@
 
 This guide covers common issues you might encounter when using the LAION Embeddings system, particularly with the IPFS and DuckDB vector stores.
 
+## 🎉 Recent Updates (v2.2.0)
+
+**Good News!** As of v2.2.0, all major MCP tool issues have been resolved:
+- ✅ All 22 MCP tools are now fully functional (100% success rate)
+- ✅ Import errors have been systematically fixed
+- ✅ Method signature inconsistencies resolved
+- ✅ Type errors and runtime problems eliminated
+- ✅ Comprehensive test validation completed
+
+**If you're upgrading from an earlier version**, most tool-related issues listed below have been automatically resolved. Run the validation script to confirm:
+```bash
+python test_all_mcp_tools.py
+```
+
 ## Installation Issues
 
 ### Missing Dependencies

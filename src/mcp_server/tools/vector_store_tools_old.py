@@ -7,8 +7,45 @@ from typing import Dict, Any, List, Optional, Union
 import json
 import os
 
-from services.vector_store_factory import VectorStoreFactory
-from services.base_vector_store import BaseVectorStore
+# Legacy file - vector store services not available in current structure
+# from vector_store_factory import VectorStoreFactory
+# from vector_store_base import BaseVectorStore
+
+# Placeholder classes for backward compatibility
+class VectorStoreFactory:
+    @staticmethod
+    def create(provider: str, config: Dict[str, Any]):
+        return MockVectorStore()
+
+class BaseVectorStore:
+    def __init__(self, *args, **kwargs):
+        pass
+
+class MockVectorStore:
+    """Mock vector store for backward compatibility"""
+    def get_info(self):
+        return {"status": "legacy", "message": "Vector store tools old is deprecated"}
+    
+    def search(self, *args, **kwargs):
+        return {"results": [], "message": "Legacy search not implemented"}
+    
+    def get_stats(self):
+        return {"count": 0, "message": "Legacy stats not available"}
+    
+    def delete(self, *args, **kwargs):
+        return {"success": False, "message": "Legacy delete not implemented"}
+    
+    def optimize(self):
+        return {"success": False, "message": "Legacy optimize not implemented"}
+    
+    def get_capabilities(self):
+        return {"features": [], "message": "Legacy capabilities not available"}
+    
+    def load_embeddings_from_file(self, *args, **kwargs):
+        return []
+    
+    def add(self, *args, **kwargs):
+        return {"success": False, "message": "Legacy add not implemented"}
 
 
 async def create_vector_store_tool(

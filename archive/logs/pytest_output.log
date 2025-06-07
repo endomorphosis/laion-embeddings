@@ -1,0 +1,173 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.3.5, pluggy-1.5.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/barberb/laion-embeddings-1
+configfile: pytest.ini
+plugins: anyio-4.9.0, timeout-2.3.1, asyncio-0.20.3
+asyncio: mode=Mode.STRICT
+collecting ... collected 165 items / 9 errors
+
+==================================== ERRORS ====================================
+____ ERROR collecting tests/test_mcp_tools/test_create_embeddings_tools.py _____
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_create_embeddings_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_mcp_tools/test_create_embeddings_tools.py:12: in <module>
+    from .conftest import (
+E   ImportError: attempted relative import with no known parent package
+_____ ERROR collecting tests/test_mcp_tools/test_data_processing_tools.py ______
+../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1778: in _get_module
+    return importlib.import_module("." + module_name, self.__name__)
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+<frozen importlib._bootstrap>:1387: in _gcd_import
+    ???
+<frozen importlib._bootstrap>:1360: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1331: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:935: in _load_unlocked
+    ???
+<frozen importlib._bootstrap_external>:995: in exec_module
+    ???
+<frozen importlib._bootstrap>:488: in _call_with_frames_removed
+    ???
+../.local/lib/python3.12/site-packages/transformers/models/whisper/processing_whisper.py:19: in <module>
+    from ...processing_utils import ProcessorMixin
+../.local/lib/python3.12/site-packages/transformers/processing_utils.py:33: in <module>
+    from .image_utils import ChannelDimension, is_valid_image, is_vision_available
+../.local/lib/python3.12/site-packages/transformers/image_utils.py:58: in <module>
+    from torchvision.transforms import InterpolationMode
+../.local/lib/python3.12/site-packages/torchvision/__init__.py:10: in <module>
+    from torchvision import _meta_registrations, datasets, io, models, ops, transforms, utils  # usort:skip
+../.local/lib/python3.12/site-packages/torchvision/_meta_registrations.py:163: in <module>
+    @torch.library.register_fake("torchvision::nms")
+../.local/lib/python3.12/site-packages/torch/library.py:1023: in register
+    use_lib._register_fake(op_name, func, _stacklevel=stacklevel + 1)
+../.local/lib/python3.12/site-packages/torch/library.py:214: in _register_fake
+    handle = entry.fake_impl.register(func_to_register, source)
+../.local/lib/python3.12/site-packages/torch/_library/fake_impl.py:31: in register
+    if torch._C._dispatch_has_kernel_for_dispatch_key(self.qualname, "Meta"):
+E   RuntimeError: operator torchvision::nms does not exist
+
+The above exception was the direct cause of the following exception:
+tests/test_mcp_tools/test_data_processing_tools.py:9: in <module>
+    from src.mcp_server.tools.data_processing_tools import (
+src/mcp_server/tools/data_processing_tools.py:12: in <module>
+    from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+ipfs_embeddings_py/__init__.py:1: in <module>
+    from .ipfs_embeddings import ipfs_embeddings_py
+ipfs_embeddings_py/ipfs_embeddings.py:28: in <module>
+    import ipfs_accelerate_py
+../ipfs_accelerate_py/ipfs_accelerate_py/__init__.py:36: in <module>
+    from .worker import worker
+../ipfs_accelerate_py/ipfs_accelerate_py/worker/__init__.py:1: in <module>
+    from .skillset.default_lm import hf_lm
+../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/__init__.py:11: in <module>
+    from .hf_whisper import *
+../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/hf_whisper.py:21: in <module>
+    from transformers import WhisperProcessor, WhisperTokenizer, WhisperFeatureExtractor
+<frozen importlib._bootstrap>:1412: in _handle_fromlist
+    ???
+../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1767: in __getattr__
+    value = getattr(module, name)
+../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1766: in __getattr__
+    module = self._get_module(self._class_to_module[name])
+../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1780: in _get_module
+    raise RuntimeError(
+E   RuntimeError: Failed to import transformers.models.whisper.processing_whisper because of the following error (look up to see its traceback):
+E   operator torchvision::nms does not exist
+------------------------------- Captured stdout --------------------------------
+connecting to master
+connecting to master
+_ ERROR collecting tests/test_mcp_tools/test_embedding_search_storage_tools.py _
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_embedding_search_storage_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_mcp_tools/test_embedding_search_storage_tools.py:13: in <module>
+    from .conftest import (
+E   ImportError: attempted relative import with no known parent package
+_______ ERROR collecting tests/test_mcp_tools/test_ipfs_cluster_tools.py _______
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_ipfs_cluster_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_mcp_tools/test_ipfs_cluster_tools.py:14: in <module>
+    from src.mcp_server.tools.ipfs_cluster_tools import (
+E   ImportError: cannot import name 'IPFSClusterManagementTool' from 'src.mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)
+______ ERROR collecting tests/test_mcp_tools/test_rate_limiting_tools.py _______
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_rate_limiting_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_mcp_tools/test_rate_limiting_tools.py:9: in <module>
+    from src.mcp_server.tools.rate_limiting_tools import (
+E   ImportError: cannot import name 'RateLimitEnforcementTool' from 'src.mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+____ ERROR collecting tests/test_mcp_tools/test_session_management_tools.py ____
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_session_management_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_mcp_tools/test_session_management_tools.py:11: in <module>
+    from .conftest import create_sample_json_file
+E   ImportError: attempted relative import with no known parent package
+_____ ERROR collecting tests/test_mcp_tools/test_shard_embeddings_tools.py _____
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_shard_embeddings_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_mcp_tools/test_shard_embeddings_tools.py:12: in <module>
+    from .conftest import (
+E   ImportError: attempted relative import with no known parent package
+_______ ERROR collecting tests/test_mcp_tools/test_vector_store_tools.py _______
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_vector_store_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_mcp_tools/test_vector_store_tools.py:14: in <module>
+    from src.mcp_server.tools.vector_store_tools import (
+E   ImportError: cannot import name 'create_vector_store_tool' from 'src.mcp_server.tools.vector_store_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/vector_store_tools.py)
+_________ ERROR collecting tests/test_mcp_tools/test_workflow_tools.py _________
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_workflow_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/test_mcp_tools/test_workflow_tools.py:14: in <module>
+    from src.mcp_server.tools.workflow_tools import (
+src/mcp_server/tools/workflow_tools.py:12: in <module>
+    from create_embeddings.create_embeddings import CreateEmbeddingsProcessor
+E   ImportError: cannot import name 'CreateEmbeddingsProcessor' from 'create_embeddings.create_embeddings' (/home/barberb/laion-embeddings-1/create_embeddings/create_embeddings.py)
+------------------------------- Captured stdout --------------------------------
+✓ Successfully imported ipfs_kit from ipfs_kit_py
+=============================== warnings summary ===============================
+../.local/lib/python3.12/site-packages/faiss/loader.py:49
+  /home/barberb/.local/lib/python3.12/site-packages/faiss/loader.py:49: DeprecationWarning: numpy.core._multiarray_umath is deprecated and has been renamed to numpy._core._multiarray_umath. The numpy._core namespace contains private NumPy internals and its use is discouraged, as NumPy internals can change without warning in any release. In practice, most real-world usage of numpy.core is to access functionality in the public NumPy API. If that is the case, use the public NumPy API. If not, you are using NumPy internals. If you would still like to access an internal attribute, use numpy._core._multiarray_umath.__cpu_features__.
+    from numpy.core._multiarray_umath import __cpu_features__
+
+../.local/lib/python3.12/site-packages/pydub/utils.py:14
+  /home/barberb/.local/lib/python3.12/site-packages/pydub/utils.py:14: DeprecationWarning: 'audioop' is deprecated and slated for removal in Python 3.13
+    import audioop
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_mcp_tools/test_create_embeddings_tools.py
+ERROR tests/test_mcp_tools/test_data_processing_tools.py - RuntimeError: Fail...
+ERROR tests/test_mcp_tools/test_embedding_search_storage_tools.py
+ERROR tests/test_mcp_tools/test_ipfs_cluster_tools.py
+ERROR tests/test_mcp_tools/test_rate_limiting_tools.py
+ERROR tests/test_mcp_tools/test_session_management_tools.py
+ERROR tests/test_mcp_tools/test_shard_embeddings_tools.py
+ERROR tests/test_mcp_tools/test_vector_store_tools.py
+ERROR tests/test_mcp_tools/test_workflow_tools.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 9 errors during collection !!!!!!!!!!!!!!!!!!!!
+======================== 2 warnings, 9 errors in 10.42s ========================

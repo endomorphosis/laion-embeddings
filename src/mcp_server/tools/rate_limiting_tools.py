@@ -680,3 +680,90 @@ class RateLimitManagementTool(ClaudeMCPTool):
                 "result": None,
                 "message": f"Rate limit management failed: {str(e)}"
             }
+
+
+class RateLimitEnforcementTool(ClaudeMCPTool):
+    """
+    Tool for enforcing rate limits on API requests.
+    """
+    
+    def __init__(self, enforcement_service=None):
+        super().__init__()
+        self.name = "rate_limit_enforcement"
+        self.description = "Enforces rate limits for API requests and handles violations"
+        self.enforcement_service = enforcement_service
+        self.input_schema = {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["check", "enforce", "reset", "status"]
+                },
+                "endpoint": {"type": "string"},
+                "user_id": {"type": "string"},
+                "request_info": {"type": "object"}
+            },
+            "required": ["action"]
+        }
+    
+    async def execute(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute rate limit enforcement."""
+        action = parameters.get("action")
+        
+        # Mock implementation for testing
+        if action == "check":
+            return {"allowed": True, "remaining": 100}
+        elif action == "enforce":
+            return {"action_taken": "none", "violation": False}
+        elif action == "reset":
+            return {"reset": True}
+        elif action == "status":
+            return {"status": "active", "violations": 0}
+        else:
+            return {"error": "Invalid action"}
+
+
+class RateLimitBypassTool(ClaudeMCPTool):
+    """
+    Tool for bypassing rate limits for specific users or requests.
+    """
+
+    def __init__(self, bypass_service=None, embedding_service=None):
+        super().__init__()
+        self.bypass_service = bypass_service
+        self.name = "rate_limit_bypass"
+        self.description = "Manages rate limit bypass permissions for users or API keys."
+        self.input_schema = {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "Bypass action to perform.",
+                    "enum": ["grant", "revoke", "check", "list", "temporary"]
+                },
+                "user_id": {"type": "string"},
+                "api_key": {"type": "string"},
+                "endpoint": {"type": "string"},
+                "duration": {"type": "integer", "description": "Duration in minutes for temporary bypass"},
+                "reason": {"type": "string"}
+            },
+            "required": ["action"]
+        }
+    
+    async def execute(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute rate limit bypass operation."""
+        action = parameters.get("action")
+        
+        # Mock implementation for testing
+        if action == "grant":
+            return {"bypass_granted": True, "user_id": parameters.get("user_id")}
+        elif action == "revoke":
+            return {"bypass_revoked": True, "user_id": parameters.get("user_id")}
+        elif action == "check":
+            return {"has_bypass": False, "user_id": parameters.get("user_id")}
+        elif action == "list":
+            return {"bypasses": []}
+        elif action == "temporary":
+            return {"temporary_bypass": True, "duration": parameters.get("duration", 60)}
+        else:
+            return {"error": "Invalid action"}

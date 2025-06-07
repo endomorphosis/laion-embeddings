@@ -43,11 +43,17 @@ class EmbeddingGenerationTool(ClaudeMCPTool):
         }
         self.embedding_service = embedding_service
     
-    async def execute(self, text: str, model: str = "sentence-transformers/all-MiniLM-L6-v2", 
-                     normalize: bool = True) -> Dict[str, Any]:
+    async def execute(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Execute embedding generation."""
         try:
+            # Extract parameters
+            text = parameters.get("text")
+            model = parameters.get("model", "sentence-transformers/all-MiniLM-L6-v2")
+            normalize = parameters.get("normalize", True)
+            
             # Validate inputs
+            if not text:
+                raise ValueError("Text parameter is required")
             text = validator.validate_text_input(text)
             model = validator.validate_model_name(model)
             
@@ -114,11 +120,18 @@ class BatchEmbeddingTool(ClaudeMCPTool):
         }
         self.embedding_service = embedding_service
     
-    async def execute(self, texts: List[str], model: str = "sentence-transformers/all-MiniLM-L6-v2",
-                     normalize: bool = True, batch_size: int = 10) -> Dict[str, Any]:
+    async def execute(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Execute batch embedding generation."""
         try:
+            # Extract parameters
+            texts = parameters.get("texts")
+            model = parameters.get("model", "sentence-transformers/all-MiniLM-L6-v2")
+            normalize = parameters.get("normalize", True)
+            batch_size = parameters.get("batch_size", 10)
+            
             # Validate inputs
+            if not texts:
+                raise ValueError("Texts parameter is required")
             if not isinstance(texts, list):
                 raise ValueError("texts must be a list")
             
@@ -200,11 +213,18 @@ class MultimodalEmbeddingTool(ClaudeMCPTool):
         }
         self.embedding_service = embedding_service
     
-    async def execute(self, content: Dict[str, str], model: str = "clip-vit-base-patch32",
-                     fusion_strategy: str = "concatenate", normalize: bool = True) -> Dict[str, Any]:
+    async def execute(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Execute multimodal embedding generation."""
         try:
+            # Extract parameters
+            content = parameters.get("content")
+            model = parameters.get("model", "clip-vit-base-patch32")
+            fusion_strategy = parameters.get("fusion_strategy", "concatenate")
+            normalize = parameters.get("normalize", True)
+            
             # Validate inputs
+            if not content:
+                raise ValueError("Content parameter is required")
             if not isinstance(content, dict):
                 raise ValueError("content must be a dictionary")
             

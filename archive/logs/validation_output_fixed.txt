@@ -1,0 +1,33 @@
+WARNING:mcp_server.tools.data_processing_tools:ipfs_embeddings_py components not available: No module named 'ipfs_kit_py.ipfs_kit'
+LAION EMBEDDINGS PROJECT - PYTEST FIXES VALIDATION
+============================================================
+============================================================
+TESTING ALL TOOL IMPORTS
+============================================================
+✓ session_management_tools imported successfully
+✓ data_processing_tools imported successfully
+✓ rate_limiting_tools imported successfully
+✓ embedding_tools imported successfully
+✓ search_tools imported successfully
+✓ ipfs_cluster_tools imported successfully
+
+============================================================
+TESTING TOOL INSTANTIATION
+============================================================
+✓ SessionCreationTool instantiated successfully
+✓ ChunkingTool instantiated successfully
+✓ RateLimitConfigurationTool instantiated successfully
+✗ EmbeddingGenerationTool instantiation failed: Embedding service cannot be None
+✗ SemanticSearchTool instantiation failed: Vector service cannot be None
+✗ IPFSClusterTool instantiation failed: IPFSClusterTool.__init__() missing 1 required positional argument: 'ipfs_vector_service'
+
+============================================================
+FINAL VALIDATION SUMMARY
+============================================================
+✓ Total successful tests: 9
+✗ Total errors: 3
+
+Errors encountered:
+1. EmbeddingGenerationTool instantiation failed: Embedding service cannot be None
+2. SemanticSearchTool instantiation failed: Vector service cannot be None
+3. IPFSClusterTool instantiation failed: IPFSClusterTool.__init__() missing 1 required positional argument: 'ipfs_vector_service'

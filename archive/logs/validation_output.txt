@@ -1,105 +1,40 @@
-2025-06-06 01:22:53,932 - faiss.loader - INFO - Loading faiss with AVX2 support.
-2025-06-06 01:22:53,971 - faiss.loader - INFO - Successfully loaded faiss with AVX2 support.
-2025-06-06 01:22:53,978 - faiss - INFO - Failed to load GPU Faiss: name 'GpuIndexIVFFlat' is not defined. Will not load constructor refs for GPU indexes. This is only an error if you're trying to use GPU Faiss.
-2025-06-06 01:22:55,661 - src.mcp_server.service_factory - INFO - Initializing core services...
-2025-06-06 01:22:55,661 - src.mcp_server.service_factory - INFO - Initializing VectorService...
-2025-06-06 01:22:55,661 - services.vector_service - INFO - Initialized IVF index with dimension 768
-2025-06-06 01:22:55,661 - src.mcp_server.service_factory - INFO - Initializing VectorClusterer...
-2025-06-06 01:22:55,661 - src.mcp_server.service_factory - INFO - Initializing EmbeddingService...
-2025-06-06 01:23:02,887 - datasets - INFO - PyTorch version 2.7.1 available.
-2025-06-06 01:23:03,480 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cuda:0
-2025-06-06 01:23:03,481 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
-🚀 Starting MCP Server Comprehensive Validation
-================================================================================
+WARNING:mcp_server.tools.data_processing_tools:ipfs_embeddings_py components not available: No module named 'ipfs_kit_py.ipfs_kit'
+LAION EMBEDDINGS PROJECT - PYTEST FIXES VALIDATION
+============================================================
+============================================================
+TESTING ALL TOOL IMPORTS
+============================================================
+✓ session_management_tools imported successfully
+✗ data_processing_tools import failed: cannot import name 'TextChunkingTool' from 'mcp_server.tools.data_processing_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/data_processing_tools.py)
+✗ rate_limiting_tools import failed: cannot import name 'RateLimitingTool' from 'mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+✗ embedding_tools import failed: cannot import name 'EmbeddingIndexingTool' from 'mcp_server.tools.embedding_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/embedding_tools.py)
+✗ search_tools import failed: cannot import name 'VectorSearchTool' from 'mcp_server.tools.search_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/search_tools.py)
+✗ ipfs_cluster_tools import failed: cannot import name 'ClusterStatusTool' from 'mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)
 
 ============================================================
-TESTING IMPORTS
+TESTING TOOL INSTANTIATION
 ============================================================
-✓ MCPConfig import
-✓ ServiceFactory import
-✓ Core services import
-✓ MCP tools import
-✓ MCPServerApplication import
+✓ SessionCreationTool instantiated successfully
+✗ TextChunkingTool instantiation failed: cannot import name 'TextChunkingTool' from 'mcp_server.tools.data_processing_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/data_processing_tools.py)
+✗ RateLimitingTool instantiation failed: cannot import name 'RateLimitingTool' from 'mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+✗ EmbeddingGenerationTool instantiation failed: EmbeddingGenerationTool.__init__() missing 1 required positional argument: 'embedding_service'
+✗ VectorSearchTool instantiation failed: cannot import name 'VectorSearchTool' from 'mcp_server.tools.search_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/search_tools.py)
+✗ ClusterStatusTool instantiation failed: cannot import name 'ClusterStatusTool' from 'mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)
 
 ============================================================
-TESTING END-TO-END INTEGRATION
+FINAL VALIDATION SUMMARY
 ============================================================
+✓ Total successful tests: 2
+✗ Total errors: 10
 
-============================================================
-TESTING SERVICE INITIALIZATION
-============================================================
-✓ MCPConfig creation
-  Server: laion-embeddings-mcp
-✓ ServiceFactory creation
-Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.45it/s]Batches: 100%|██████████| 1/1 [00:00<00:00,  2.45it/s]
-2025-06-06 01:23:06,356 - services.embedding_service - INFO - Initialized SentenceTransformers model: sentence-transformers/all-MiniLM-L6-v2 (dim: 384)
-2025-06-06 01:23:06,357 - services.embedding_service - INFO - Embedding service initialized
-2025-06-06 01:23:06,357 - src.mcp_server.service_factory - INFO - Initializing IPFSVectorService...
-2025-06-06 01:23:06,357 - services.vector_service - INFO - Initialized IVF index with dimension 768
-2025-06-06 01:23:06,357 - src.mcp_server.service_factory - WARNING - IPFS service not available: ipfshttpclient not available. Install with: pip install ipfshttpclient
-2025-06-06 01:23:06,357 - src.mcp_server.service_factory - INFO - Initializing DistributedVectorIndex...
-2025-06-06 01:23:06,357 - src.mcp_server.service_factory - WARNING - Distributed vector service not available: DistributedVectorIndex.__init__() missing 1 required positional argument: 'storage'
-2025-06-06 01:23:06,357 - src.mcp_server.service_factory - INFO - All 5 services initialized successfully
-✓ Services initialization
-  Initialized 5 services
-✓ Embedding service access
-  Type: EmbeddingService
-✓ Vector service access
-  Type: VectorService
-✓ Clustering service access
-  Type: VectorClusterer
-✗ IPFS service access
-  Error: Service not available
-
-============================================================
-TESTING MCP APPLICATION
-============================================================
-2025-06-06 01:23:06,358 - src.mcp_server.main - INFO - Initializing MCP Server: laion-embeddings-mcp v1.0.0
-✓ MCPServerApplication creation
-2025-06-06 01:23:06,358 - src.mcp_server.main - INFO - Initializing service factory...
-2025-06-06 01:23:06,359 - src.mcp_server.service_factory - INFO - Initializing core services...
-2025-06-06 01:23:06,359 - src.mcp_server.service_factory - INFO - Initializing VectorService...
-2025-06-06 01:23:06,359 - services.vector_service - INFO - Initialized IVF index with dimension 768
-2025-06-06 01:23:06,359 - src.mcp_server.service_factory - INFO - Initializing VectorClusterer...
-2025-06-06 01:23:06,359 - src.mcp_server.service_factory - INFO - Initializing EmbeddingService...
-2025-06-06 01:23:06,362 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cuda:0
-2025-06-06 01:23:06,362 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: sentence-transformers/all-MiniLM-L6-v2
-Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 150.52it/s]
-2025-06-06 01:23:07,667 - services.embedding_service - INFO - Initialized SentenceTransformers model: sentence-transformers/all-MiniLM-L6-v2 (dim: 384)
-2025-06-06 01:23:07,667 - services.embedding_service - INFO - Embedding service initialized
-2025-06-06 01:23:07,667 - src.mcp_server.service_factory - INFO - Initializing IPFSVectorService...
-2025-06-06 01:23:07,667 - services.vector_service - INFO - Initialized IVF index with dimension 768
-2025-06-06 01:23:07,667 - src.mcp_server.service_factory - WARNING - IPFS service not available: ipfshttpclient not available. Install with: pip install ipfshttpclient
-2025-06-06 01:23:07,668 - src.mcp_server.service_factory - INFO - Initializing DistributedVectorIndex...
-2025-06-06 01:23:07,668 - src.mcp_server.service_factory - WARNING - Distributed vector service not available: DistributedVectorIndex.__init__() missing 1 required positional argument: 'storage'
-2025-06-06 01:23:07,668 - src.mcp_server.service_factory - INFO - All 5 services initialized successfully
-2025-06-06 01:23:07,668 - src.mcp_server.main - INFO - Initializing session manager...
-2025-06-06 01:23:07,668 - src.mcp_server.main - INFO - Initializing metrics collector...
-2025-06-06 01:23:08,669 - src.mcp_server.main - INFO - Initializing tool registry...
-2025-06-06 01:23:08,670 - src.mcp_server.tool_registry - INFO - Tool registry initialized
-2025-06-06 01:23:08,670 - src.mcp_server.main - INFO - Registering embedding tools...
-2025-06-06 01:23:08,670 - src.mcp_server.tool_registry - INFO - Registered tool: generate_embedding (category: general)
-2025-06-06 01:23:08,670 - src.mcp_server.tool_registry - INFO - Registered tool: generate_batch_embeddings (category: general)
-2025-06-06 01:23:08,670 - src.mcp_server.tool_registry - INFO - Registered tool: generate_multimodal_embedding (category: general)
-2025-06-06 01:23:08,670 - src.mcp_server.main - INFO - Registering search tools...
-2025-06-06 01:23:08,670 - src.mcp_server.main - ERROR - Failed to register tools: SemanticSearchTool.__init__() takes 2 positional arguments but 3 were given
-2025-06-06 01:23:08,670 - src.mcp_server.error_handlers - WARNING - Invalid request: Internal error: Tool registration failed: SemanticSearchTool.__init__() takes 2 positional arguments but 3 were given
-2025-06-06 01:23:08,670 - src.mcp_server.main - ERROR - Failed to initialize components: SemanticSearchTool.__init__() takes 2 positional arguments but 3 were given
-2025-06-06 01:23:08,670 - src.mcp_server.error_handlers - WARNING - Invalid request: Internal error: Component initialization failed: SemanticSearchTool.__init__() takes 2 positional arguments but 3 were given
-✗ MCP application initialization
-  Error: SemanticSearchTool.__init__() takes 2 positional arguments but 3 were given
-✗ End-to-end integration
-  Error: MCP application initialization failed
-
-================================================================================
-FINAL VALIDATION RESULTS
-================================================================================
-Total Tests: 15
-Passed: 12
-Failed: 3
-Success Rate: 80.0%
-
-❌ 3 TESTS FAILED
-🔧 Please review the failed tests above.
-
-Validation completed with exit code: 1
+Errors encountered:
+1. data_processing_tools import failed: cannot import name 'TextChunkingTool' from 'mcp_server.tools.data_processing_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/data_processing_tools.py)
+2. rate_limiting_tools import failed: cannot import name 'RateLimitingTool' from 'mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+3. embedding_tools import failed: cannot import name 'EmbeddingIndexingTool' from 'mcp_server.tools.embedding_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/embedding_tools.py)
+4. search_tools import failed: cannot import name 'VectorSearchTool' from 'mcp_server.tools.search_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/search_tools.py)
+5. ipfs_cluster_tools import failed: cannot import name 'ClusterStatusTool' from 'mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)
+6. TextChunkingTool instantiation failed: cannot import name 'TextChunkingTool' from 'mcp_server.tools.data_processing_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/data_processing_tools.py)
+7. RateLimitingTool instantiation failed: cannot import name 'RateLimitingTool' from 'mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+8. EmbeddingGenerationTool instantiation failed: EmbeddingGenerationTool.__init__() missing 1 required positional argument: 'embedding_service'
+9. VectorSearchTool instantiation failed: cannot import name 'VectorSearchTool' from 'mcp_server.tools.search_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/search_tools.py)
+10. ClusterStatusTool instantiation failed: cannot import name 'ClusterStatusTool' from 'mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)

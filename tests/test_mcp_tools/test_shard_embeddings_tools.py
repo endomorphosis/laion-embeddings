@@ -9,7 +9,10 @@ import tempfile
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from pathlib import Path
 
-from conftest import (
+import sys
+sys.path.append('/home/barberb/laion-embeddings-1/tests/test_mcp_tools')
+sys.path.append('/home/barberb/laion-embeddings-1')
+from tests.test_mcp_tools.conftest import (
     MockShardEmbeddingsProcessor, create_sample_file, create_sample_embeddings_file,
     TEST_SHARD_SIZE, sample_embeddings
 )

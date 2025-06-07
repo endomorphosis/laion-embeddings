@@ -10,7 +10,10 @@ import numpy as np
 from unittest.mock import Mock, AsyncMock, patch, MagicMock
 from pathlib import Path
 
-from conftest import (
+import sys
+sys.path.append('/home/barberb/laion-embeddings-1/tests/test_mcp_tools')
+sys.path.append('/home/barberb/laion-embeddings-1')
+from tests.test_mcp_tools.conftest import (
     mock_embedding_service, sample_embeddings, sample_metadata,
     create_sample_file, TEST_MODEL_NAME, TEST_BATCH_SIZE
 )

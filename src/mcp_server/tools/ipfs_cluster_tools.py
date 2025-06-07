@@ -101,6 +101,10 @@ class IPFSClusterTool(ClaudeMCPTool):
             raise
 
 
+# Alias for backwards compatibility with test expectations
+IPFSClusterManagementTool = IPFSClusterTool
+
+
 class StorachaIntegrationTool(ClaudeMCPTool):
     """
     Tool for managing Storacha distributed storage integration.
@@ -477,12 +481,18 @@ class DistributedVectorTool(ClaudeMCPTool):
         }
         self.distributed_vector_service = distributed_vector_service
     
-    async def execute(self, action: str, collection: str = "default", 
-                     node_ids: Optional[List[str]] = None, 
-                     replication_factor: int = 3) -> Dict[str, Any]:
+    async def execute(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Execute distributed vector operation."""
         try:
+            # Extract parameters
+            action = parameters.get("action")
+            collection = parameters.get("collection", "default")
+            node_ids = parameters.get("node_ids")
+            replication_factor = parameters.get("replication_factor", 3)
+            
             # Validate inputs
+            if not action:
+                raise ValueError("Action parameter is required")
             action = validator.validate_algorithm_choice(action, ["distribute", "aggregate", "sync", "balance", "status"])
             collection = validator.validate_text_input(collection)
             
@@ -545,12 +555,18 @@ class IPFSMetadataTool(ClaudeMCPTool):
         }
         self.ipfs_vector_service = ipfs_vector_service
     
-    async def execute(self, action: str, cid: Optional[str] = None, 
-                     metadata: Optional[Dict[str, Any]] = None,
-                     filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def execute(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
         """Execute IPFS metadata operation."""
         try:
+            # Extract parameters
+            action = parameters.get("action")
+            cid = parameters.get("cid")
+            metadata = parameters.get("metadata")
+            filters = parameters.get("filters")
+            
             # Validate inputs
+            if not action:
+                raise ValueError("Action parameter is required")
             action = validator.validate_algorithm_choice(action, ["get", "set", "update", "delete", "list"])
             
             if cid:

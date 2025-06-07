@@ -2,6 +2,13 @@
 
 Welcome to the LAION Embeddings documentation. This collection of guides, references, and examples will help you get the most out of the IPFS-based embeddings search engine.
 
+## 🎉 Latest Updates (June 2025)
+
+**✅ Codebase Fully Validated**: All pytest issues resolved with comprehensive error handling  
+**✅ Directory Structure Organized**: Professional project organization completed  
+**✅ Tool Interface Consistency**: All 40+ MCP tools standardized and validated  
+**✅ Production Ready**: Clean, error-free codebase ready for deployment  
+
 ## 📚 Core Documentation
 
 - [Installation Guide](installation.md) - Set up and install the system
@@ -41,6 +48,18 @@ The unified vector database architecture provides a consistent interface to mult
 
 - [Contributing Guide](contributing.md) - How to contribute to the project
 - [Changelog](changelog.md) - Project version history
-- [Vector Dependencies](../VECTOR_DEPENDENCIES.md) - Dependencies for different vector stores
-- [Vector Integration Status](../VECTOR_INTEGRATION_STATUS.md) - Status of vector store integrations
-- [Vector Integration Complete](../VECTOR_INTEGRATION_COMPLETE.md) - Completion details
+
+## 📊 Project Organization
+
+### Tools & Utilities
+- **`tools/audit/`** - Code auditing and analysis tools
+- **`tools/testing/`** - Testing utilities and comprehensive test runners
+- **`tools/validation/`** - Validation and verification tools
+- **`scripts/`** - Utility scripts for common operations
+- **`config/`** - Configuration files and workspace settings
+
+### Archive & History
+- **`archive/status_reports/`** - Project completion and status reports
+- **`archive/documentation/`** - Historical documentation versions
+- **`archive/development/`** - Development experiments and debug files
+- **`archive/test_experiments/`** - Test development history

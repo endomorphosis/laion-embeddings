@@ -561,7 +561,7 @@ class IndexStatusTool(ClaudeMCPTool):
                 "include_details": {
                     "type": "boolean",
                     "description": "Include detailed diagnostic information.",
-                    "default": false
+                    "default": False
                 }
             },
             "required": []

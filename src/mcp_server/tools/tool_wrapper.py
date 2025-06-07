@@ -7,7 +7,7 @@ import logging
 from typing import Dict, Any, Callable, Optional
 from datetime import datetime
 
-from .tool_registry import ClaudeMCPTool
+from ..tool_registry import ClaudeMCPTool
 
 logger = logging.getLogger(__name__)
 

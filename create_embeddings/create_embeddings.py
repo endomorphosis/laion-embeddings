@@ -98,6 +98,9 @@ class create_embeddings:
         await self.create_embeddings(dataset, split, column, dst_path, models)
         return True
     
+# Alias for compatibility with other modules
+CreateEmbeddingsProcessor = create_embeddings
+
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",

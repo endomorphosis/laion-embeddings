@@ -37,6 +37,24 @@ class shard_embeddings:
             print(e)
             raise e
 
+class ShardEmbeddingsProcessor:
+    """
+    Processor class for shard embeddings operations.
+    Alias for the main shard_embeddings class for compatibility.
+    """
+    
+    def __init__(self, resources=None, metadata=None):
+        self.shard_embeddings_instance = shard_embeddings(resources, metadata)
+        
+    async def process(self, metadata=None):
+        """Process shard embeddings."""
+        return await self.shard_embeddings_instance(metadata)
+    
+    def __getattr__(self, name):
+        """Delegate attribute access to the shard_embeddings instance."""
+        return getattr(self.shard_embeddings_instance, name)
+
+
 if __name__ == '__main__':
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",

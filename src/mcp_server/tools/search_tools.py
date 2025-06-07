@@ -17,6 +17,7 @@ class SemanticSearchTool(ClaudeMCPTool):
         if vector_service is None:
             raise ValueError("Vector service cannot be None")
             
+        self.vector_service = vector_service
         self.name = "semantic_search"
         self.description = "Performs semantic search on LAION embeddings using vector similarity."
         self.input_schema = {
@@ -72,9 +73,9 @@ class SemanticSearchTool(ClaudeMCPTool):
             filters = parameters.get("filters", {})
             
             # TODO: Replace with actual LAION Embeddings service integration
-            if self.ipfs_embeddings:
+            if self.vector_service:
                 samples = [query]
-                search_results = await self.ipfs_embeddings.index_knn(samples, model)
+                search_results = await self.vector_service.index_knn(samples, model)
                 
                 if search_results and isinstance(search_results, list):
                     results = search_results[:top_k]

@@ -7,12 +7,7 @@ from typing import Dict, Any, List, Optional
 import json
 import os
 
-from shard_embeddings.shard_embeddings import (
-    ShardEmbeddingsProcessor,
-    ShardConfig,
-    InputConfig,
-    OutputConfig
-)
+from shard_embeddings.shard_embeddings import shard_embeddings, ShardEmbeddingsProcessor
 
 
 async def shard_embeddings_tool(

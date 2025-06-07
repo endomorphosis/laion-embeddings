@@ -1,0 +1,30 @@
+WARNING:mcp_server.tools.data_processing_tools:ipfs_embeddings_py components not available: No module named 'ipfs_kit_py.ipfs_kit'
+LAION EMBEDDINGS PROJECT - PYTEST FIXES VALIDATION
+============================================================
+============================================================
+TESTING ALL TOOL IMPORTS
+============================================================
+✓ session_management_tools imported successfully
+✓ data_processing_tools imported successfully
+✓ rate_limiting_tools imported successfully
+✓ embedding_tools imported successfully
+✓ search_tools imported successfully
+✓ ipfs_cluster_tools imported successfully
+
+============================================================
+TESTING TOOL INSTANTIATION
+============================================================
+✓ SessionCreationTool instantiated successfully
+✓ ChunkingTool instantiated successfully
+✓ RateLimitConfigurationTool instantiated successfully
+✓ EmbeddingGenerationTool instantiated successfully
+✓ SemanticSearchTool instantiated successfully
+✓ IPFSClusterTool instantiated successfully
+
+============================================================
+FINAL VALIDATION SUMMARY
+============================================================
+✓ Total successful tests: 12
+✗ Total errors: 0
+
+🎉 ALL TESTS PASSED! All pytest fixes are working correctly!
