@@ -2,6 +2,103 @@
 
 This guide will help you install and set up the LAION Embeddings search engine with all its dependencies.
 
+## 🎉 Latest Update (v2.2.0)
+
+**Production Ready!** All 22 MCP tools are now fully functional with comprehensive Docker support and CI/CD alignment.
+
+### Key Features ✅
+- **Docker-CI/CD Alignment**: Complete configuration consistency across all environments
+- **Unified MCP Server**: Single `mcp_server.py` entrypoint for all deployment scenarios
+- **Production Validation**: Same validation commands used in CI/CD, Docker, and manual testing
+
+## Installation Options
+
+Choose your preferred installation method:
+
+1. **🐳 Docker (Recommended)** - Fastest setup, production-ready
+2. **📦 Native Python** - Full development environment
+3. **🚀 Docker Compose** - Full stack with monitoring
+
+## 🐳 Docker Installation (Recommended)
+
+The fastest way to get started with a production-ready setup.
+
+### Prerequisites for Docker
+
+- Docker 20.10+ and Docker Compose 2.0+
+- 8GB+ RAM recommended
+- 20GB+ disk space
+
+### Quick Docker Start
+
+```bash
+# Clone repository
+git clone https://github.com/laion-ai/laion-embeddings.git
+cd laion-embeddings
+
+# Validate MCP tools (same as CI/CD)
+python3 mcp_server.py --validate
+
+# Full deployment (build, test, and run)
+./docker-deploy.sh all
+```
+
+Your server will be available at `http://localhost:9999`
+
+> **Note**: The Docker deployment uses the same `mcp_server.py` entrypoint as the CI/CD pipeline, ensuring consistent behavior across all environments.
+
+### Docker Commands
+
+```bash
+# Build image only
+./docker-deploy.sh build
+
+# Test the image
+./docker-deploy.sh test
+
+# Run production container
+./docker-deploy.sh run
+
+# Check status
+./docker-deploy.sh status
+
+# View logs
+./docker-deploy.sh logs
+
+# Stop container
+./docker-deploy.sh stop
+
+# Full cleanup
+./docker-deploy.sh cleanup
+```
+
+### Docker Compose (Full Stack)
+
+For a complete setup with monitoring:
+
+```bash
+# Start all services (API + IPFS + Monitoring)
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f laion-embeddings
+
+# Stop all services
+docker-compose down
+```
+
+Services will be available at:
+- **API Server**: http://localhost:9999
+- **Health Check**: http://localhost:9999/health
+- **IPFS Gateway**: http://localhost:8080
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3000 (admin/admin)
+
+## 📦 Native Python Installation
+
 ## Prerequisites
 
 The following prerequisites are required:

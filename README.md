@@ -16,7 +16,8 @@ An advanced, production-ready IPFS-based embeddings search engine that provides 
 - **✅ Tool Interface Consistency**: All MCP tools now use standardized parameter handling
 - **✅ Robust Error Handling**: Comprehensive null checks and fallback mechanisms implemented
 - **✅ Directory Cleanup**: Professional project structure with organized archives
-- **✅ Production Ready**: Immediate deployment capability with clean codebase
+- **✅ Docker-CI/CD Alignment**: Complete alignment of Docker configurations with CI/CD pipeline
+- **✅ Production Ready**: Immediate deployment capability with clean codebase and unified deployment approach
 
 ### 📊 System Status
 - **Working Components**: 3/3 core components operational ✅
@@ -57,10 +58,12 @@ python3 -m fastapi run main.py
 
 ### 2. Start the MCP Server (Optional - for AI Assistants)
 ```bash
-python -m src.mcp_server.main
+python3 mcp_server.py
 ```
 
 This starts the Model Context Protocol server with 40+ tools for AI assistant integration.
+
+> **Note**: The MCP server now uses a unified entrypoint (`mcp_server.py`) that matches the CI/CD pipeline and Docker deployment configurations for consistency across all environments.
 
 ### 3. Load Data (Optional)
 ```bash
@@ -102,6 +105,34 @@ curl 127.0.0.1:9999/create \
     -d '["TeraflopAI/Caselaw_Access_Project", "train", "text", "/storage/teraflopai/tmp", ["thenlper/gte-small", "Alibaba-NLP/gte-large-en-v1.5", "Alibaba-NLP/gte-Qwen2-1.5B-instruct"]]' \
     -H 'Content-Type: application/json'
 ```
+
+## 🐳 Docker Deployment
+
+The system provides production-ready Docker configurations that are fully aligned with the CI/CD pipeline for consistent deployment across all environments.
+
+### Docker Quick Start
+```bash
+# Build and run with Docker Compose
+docker-compose up --build
+
+# Or build and deploy with the deployment script
+./docker-deploy.sh
+```
+
+### Docker Features
+- **✅ Unified Entrypoint**: Uses same `mcp_server.py` entrypoint as CI/CD pipeline
+- **✅ Virtual Environment**: Properly configured Python virtual environment in containers
+- **✅ Health Checks**: Continuous MCP server validation using `mcp_server.py --validate`
+- **✅ Production Ready**: CUDA support, security-hardened, optimized for production
+- **✅ Multi-Service**: Includes IPFS node, monitoring (Prometheus/Grafana), and main server
+
+### Docker Services
+- **laion-embeddings-mcp-server**: Main application server with MCP tools
+- **ipfs**: IPFS node for distributed vector storage
+- **prometheus**: Metrics collection and monitoring
+- **grafana**: Visualization dashboard
+
+For complete Docker documentation, see [Docker Deployment Guide](docs/deployment/docker-guide.md).
 
 ## 🚀 Key Features
 
@@ -186,12 +217,17 @@ The system provides comprehensive MCP integration with **40+ tools** that expose
 
 1. **Start the MCP Server**:
    ```bash
-   python -m src.mcp_server.main
+   python3 mcp_server.py
    ```
 
-2. **Configure AI Assistant**: Add MCP server configuration to your AI assistant (Claude Desktop, etc.)
+2. **Validate MCP Tools** (same as CI/CD and Docker):
+   ```bash
+   python3 mcp_server.py --validate
+   ```
 
-3. **Use Tools**: AI assistants can now access all 40+ tools for comprehensive system interaction
+3. **Configure AI Assistant**: Add MCP server configuration to your AI assistant (Claude Desktop, etc.)
+
+4. **Use Tools**: AI assistants can now access all 40+ tools for comprehensive system interaction
 
 For complete MCP documentation, see [MCP Integration Guide](docs/mcp/README.md).
 

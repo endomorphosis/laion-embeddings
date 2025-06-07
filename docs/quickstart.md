@@ -6,6 +6,8 @@ This guide will help you get started with the LAION Embeddings search engine qui
 
 **Great News!** The system is now production-ready with:
 - ✅ All 22 MCP tools fully functional (100% success rate)
+- ✅ Docker-CI/CD alignment for consistent deployment
+- ✅ Unified MCP server entrypoint (`mcp_server.py`)
 - ✅ Comprehensive testing and validation
 - ✅ Professional project organization
 - ✅ Complete documentation
@@ -16,13 +18,25 @@ Ensure you have completed the [Installation Guide](installation.md) to install a
 
 ## Quick Validation
 
-First, verify that all MCP tools are working:
+First, verify that all MCP tools are working (same validation as CI/CD and Docker):
 
 ```bash
-python test_all_mcp_tools.py
+python3 mcp_server.py --validate
 ```
 
-Expected output: `All 22 MCP tools working correctly! ✅`
+Expected output: JSON with status "success" and tools count "22"
+
+## Starting the MCP Server (Optional)
+
+For AI assistant integration, start the MCP server:
+
+```bash
+python3 mcp_server.py
+```
+
+This starts the Model Context Protocol server with all 22 tools available for AI assistants.
+
+> **Note**: The MCP server uses the same entrypoint across all environments (development, CI/CD, Docker) for consistency.
 
 ## Starting the Server
 

@@ -1,0 +1,60 @@
+fastapi
+fastapi[standard]
+uvicorn
+datasets
+pandas
+numpy
+qdrant-client
+multiformats
+# ipfs_kit_py - using local development version from docs/ipfs_kit_py
+# DEPRECATED: ipfs_datasets_py==0.0.9 - replaced with ipfs_kit_py
+# DEPRECATED: ipfs_embeddings_py==0.0.19 - replaced with ipfs_kit_py
+# DEPRECATED: ipfs_accelerate_py==0.0.40 - replaced with ipfs_kit_py
+datasets
+transformers
+aiohttp
+multiformats
+elasticsearch
+nltk
+rank_bm25
+llama-index-embeddings-huggingface
+llama-index
+torch
+haystack
+faiss-cpu
+scikit-learn
+# DEPRECATED: ipfshttpclient - replaced with ipfs_kit_py
+pysbd
+optimum
+optimum[openvino]
+# DEPRECATED: ipfs_transformers_py - replaced with ipfs_kit_py
+toml
+torchvision
+einops
+timm
+
+# Authentication and security
+PyJWT
+passlib[bcrypt]
+python-multipart
+
+# Performance monitoring
+psutil
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+pytest-benchmark
+httpx
+
+# Development tools
+black
+isort
+mypy
+flake8
+pre-commit
+
+# Security
+bandit
+safety

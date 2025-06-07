@@ -16,9 +16,13 @@ The MCP server exposes **40+ tools** that provide complete access to:
 **✅ All Tool Interface Issues Resolved**: Comprehensive fixes applied to all MCP tools  
 **✅ Consistent Parameter Handling**: All 40+ tools now use standardized parameter dictionaries  
 **✅ Robust Error Handling**: Added null checks and fallback mechanisms across all tools  
+**✅ Unified Entrypoint**: MCP server now uses same `mcp_server.py` entrypoint as CI/CD and Docker  
 **✅ Production Ready**: All import errors and type issues resolved  
 
 ### 🔧 Technical Improvements
+- **Unified Server Entrypoint**: Single `mcp_server.py` file for consistency across environments
+- **CI/CD Alignment**: Same validation commands (`--validate`) used in testing and deployment
+- **Docker Integration**: Perfect alignment between MCP server configuration and Docker deployment
 - **Fixed Method Signatures**: All execute methods now properly inherit from base class
 - **Parameter Standardization**: Consistent `parameters: Dict[str, Any]` across all tools
 - **Error Handling**: Comprehensive null checks for optional dependencies
@@ -30,8 +34,15 @@ The MCP server exposes **40+ tools** that provide complete access to:
 ### 1. Start the MCP Server
 
 ```bash
-# Start the MCP server
-python -m src.mcp_server.main
+# Start the MCP server (unified entrypoint)
+python3 mcp_server.py
+```
+
+### 1.1 Validate MCP Server (same as CI/CD and Docker)
+
+```bash
+# Validate MCP tools (same command used in CI/CD and Docker health checks)
+python3 mcp_server.py --validate
 ```
 
 The server will initialize and register all available tools:

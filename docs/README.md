@@ -7,6 +7,7 @@ Welcome to the LAION Embeddings documentation. This collection of guides, refere
 **✅ Codebase Fully Validated**: All pytest issues resolved with comprehensive error handling  
 **✅ Directory Structure Organized**: Professional project organization completed  
 **✅ Tool Interface Consistency**: All 40+ MCP tools standardized and validated  
+**✅ Docker-CI/CD Alignment**: Complete configuration alignment for unified deployment approach  
 **✅ Production Ready**: Clean, error-free codebase ready for deployment  
 
 ## 📚 Core Documentation
@@ -16,6 +17,11 @@ Welcome to the LAION Embeddings documentation. This collection of guides, refere
 - [Configuration](configuration.md) - Configure endpoints and models
 - [API Reference](api/README.md) - Complete API documentation 
 - [MCP Integration](mcp/README.md) - Model Context Protocol server and 40+ tools 
+
+## 🐳 Deployment & Production
+
+- [Docker Guide](deployment/docker-guide.md) - Complete Docker deployment guide with CI/CD alignment
+- [Production Guide](deployment/production-guide.md) - Production deployment best practices 
 
 ## 🔍 Vector Database Architecture
 

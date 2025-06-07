@@ -1,0 +1,130 @@
+# .dockerignore for LAION Embeddings
+# Optimizes Docker build by excluding unnecessary files
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+archive/documentation/
+archive/status_reports/
+archive/development/
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Data files
+data/
+tmp/
+*.csv
+*.json
+*.parquet
+*.arrow
+
+# Backup files
+backup*/
+*backup/
+*.backup
+*.bak
+
+# Test files
+test_results/
+test_output*.txt
+*test*.json
+test_backup/
+
+# Archive directories
+archive/
+deprecated*/
+old*/
+
+# Temporary files
+.tmp/
+temp/
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Large model files
+models/
+*.bin
+*.safetensors
+*.onnx
+
+# FAISS indexes
+faiss_indexes/
+*.index
+*.faiss
+
+# Conda
+.conda/
