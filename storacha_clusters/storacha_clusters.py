@@ -1,55 +1,80 @@
-import ipfs_kit_py
-from ipfs_kit_py import *
-from ..ipfs_embeddings_py import ipfs_embeddings_py
-from ipfs_embeddings_py import *
-from ..ipfs_embeddings_py import ipfs_parquet_to_car
+"""
+DEPRECATED: storacha_clusters module
+
+This module is deprecated and has been replaced by ipfs_kit_py.
+
+Migration Guide:
+---------------
+
+OLD (deprecated):
+    from storacha_clusters import storacha_clusters
+    storacha = storacha_clusters(resources, metadata)
+    
+NEW (recommended):
+    from ipfs_kit_py.storacha_kit import storacha_kit
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
+    
+    # For Storacha functionality:
+    storacha = storacha_kit(api_key="your_api_key")
+    
+    # For general IPFS functionality:
+    ipfs = ipfs_kit(resources, metadata)
+
+Features mapping:
+-----------------
+- storacha_clusters.test() -> storacha_kit.validate_connection()
+- storacha_clusters.kmeans_cluster_split -> ipfs_kit.faiss_kit.kmeans_cluster_split_dataset
+- All IPFS operations -> ipfs_kit methods
+- All S3 operations -> ipfs_kit.s3_kit methods
+- All embedding operations -> ipfs_kit.ipfs_embeddings methods
+
+For more information, see: docs/IPFS_KIT_INTEGRATION_GUIDE.md
+"""
+
+import warnings
+import logging
+
+logger = logging.getLogger(__name__)
 
 class storacha_clusters:
-    def _init(self, resources=None, metadata=None):
+    """DEPRECATED: Use ipfs_kit_py.storacha_kit instead."""
+    
+    def __init__(self, resources=None, metadata=None):
+        warnings.warn(
+            "storacha_clusters is deprecated. Use ipfs_kit_py.storacha_kit instead. "
+            "See docs/IPFS_KIT_INTEGRATION_GUIDE.md for migration instructions.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        logger.warning(
+            "storacha_clusters is deprecated. Use ipfs_kit_py.storacha_kit instead."
+        )
+        
+        # Initialize with None to prevent usage
         self.resources = resources
         self.metadata = metadata
-        self.ipfs_kit_py = ipfs_kit_py.ipfs_kit(resources, metadata)
-        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings(resources, metadata)
-        self.ipfs_parquet_to_car = ipfs_embeddings_py.ipfs_parquet_to_car(resources, metadata)
-        self.kmeans_cluster_split = ipfs_embeddings_py.kmeans_cluster_split()
-        return None
-    
+        self.ipfs_kit_py = None
+        self.s3_kit_py = None
+        self.ipfs_embeddings_py = None
+        self.ipfs_parquet_to_car = None
+        self.kmeans_cluster_split = None
+        
     def test(self):
-        results = {}
-        test_ipfs_kit_init = None
-        test_ipfs_kit = None
-        test_ipfs_parquet_to_car = None
-        test_storacha_clusters = None
-        try:
-            test_ipfs_kit_init = self.ipfs_kit.init()
-        except Exception as e:
-            test_ipfs_kit_init = e
-            print(e)
-            raise e 
+        """DEPRECATED: Use storacha_kit.validate_connection() instead."""
+        raise DeprecationWarning(
+            "storacha_clusters.test() is deprecated. "
+            "Use ipfs_kit_py.storacha_kit.validate_connection() instead."
+        )
         
-        try:
-            test_ipfs_kit = self.ipfs_kit.test()
-        except Exception as e:
-            test_ipfs_kit = e
-            print(e)
-            raise e
-        try:
-            test_ipfs_parquet_to_car = self.ipfs_parquet_to_car.test()
-        except Exception as e:
-            test_ipfs_parquet_to_car = e
-            print(e)
-            raise e
-        try:
-            test_storacha_clusters = self.ipfs_kit_py.storacha_kit_py.test()
-        except Exception as e:
-            test_storacha_clusters = e
-            print(e)
-            raise e
-        
+    def __getattr__(self, name):
+        """Catch all attribute access and show deprecation warning."""
+        raise AttributeError(
+            f"storacha_clusters.{name} is deprecated. "
+            f"Use ipfs_kit_py instead. See docs/IPFS_KIT_INTEGRATION_GUIDE.md"
+        )
 
-    
-if __name__ == "main":
-    metadata = {}
-    resources = {}
-    test_storacha_clusters = storacha_clusters(resources, metadata)
-    test_storacha_clusters.test()
+if __name__ == "__main__":
+    print("ERROR: storacha_clusters is deprecated.")
+    print("Use ipfs_kit_py instead.")
+    print("See docs/IPFS_KIT_INTEGRATION_GUIDE.md for migration instructions.")
+    sys.exit(1)

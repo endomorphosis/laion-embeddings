@@ -1,0 +1,41 @@
+🔧 MCP Tools Quick Validation
+==================================================
+
+1. Testing core imports...
+   ✅ All core imports successful
+
+2. Testing basic tool instantiation...
+   ✅ AuthenticationTool (authenticate_user)
+   ✅ TokenValidationTool (validate_token)
+   ✅ SessionManager
+   ✅ RateLimitConfigurationTool (rate_limit_configuration)
+
+3. Checking critical files...
+   ✅ All critical files exist
+
+==================================================
+📊 Validation Results Summary:
+   • Core Imports: ✅ PASS
+   • Tools Instantiated: 4/4
+   • Critical Files: ✅ PASS
+   • Overall Status: ✅ PASS (100% success rate)
+
+🎉 MCP Tools validation successful!
+✅ Ready for CI/CD pipeline execution
+
+📄 JSON Output: {
+  "status": "success",
+  "validation": {
+    "imports": true,
+    "instantiation": 4,
+    "total_tools": 4,
+    "critical_files": true
+  },
+  "success_rate": 1.0,
+  "tools_validated": [
+    "AuthenticationTool (authenticate_user)",
+    "TokenValidationTool (validate_token)",
+    "SessionManager",
+    "RateLimitConfigurationTool (rate_limit_configuration)"
+  ]
+}

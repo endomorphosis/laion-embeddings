@@ -1,0 +1,218 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.3.5, pluggy-1.5.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/barberb/laion-embeddings-1
+configfile: pytest.ini
+plugins: anyio-4.9.0, timeout-2.3.1, asyncio-0.20.3
+asyncio: mode=Mode.STRICT
+collecting ... collected 15 items
+
+test/test_ipfs_vector_service.py::TestIPFSVectorStorage::test_ipfs_storage_initialization PASSED [  6%]
+test/test_ipfs_vector_service.py::TestIPFSVectorStorage::test_store_vector_shard PASSED [ 13%]
+test/test_ipfs_vector_service.py::TestIPFSVectorStorage::test_retrieve_vector_shard PASSED [ 20%]
+test/test_ipfs_vector_service.py::TestIPFSVectorStorage::test_store_index_manifest PASSED [ 26%]
+test/test_ipfs_vector_service.py::TestIPFSVectorStorage::test_retrieve_index_manifest PASSED [ 33%]
+test/test_ipfs_vector_service.py::TestIPFSVectorStorage::test_ipfs_connection_failure PASSED [ 40%]
+test/test_ipfs_vector_service.py::TestIPFSVectorStorage::test_missing_ipfs_client PASSED [ 46%]
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_add_vectors_distributed FAILED [ 53%]
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_search_distributed FAILED [ 60%]
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_load_from_manifest FAILED [ 66%]
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_shard_creation PASSED [ 73%]
+test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_error_handling_in_search FAILED [ 80%]
+test/test_ipfs_vector_service.py::TestIPFSIntegration::test_round_trip_vector_storage PASSED [ 86%]
+test/test_ipfs_vector_service.py::TestIPFSIntegration::test_manifest_consistency FAILED [ 93%]
+test/test_ipfs_vector_service.py::TestIPFSPerformance::test_large_shard_storage PASSED [100%]
+
+=================================== FAILURES ===================================
+___________ TestDistributedVectorIndex.test_add_vectors_distributed ____________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x7893ce76f440>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x7893cbfea660>
+mock_ipfs_storage = <Mock id='132576177989408'>
+
+    @pytest.mark.asyncio
+    async def test_add_vectors_distributed(self, distributed_index, mock_ipfs_storage):
+        """Test adding vectors to distributed index."""
+        embeddings = [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6], [0.7, 0.8]]
+        texts = ['text1', 'text2', 'text3', 'text4']
+        metadata = [{'id': i} for i in range(4)]
+    
+        manifest_hash = await distributed_index.add_vectors_distributed(
+            embeddings, texts, metadata
+        )
+    
+>       assert manifest_hash == 'QmManifest123'
+E       AssertionError: assert 'QmTestCID000003' == 'QmManifest123'
+E         
+E         - QmManifest123
+E         + QmTestCID000003
+
+test/test_ipfs_vector_service.py:215: AssertionError
+______________ TestDistributedVectorIndex.test_search_distributed ______________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x7893ce76f560>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x7893cc003f80>
+mock_vector_service = <Mock id='132576178086800'>
+mock_ipfs_storage = <Mock id='132576170743888'>
+
+    @pytest.mark.asyncio
+    async def test_search_distributed(self, distributed_index, mock_vector_service, mock_ipfs_storage):
+        """Test searching across distributed shards."""
+        # Setup existing shards
+        distributed_index.shard_metadata = {
+            'shard_0': {'ipfs_hash': 'QmShard123', 'vector_count': 2}
+        }
+    
+        query_embedding = [0.1, 0.2]
+        results = await distributed_index.search_distributed(query_embedding, k=5)
+    
+>       assert len(results) == 2  # Mock returns 2 results
+E       AssertionError: assert 4 == 2
+E        +  where 4 = len({'results': [], 'searched_shards': 1, 'status': 'success', 'total_candidates': 0})
+
+test/test_ipfs_vector_service.py:233: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    services.ipfs_vector_service:ipfs_vector_service.py:541 Error searching shard shard_0: 'cid'
+______________ TestDistributedVectorIndex.test_load_from_manifest ______________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x7893ce76f6e0>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x7893cb947f80>
+mock_ipfs_storage = <Mock id='132576171016656'>
+
+    @pytest.mark.asyncio
+    async def test_load_from_manifest(self, distributed_index, mock_ipfs_storage):
+        """Test loading distributed index from manifest."""
+        manifest_hash = 'QmManifest123'
+    
+>       await distributed_index.load_from_manifest(manifest_hash)
+
+test/test_ipfs_vector_service.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/ipfs_vector_service.py:601: in load_from_manifest
+    manifest = await self.storage.retrieve_index_manifest(manifest_hash)
+services/ipfs_vector_service.py:247: in retrieve_index_manifest
+    return await self.retrieve_index_metadata(cid)
+services/ipfs_vector_service.py:236: in retrieve_index_metadata
+    return self.client.get_json(cid)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.ipfs_vector_service.MockIPFSClient object at 0x7893cb914950>
+cid = 'QmManifest123', kwargs = {}
+
+    def get_json(self, cid, **kwargs):
+        """Mock get_json method."""
+        if cid not in self._storage:
+>           raise Exception(f"CID {cid} not found")
+E           Exception: CID QmManifest123 not found
+
+services/ipfs_vector_service.py:77: Exception
+------------------------------ Captured log call -------------------------------
+ERROR    services.ipfs_vector_service:ipfs_vector_service.py:238 Failed to retrieve index metadata QmManifest123: CID QmManifest123 not found
+ERROR    services.ipfs_vector_service:ipfs_vector_service.py:616 Failed to load from manifest QmManifest123: CID QmManifest123 not found
+___________ TestDistributedVectorIndex.test_error_handling_in_search ___________
+
+self = <test.test_ipfs_vector_service.TestDistributedVectorIndex object at 0x7893ce76f9e0>
+distributed_index = <services.ipfs_vector_service.DistributedVectorIndex object at 0x7893cb9ff710>
+mock_ipfs_storage = <Mock id='132576171710544'>
+
+    @pytest.mark.asyncio
+    async def test_error_handling_in_search(self, distributed_index, mock_ipfs_storage):
+        """Test error handling during distributed search."""
+        # Setup shard that will fail
+        distributed_index.shard_metadata = {
+            'failing_shard': {'ipfs_hash': 'QmFailingShard', 'vector_count': 2}
+        }
+    
+        # Make retrieval fail for this shard
+        mock_ipfs_storage.retrieve_vector_shard.side_effect = Exception("Retrieval failed")
+    
+        query_embedding = [0.1, 0.2]
+        results = await distributed_index.search_distributed(query_embedding, k=5)
+    
+        # Should return empty results but not crash
+>       assert results == []
+E       AssertionError: assert {'results': [...andidates': 0} == []
+E         
+E         Full diff:
+E         - []
+E         + {
+E         +     'results': [],
+E         +     'searched_shards': 1,
+E         +     'status': 'success',
+E         +     'total_candidates': 0,
+E         + }
+
+test/test_ipfs_vector_service.py:279: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    services.ipfs_vector_service:ipfs_vector_service.py:541 Error searching shard failing_shard: 'cid'
+________________ TestIPFSIntegration.test_manifest_consistency _________________
+
+self = <test.test_ipfs_vector_service.TestIPFSIntegration object at 0x7893ce76ff50>
+mock_ipfshttpclient = <MagicMock name='ipfshttpclient' id='132576171581440'>
+
+    @pytest.mark.asyncio
+    async def test_manifest_consistency(self, mock_ipfshttpclient):
+        """Test manifest consistency across operations."""
+        from services.ipfs_vector_service import IPFSVectorStorage, DistributedVectorIndex
+    
+        # Setup mocks
+        mock_vector_service = Mock()
+        mock_vector_service.create_index = Mock(return_value=Mock())
+        mock_vector_service.add_embeddings = AsyncMock(return_value=[0, 1])
+    
+        manifest_storage = {}
+        def mock_store_manifest(manifest):
+            manifest_hash = f"QmManifest{len(manifest_storage)}"
+            manifest_storage[manifest_hash] = manifest
+            return manifest_hash
+    
+        def mock_get_manifest(hash_val):
+            return manifest_storage[hash_val]
+    
+        mock_client = Mock()
+        mock_client.version = Mock(return_value={'Version': '0.12.0'})
+        mock_client.add_json = Mock(side_effect=lambda x: 'QmShard123')
+        mock_client.get_json = Mock(side_effect=mock_get_manifest)
+        mock_ipfshttpclient.connect.return_value = mock_client
+    
+        # Test
+        config = {'api_url': '/ip4/127.0.0.1/tcp/5001'}
+        storage = IPFSVectorStorage(config)
+        storage.store_index_manifest = AsyncMock(side_effect=mock_store_manifest)
+        storage.retrieve_index_manifest = AsyncMock(side_effect=mock_get_manifest)
+    
+        distributed_index = DistributedVectorIndex(mock_vector_service, storage, shard_size=2)
+    
+        # Add vectors and get manifest
+        embeddings = [[0.1, 0.2], [0.3, 0.4]]
+        texts = ['text1', 'text2']
+    
+        manifest_hash = await distributed_index.add_vectors_distributed(embeddings, texts)
+    
+        # Load from manifest and verify consistency
+        new_index = DistributedVectorIndex(mock_vector_service, storage, shard_size=2)
+        await new_index.load_from_manifest(manifest_hash)
+    
+>       assert len(new_index.shard_metadata) == len(distributed_index.shard_metadata)
+E       AttributeError: 'DistributedVectorIndex' object has no attribute 'shard_metadata'. Did you mean: 'index_metadata'?
+
+test/test_ipfs_vector_service.py:367: AttributeError
+=============================== warnings summary ===============================
+test/test_ipfs_vector_service.py:370
+  /home/barberb/laion-embeddings-1/test/test_ipfs_vector_service.py:370: PytestUnknownMarkWarning: Unknown pytest.mark.performance - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.performance
+
+test/test_ipfs_vector_service.py::TestIPFSVectorStorage::test_ipfs_storage_initialization
+  /home/barberb/.local/lib/python3.12/site-packages/faiss/loader.py:49: DeprecationWarning: numpy.core._multiarray_umath is deprecated and has been renamed to numpy._core._multiarray_umath. The numpy._core namespace contains private NumPy internals and its use is discouraged, as NumPy internals can change without warning in any release. In practice, most real-world usage of numpy.core is to access functionality in the public NumPy API. If that is the case, use the public NumPy API. If not, you are using NumPy internals. If you would still like to access an internal attribute, use numpy._core._multiarray_umath.__cpu_features__.
+    from numpy.core._multiarray_umath import __cpu_features__
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_add_vectors_distributed
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_search_distributed
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_load_from_manifest
+FAILED test/test_ipfs_vector_service.py::TestDistributedVectorIndex::test_error_handling_in_search
+FAILED test/test_ipfs_vector_service.py::TestIPFSIntegration::test_manifest_consistency
+=================== 5 failed, 10 passed, 2 warnings in 0.69s ===================
+Test exit code: 1
+

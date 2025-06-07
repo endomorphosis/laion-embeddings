@@ -1,0 +1,90 @@
+INFO:__main__:Testing MCP server components...
+INFO:__main__:
+Running MCP Imports test...
+INFO:__main__:✓ FastMCP import successful
+INFO:__main__:
+Running LAION Imports test...
+INFO:datasets:PyTorch version 2.7.0 available.
+INFO:faiss.loader:Loading faiss with AVX2 support.
+INFO:faiss.loader:Successfully loaded faiss with AVX2 support.
+INFO:faiss:Failed to load GPU Faiss: name 'GpuIndexIVFFlat' is not defined. Will not load constructor refs for GPU indexes. This is only an error if you're trying to use GPU Faiss.
+INFO:ipfs_kit_py.lotus_kit:Lotus binary available: False
+/home/barberb/laion-embeddings-1/docs/ipfs_kit_py/ipfs_kit_py/libp2p/hooks.py:32: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  module = original_import(name, globals, locals, fromlist, level)
+WARNING:ipfs_kit_py.libp2p:Missing libp2p dependencies: libp2p
+WARNING:ipfs_kit_py.libp2p:Install with `pip install ipfs_kit_py[libp2p]` to enable libp2p functionality
+WARNING:ipfs_kit_py.libp2p:libp2p dependencies not available. Some functionality will be limited.
+WARNING:ipfs_kit_py.libp2p.crypto_compat:Failed to import libp2p.crypto.keys: No module named 'libp2p'
+WARNING:ipfs_kit_py.libp2p.crypto_compat:Failed to import libp2p.crypto.serialization: No module named 'libp2p'
+WARNING:ipfs_kit_py.libp2p_peer:libp2p dependencies are not available, peer-to-peer functionality will be limited
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in StoreModelResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in ShareModelResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in UpdateModelMetadataResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in DeleteModelResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in GetModelCIDResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_type" in ExportSavedModelResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_type" in OptimizeForInferenceResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in SaveModelResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in SaveModelResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_name" in SaveModelErrorResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+/home/barberb/laion-embeddings-1/.venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:132: UserWarning: Field "model_version" in SaveModelErrorResponse has conflict with protected namespace "model_".
+
+You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+  warnings.warn(
+INFO:__main__:✓ LAION imports successful
+INFO:__main__:
+Running Tool Registry test...
+INFO:src.mcp_server.tool_registry:Tool registry initialized
+INFO:src.mcp_server.tool_registry:Initializing LAION embedding tools...
+INFO:src.mcp_server.tool_registry:Registered tool: generate_embedding (category: general)
+INFO:src.mcp_server.tool_registry:Registered tool: generate_batch_embeddings (category: general)
+INFO:src.mcp_server.tool_registry:Registered tool: generate_multimodal_embedding (category: general)
+INFO:src.mcp_server.tool_registry:Registered tool: semantic_search (category: search)
+INFO:src.mcp_server.tool_registry:Registered tool:  (category: general)
+WARNING:src.mcp_server.tool_registry:Tool '' already registered, overwriting
+INFO:src.mcp_server.tool_registry:Registered tool:  (category: general)
+WARNING:src.mcp_server.tool_registry:Tool '' already registered, overwriting
+INFO:src.mcp_server.tool_registry:Registered tool:  (category: general)
+INFO:src.mcp_server.tool_registry:Registered tool: storage_management (category: storage)
+INFO:src.mcp_server.tool_registry:Registered tool: collection_management (category: storage)
+WARNING:src.mcp_server.tool_registry:Could not register data processing tools (embedding service required): 'ChunkingTool' object has no attribute 'category'
+INFO:src.mcp_server.tool_registry:Successfully registered 8 tools
+INFO:__main__:✓ Tool registry initialized with 8 tools
+ERROR:__main__:✗ Tool registry test failed: 'list' object has no attribute 'keys'
+ERROR:__main__:Tool Registry test failed
+INFO:__main__:
+Running FastMCP Setup test...
+INFO:__main__:✓ FastMCP server setup successful
+INFO:__main__:
+Test Summary: 3/4 tests passed
+ERROR:__main__:✗ Some tests failed. Check the errors above.

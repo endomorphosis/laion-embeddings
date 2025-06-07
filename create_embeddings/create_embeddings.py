@@ -2,14 +2,18 @@ import asyncio
 from aiohttp import ClientSession
 from datasets import load_dataset, Dataset
 import os
-import sys
 import datasets
-sys.path.append('../ipfs_embeddings_py')
-from ipfs_embeddings_py import ipfs_embeddings_py
-import os
-import sys
+
+# Try to import ipfs_kit_py
+try:
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
+    print("✓ Successfully imported ipfs_kit from ipfs_kit_py")
+except ImportError:
+    print("⚠ Warning: Could not import ipfs_kit_py. Some functionality may be limited.")
+    ipfs_kit = None
+
 import subprocess
-from transformers import AutoTokenizer
+from transformers.models.auto.tokenization_auto import AutoTokenizer
 import random
 from multiprocessing import Pool
 
@@ -23,24 +27,50 @@ class create_embeddings:
         if len(list(metadata.keys())) > 0:
             for key in metadata.keys():
                 setattr(self, key, metadata[key])
-        self.ipfs_embeddings_py = ipfs_embeddings_py(resources, metadata)
-        if "https_endpoints" in resources.keys():
+        
+        # Initialize ipfs_kit if available
+        if ipfs_kit:
+            self.ipfs_kit = ipfs_kit(resources, metadata)
+        else:
+            print("⚠ Warning: ipfs_kit not available, creating placeholder")
+            self.ipfs_kit = None
+            
+        if "https_endpoints" in resources.keys() and self.ipfs_kit:
             for endpoint in resources["https_endpoints"]:
-                self.ipfs_embeddings_py.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])
+                self.ipfs_kit.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])
         self.join_column = None
         self.tokenizer = {}
-        self.index_dataset = self.index_dataset
 
     def add_https_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_https_endpoint(model, endpoint, ctx_length)
+        if self.ipfs_kit:
+            return self.ipfs_kit.add_https_endpoint(model, endpoint, ctx_length)
+        else:
+            print("Error: ipfs_kit not initialized. Cannot add HTTPS endpoint.")
+            return None
+
+    async def index_dataset(self, dataset, split=None, column=None, dst_path=None, models=None):
+        """Index a dataset to create embeddings"""
+        if self.ipfs_kit:
+            return await self.ipfs_kit.index_dataset(dataset, split, column, dst_path, models)
+        else:
+            print("Error: ipfs_kit not initialized. Cannot index dataset.")
+            return None
 
     async def create_embeddings(self, dataset, split, column, dst_path, models):
-        await self.ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
-        return None
+        if self.ipfs_kit:
+            await self.ipfs_kit.index_dataset(dataset, split, column, dst_path, models)
+            return True
+        else:
+            print("Error: ipfs_kit not initialized. Cannot create embeddings.")
+            return False
            
     async def __call__(self, dataset, split, column, dst_path, models):
-        await self.ipfs_embeddings_py.index_dataset(dataset, split, column, dst_path, models)
-        return None
+        if self.ipfs_kit:
+            await self.ipfs_kit.index_dataset(dataset, split, column, dst_path, models)
+            return True
+        else:
+            print("Error: ipfs_kit not initialized. Cannot call create_embeddings.")
+            return False
 
     async def test(self, dataset, split, column, dst_path, models):
         https_endpoints = [
@@ -65,9 +95,12 @@ class create_embeddings:
         ]
         for endpoint in https_endpoints:
             self.add_https_endpoint(endpoint[0], endpoint[1], endpoint[2])
-        await self.index_dataset(dataset, split, column, dst_path, models)
-        return None
+        await self.create_embeddings(dataset, split, column, dst_path, models)
+        return True
     
+# Alias for compatibility with other modules
+CreateEmbeddingsProcessor = create_embeddings
+
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",
@@ -76,11 +109,11 @@ if __name__ == "__main__":
         "models": [
             "Alibaba-NLP/gte-large-en-v1.5",
             "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-            # "dunzhang/stella_en_1.5B_v5",
+            # "dunzhang/stella_en_1.5B-v5",
         ],
         "dst_path": "/storage/teraflopai/tmp"
     }
     resources = {
     }
     create_embeddings_batch = create_embeddings(resources, metadata)
-    asyncio.run(create_embeddings_batch.test(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))    
+    asyncio.run(create_embeddings_batch.test(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"]))

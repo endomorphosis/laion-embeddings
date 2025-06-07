@@ -1,28 +1,33 @@
 
 try:
-    from ipfs_kit_py import ipfs_kit_py
-except:
-    try:    
-        from ipfs_kit_py import *
-    except:
-        pass
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
+except ImportError:
+    print("Warning: Could not import ipfs_kit_py. Please install it: pip install -e docs/ipfs_kit_py/")
+    ipfs_kit = None
     
 import datasets
 from datasets import *
+
 try:
-    from ..ipfs_embeddings_py import ipfs_embeddings_py
-except Exception as e:
+    from ipfs_kit_py import storacha_kit
+except ImportError:
     try:
-        from ipfs_embeddings_py import ipfs_embeddings_py
-    except Exception as e:  
-        pass
+        from ipfs_kit_py.storacha_kit import storacha_kit
+    except ImportError:
+        print("Warning: Could not import storacha_kit from ipfs_kit_py")
+        storacha_kit = None
+
+# Note: ipfs_parquet_to_car functionality should be available in ipfs_kit_py
+# If not, this functionality may need to be implemented or removed
+
 class ipfs_cluster_index:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
-        self.ipfs_kit_py = ipfs_kit_py.ipfs_kit(resources, metadata)
-        self.storacha_kit_py = ipfs_kit_py.storacha_kit(resources, metadata)
-        self.parquet_to_car_py = ipfs_embeddings_py.ipfs_parquet_to_car(resources, metadata)
+        self.ipfs_kit_py = ipfs_kit(resources, metadata) if ipfs_kit else None
+        self.storacha_kit_py = storacha_kit(resources, metadata) if storacha_kit else None
+        # Note: parquet_to_car functionality should be available through ipfs_kit_py
+        self.parquet_to_car_py = None
         return None
     
     def export_cid_list(self, dst_path):

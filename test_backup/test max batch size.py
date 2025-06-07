@@ -1,9 +1,9 @@
-from ipfs_embeddings_py import ipfs_embeddings_py
+from ipfs_kit_py.ipfs_kit import ipfs_kit
 import uuid
 class test_embeddings:
     def __init__(self, resources, metadata):
         self.ipfs_embeddings_py = ipfs_embeddings_py(resources, metadata)
-        self.ipfs_embeddings_py.add_https_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
+        self.ipfs_kit.add_https_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
         return None
     
     def test(self, model):
@@ -16,7 +16,7 @@ class test_embeddings:
                 generate_random_uuid = str(uuid.uuid4())
                 batch.append(generate_random_uuid)
             try:
-                embeddings = self.ipfs_embeddings_py.index_knn(batch, model)
+                embeddings = self.ipfs_kit.index_knn(batch, model)
                 if not isinstance(embeddings[0], list):
                     raise Exception("Embeddings not returned as list")
                 embed_fail = False

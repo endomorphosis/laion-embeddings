@@ -1,0 +1,22 @@
+MCP Server Test Results
+======================
+
+1. Testing basic imports...
+✓ Basic imports successful
+
+2. Testing ToolRegistry creation...
+✓ ToolRegistry created successfully
+
+3. Testing tool initialization...
+✓ Initialized 0 tools:
+
+4. Testing tool categories...
+✓ Found 0 categories:
+❌ ERROR: 'list' object has no attribute 'items'
+Traceback:
+Traceback (most recent call last):
+  File "/home/barberb/laion-embeddings-1/test/mcp/test_mcp_write_results.py", line 38, in <module>
+    for category, tool_list in categories.items():
+                               ^^^^^^^^^^^^^^^^
+AttributeError: 'list' object has no attribute 'items'
+

@@ -1,17 +1,20 @@
 try:
-    from ..ipfs_embeddings_py import ipfs_embeddings_py
-except:
-    try:    
-        from ipfs_embeddings_py import ipfs_embeddings_py
-    except: 
-        import ipfs_embeddings_py 
+    from ipfs_kit_py.ipfs_kit import ipfs_kit
+except ImportError:
+    # Fallback if direct import fails, assuming it's in the global scope or similar
+    # This might not be ideal, but handles cases where the package structure is flat
+    print("Warning: Could not import ipfs_kit_py. Please install it: pip install -e docs/ipfs_kit_py/")
+    ipfs_kit = None
 
 class shard_embeddings:
     def __init__(self, resources, metadata):
         self.resources = resources
         self.metadata = metadata
-        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
-        self.kmeans_cluster_split = self.ipfs_embeddings_py.kmeans_cluster_split
+        self.ipfs_kit = ipfs_kit(resources, metadata) if ipfs_kit else None
+        if self.ipfs_kit and hasattr(self.ipfs_kit, 'faiss_kit'):
+            self.kmeans_cluster_split = self.ipfs_kit.faiss_kit.kmeans_cluster_split_dataset
+        else:
+            self.kmeans_cluster_split = None
         return None
     
     async def __call__(self, metadata=None):
@@ -20,7 +23,7 @@ class shard_embeddings:
         try: 
             if metadata is None and metadata in list(dir(self)):
                 metadata = self.metadata
-            return await self.ipfs_embeddings_py.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"])
+            return await self.ipfs_kit.kmeans_cluster_split(metadata["dataset"], metadata["split"], metadata["column"], metadata["dst_path"], metadata["models"])
         except Exception as e:
             print(e)
             raise e
@@ -33,6 +36,24 @@ class shard_embeddings:
         except Exception as e:
             print(e)
             raise e
+
+class ShardEmbeddingsProcessor:
+    """
+    Processor class for shard embeddings operations.
+    Alias for the main shard_embeddings class for compatibility.
+    """
+    
+    def __init__(self, resources=None, metadata=None):
+        self.shard_embeddings_instance = shard_embeddings(resources, metadata)
+        
+    async def process(self, metadata=None):
+        """Process shard embeddings."""
+        return await self.shard_embeddings_instance(metadata)
+    
+    def __getattr__(self, name):
+        """Delegate attribute access to the shard_embeddings instance."""
+        return getattr(self.shard_embeddings_instance, name)
+
 
 if __name__ == '__main__':
     metadata = {

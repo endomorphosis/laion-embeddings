@@ -1,0 +1,83 @@
+{
+  "timestamp": "2025-06-02T22:57:44.374136",
+  "duration_seconds": 38.084759,
+  "overall_status": "FAILURE",
+  "summary": {
+    "total_tests": 7,
+    "passed_tests": 3,
+    "critical_tests": 6,
+    "critical_passed": 2
+  },
+  "test_results": {
+    "Standalone Integration Tests": {
+      "result": {
+        "success": true,
+        "stdout": "Starting integration tests...\n\n\n==================================================\nTesting basic vector service...\nAdding embeddings...\nAdd result: {'status': 'success', 'added_count': 50, 'total_vectors': 50}\nTesting search...\nSearch result: {'status': 'success', 'results': [{'index': 14, 'distance': 54.38917541503906, 'similarity_score': np.float32(0.01805407), 'id': 'vec_14', 'text': 'Sample text 14', 'metadata': {'id': 'doc_14', 'source': 'test'}}, {'index': 25, 'distance': 55.87206268310547, 'similarity_score': np.float32(0.017583326), 'id': 'vec_25', 'text': 'Sample text 25', 'metadata': {'id': 'doc_25', 'source': 'test'}}, {'index': 23, 'distance': 57.45930099487305, 'similarity_score': np.float32(0.017105918), 'id': 'vec_23', 'text': 'Sample text 23', 'metadata': {'id': 'doc_23', 'source': 'test'}}, {'index': 19, 'distance': 57.49851989746094, 'similarity_score': np.float32(0.01709445), 'id': 'vec_19', 'text': 'Sample text 19', 'metadata': {'id': 'doc_19', 'source': 'test'}}, {'index': 38, 'distance': 58.953346252441406, 'similarity_score': np.float32(0.016679635), 'id': 'vec_38', 'text': 'Sample text 38', 'metadata': {'id': 'doc_38', 'source': 'test'}}], 'query_time_ms': 0}\n\u2713 Vector service test passed!\n==================================================\n\n==================================================\nTesting IPFS vector service...\nAdding embeddings to IPFS service...\nAdd result: {'status': 'success', 'local': {'status': 'success', 'added_count': 30, 'total_vectors': 30}, 'distributed': {'status': 'success', 'added_count': 30, 'shard_ids': ['shard_e37307df', 'shard_121fb3f7'], 'shard_cids': ['QmTestHash123', 'QmTestHash123'], 'total_vectors': 30, 'shard_count': 2, 'manifest_hash': 'QmTestHash123'}}\nTesting search...\nSearch result: {'status': 'success', 'results': {'local': {'status': 'success', 'results': [{'index': 18, 'distance': 62.17408752441406, 'similarity_score': np.float32(0.015829274), 'id': 'vec_18', 'text': 'Sample text 18', 'metadata': {'id': 'doc_18', 'source': 'test', 'text': 'Sample text 18'}}, {'index': 6, 'distance': 62.58126449584961, 'similarity_score': np.float32(0.015727904), 'id': 'vec_6', 'text': 'Sample text 6', 'metadata': {'id': 'doc_6', 'source': 'test', 'text': 'Sample text 6'}}, {'index': 8, 'distance': 62.676109313964844, 'similarity_score': np.float32(0.015704477), 'id': 'vec_8', 'text': 'Sample text 8', 'metadata': {'id': 'doc_8', 'source': 'test', 'text': 'Sample text 8'}}, {'index': 22, 'distance': 62.96046447753906, 'similarity_score': np.float32(0.015634658), 'id': 'vec_22', 'text': 'Sample text 22', 'metadata': {'id': 'doc_22', 'source': 'test', 'text': 'Sample text 22'}}, {'index': 28, 'distance': 63.448707580566406, 'similarity_score': np.float32(0.015516215), 'id': 'vec_28', 'text': 'Sample text 28', 'metadata': {'id': 'doc_28', 'source': 'test', 'text': 'Sample text 28'}}], 'query_time_ms': 0}}}\n\u2713 IPFS vector service test passed!\n==================================================\n\n==================================================\nTesting clustering service...\nAdding vectors with clustering...\nAdd result: {'status': 'success', 'total_added': 30, 'shards_used': ['cluster_2_shard', 'cluster_1_shard', 'cluster_0_shard'], 'clustering_quality': {'silhouette_score': 0.0076288082636892796, 'calinski_harabasz_score': 1.2368385791778564, 'n_clusters': 3, 'n_noise': 0}, 'clusters_info': {np.int32(0): {'size': 3, 'quality_score': np.float32(0.1831885)}, np.int32(1): {'size': 15, 'quality_score': np.float32(0.15579808)}, np.int32(2): {'size': 12, 'quality_score': np.float32(0.15862617)}}}\nTesting search with cluster routing...\nSearch result: {'status': 'success', 'results': [{'index': 5, 'distance': 62.17408752441406, 'similarity_score': np.float32(0.015829274), 'id': 'vec_5', 'text': 'Sample text 18', 'metadata': {'id': 'doc_18', 'source': 'test'}, 'shard_id': 'cluster_2_shard', 'cluster_id': np.int32(2)}, {'index': 2, 'distance': 62.58126449584961, 'similarity_score': np.float32(0.015727904), 'id': 'vec_2', 'text': 'Sample text 6', 'metadata': {'id': 'doc_6', 'source': 'test'}, 'shard_id': 'cluster_1_shard', 'cluster_id': np.int32(1)}, {'index': 3, 'distance': 62.676109313964844, 'similarity_score': np.float32(0.015704477), 'id': 'vec_3', 'text': 'Sample text 8', 'metadata': {'id': 'doc_8', 'source': 'test'}, 'shard_id': 'cluster_1_shard', 'cluster_id': np.int32(1)}, {'index': 8, 'distance': 62.96046447753906, 'similarity_score': np.float32(0.015634658), 'id': 'vec_8', 'text': 'Sample text 22', 'metadata': {'id': 'doc_22', 'source': 'test'}, 'shard_id': 'cluster_2_shard', 'cluster_id': np.int32(2)}, {'index': 11, 'distance': 63.448707580566406, 'similarity_score': np.float32(0.015516215), 'id': 'vec_11', 'text': 'Sample text 28', 'metadata': {'id': 'doc_28', 'source': 'test'}, 'shard_id': 'cluster_2_shard', 'cluster_id': np.int32(2)}], 'shards_searched': ['cluster_2_shard', 'cluster_1_shard', 'cluster_0_shard'], 'total_candidates': 13, 'search_strategy': 'adaptive'}\n\u2713 Clustering service test passed!\n==================================================\n\n\nTest Results:\nPassed: 3/3\n\ud83c\udf89 All integration tests passed!\n",
+        "stderr": "Failed to connect to IPFS: ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=5001): Max retries exceeded with url: /api/v0/version?stream-channels=true (Caused by NewConnectionError('<ipfshttpclient.requests_wrapper.HTTPConnection object at 0x7fb6167133b0>: Failed to establish a new connection: [Errno 111] Connection refused'))\nIPFS connection failed in test mode: ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=5001): Max retries exceeded with url: /api/v0/version?stream-channels=true (Caused by NewConnectionError('<ipfshttpclient.requests_wrapper.HTTPConnection object at 0x7fb6167133b0>: Failed to establish a new connection: [Errno 111] Connection refused')), using mock client\n",
+        "returncode": 0
+      },
+      "critical": true,
+      "command": "python test_integration_standalone.py"
+    },
+    "Vector Service Unit Tests": {
+      "result": {
+        "success": false,
+        "stdout": "connecting to master\nconnecting to master\n",
+        "stderr": "ImportError while loading conftest '/home/barberb/laion-embeddings-1/conftest.py'.\nconftest.py:3: in <module>\n    from main import app\nmain.py:9: in <module>\n    from search_embeddings import search_embeddings\nsearch_embeddings/__init__.py:6: in <module>\n    from .search_embeddings import search_embeddings\nsearch_embeddings/search_embeddings.py:4: in <module>\n    import ipfs_embeddings_py\nipfs_embeddings_py/__init__.py:1: in <module>\n    from .ipfs_embeddings import ipfs_embeddings_py\nipfs_embeddings_py/ipfs_embeddings.py:28: in <module>\n    import ipfs_accelerate_py\n../ipfs_accelerate_py/ipfs_accelerate_py/__init__.py:36: in <module>\n    from .worker import worker\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/__init__.py:1: in <module>\n    from .skillset.default_lm import hf_lm\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/__init__.py:11: in <module>\n    from .hf_whisper import *\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/hf_whisper.py:21: in <module>\n    from transformers import WhisperProcessor, WhisperTokenizer, WhisperFeatureExtractor\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1767: in __getattr__\n    value = getattr(module, name)\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1766: in __getattr__\n    module = self._get_module(self._class_to_module[name])\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1780: in _get_module\n    raise RuntimeError(\nE   RuntimeError: Failed to import transformers.models.whisper.processing_whisper because of the following error (look up to see its traceback):\nE   operator torchvision::nms does not exist\n",
+        "returncode": 4
+      },
+      "critical": true,
+      "command": "python -m pytest test/test_vector_service.py -v --tb=short"
+    },
+    "IPFS Vector Service Unit Tests": {
+      "result": {
+        "success": false,
+        "stdout": "connecting to master\nconnecting to master\n",
+        "stderr": "ImportError while loading conftest '/home/barberb/laion-embeddings-1/conftest.py'.\nconftest.py:3: in <module>\n    from main import app\nmain.py:9: in <module>\n    from search_embeddings import search_embeddings\nsearch_embeddings/__init__.py:6: in <module>\n    from .search_embeddings import search_embeddings\nsearch_embeddings/search_embeddings.py:4: in <module>\n    import ipfs_embeddings_py\nipfs_embeddings_py/__init__.py:1: in <module>\n    from .ipfs_embeddings import ipfs_embeddings_py\nipfs_embeddings_py/ipfs_embeddings.py:28: in <module>\n    import ipfs_accelerate_py\n../ipfs_accelerate_py/ipfs_accelerate_py/__init__.py:36: in <module>\n    from .worker import worker\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/__init__.py:1: in <module>\n    from .skillset.default_lm import hf_lm\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/__init__.py:11: in <module>\n    from .hf_whisper import *\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/hf_whisper.py:21: in <module>\n    from transformers import WhisperProcessor, WhisperTokenizer, WhisperFeatureExtractor\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1767: in __getattr__\n    value = getattr(module, name)\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1766: in __getattr__\n    module = self._get_module(self._class_to_module[name])\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1780: in _get_module\n    raise RuntimeError(\nE   RuntimeError: Failed to import transformers.models.whisper.processing_whisper because of the following error (look up to see its traceback):\nE   operator torchvision::nms does not exist\n",
+        "returncode": 4
+      },
+      "critical": true,
+      "command": "python -m pytest test/test_ipfs_vector_service.py -v --tb=short"
+    },
+    "Clustering Service Unit Tests": {
+      "result": {
+        "success": false,
+        "stdout": "connecting to master\nconnecting to master\n",
+        "stderr": "ImportError while loading conftest '/home/barberb/laion-embeddings-1/conftest.py'.\nconftest.py:3: in <module>\n    from main import app\nmain.py:9: in <module>\n    from search_embeddings import search_embeddings\nsearch_embeddings/__init__.py:6: in <module>\n    from .search_embeddings import search_embeddings\nsearch_embeddings/search_embeddings.py:4: in <module>\n    import ipfs_embeddings_py\nipfs_embeddings_py/__init__.py:1: in <module>\n    from .ipfs_embeddings import ipfs_embeddings_py\nipfs_embeddings_py/ipfs_embeddings.py:28: in <module>\n    import ipfs_accelerate_py\n../ipfs_accelerate_py/ipfs_accelerate_py/__init__.py:36: in <module>\n    from .worker import worker\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/__init__.py:1: in <module>\n    from .skillset.default_lm import hf_lm\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/__init__.py:11: in <module>\n    from .hf_whisper import *\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/hf_whisper.py:21: in <module>\n    from transformers import WhisperProcessor, WhisperTokenizer, WhisperFeatureExtractor\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1767: in __getattr__\n    value = getattr(module, name)\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1766: in __getattr__\n    module = self._get_module(self._class_to_module[name])\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1780: in _get_module\n    raise RuntimeError(\nE   RuntimeError: Failed to import transformers.models.whisper.processing_whisper because of the following error (look up to see its traceback):\nE   operator torchvision::nms does not exist\n",
+        "returncode": 4
+      },
+      "critical": true,
+      "command": "python -m pytest test/test_clustering_service.py -v --tb=short"
+    },
+    "Vector Service Integration Tests": {
+      "result": {
+        "success": false,
+        "stdout": "connecting to master\nconnecting to master\n",
+        "stderr": "ImportError while loading conftest '/home/barberb/laion-embeddings-1/conftest.py'.\nconftest.py:3: in <module>\n    from main import app\nmain.py:9: in <module>\n    from search_embeddings import search_embeddings\nsearch_embeddings/__init__.py:6: in <module>\n    from .search_embeddings import search_embeddings\nsearch_embeddings/search_embeddings.py:4: in <module>\n    import ipfs_embeddings_py\nipfs_embeddings_py/__init__.py:1: in <module>\n    from .ipfs_embeddings import ipfs_embeddings_py\nipfs_embeddings_py/ipfs_embeddings.py:28: in <module>\n    import ipfs_accelerate_py\n../ipfs_accelerate_py/ipfs_accelerate_py/__init__.py:36: in <module>\n    from .worker import worker\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/__init__.py:1: in <module>\n    from .skillset.default_lm import hf_lm\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/__init__.py:11: in <module>\n    from .hf_whisper import *\n../ipfs_accelerate_py/ipfs_accelerate_py/worker/skillset/hf_whisper.py:21: in <module>\n    from transformers import WhisperProcessor, WhisperTokenizer, WhisperFeatureExtractor\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1767: in __getattr__\n    value = getattr(module, name)\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1766: in __getattr__\n    module = self._get_module(self._class_to_module[name])\n../.local/lib/python3.12/site-packages/transformers/utils/import_utils.py:1780: in _get_module\n    raise RuntimeError(\nE   RuntimeError: Failed to import transformers.models.whisper.processing_whisper because of the following error (look up to see its traceback):\nE   operator torchvision::nms does not exist\n",
+        "returncode": 4
+      },
+      "critical": true,
+      "command": "python -m pytest test/test_complete_integration.py::TestVectorServiceIntegration -v"
+    },
+    "Basic Import Tests": {
+      "result": {
+        "success": true,
+        "stdout": "",
+        "stderr": "",
+        "returncode": 0
+      },
+      "critical": false,
+      "command": "python test_imports.py"
+    },
+    "Service Dependencies Check": {
+      "result": {
+        "success": true,
+        "stdout": "All services import OK\n",
+        "stderr": "",
+        "returncode": 0
+      },
+      "critical": true,
+      "command": "python -c \"from services.vector_service import VectorService; from services.clustering_service import SmartShardingService; print(\\\"All services import OK\\\")\""
+    }
+  }
+}

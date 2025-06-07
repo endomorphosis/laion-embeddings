@@ -1,0 +1,75 @@
+WARNING:mcp_server.tools.data_processing_tools:ipfs_embeddings_py components not available: No module named 'ipfs_kit_py.ipfs_kit'
+🧪 COMPREHENSIVE MCP TOOLS TESTING
+============================================================
+Project root: /home/barberb/laion-embeddings-1
+Python version: 3.12.3 (main, Feb  4 2025, 14:48:35) [GCC 13.3.0]
+
+Testing CORE tools (previously validated):
+--------------------------------------------------
+✓ session_management_tools: 3/3 classes found
+✓ data_processing_tools: 3/3 classes found
+✓ rate_limiting_tools: 2/2 classes found
+✓ ipfs_cluster_tools: 1/1 classes found
+✓ embedding_tools: 1/3 classes found
+✓ search_tools: 1/1 classes found
+Core tools result: 5/6 modules working
+
+Testing ADDITIONAL tools:
+--------------------------------------------------
+✓ cache_tools: 5 classes, 2 functions
+✓ admin_tools: 5 classes, 3 functions
+✓ index_management_tools: 6 classes, 3 functions
+✓ monitoring_tools: 6 classes, 3 functions
+⚠ Warning: Could not import ipfs_kit_py. Some functionality may be limited.
+Warning: Could not import ipfs_kit_py. Please install it: pip install -e docs/ipfs_kit_py/
+Warning: Could not import ipfs_kit_py. Please install it: pip install -e docs/ipfs_kit_py/
+Warning: Could not import storacha_kit from ipfs_kit_py
+✓ workflow_tools: 7 classes, 8 functions
+✓ auth_tools: 7 classes, 2 functions
+✓ vector_store_tools: 5 classes, 10 functions
+✓ analysis_tools: 8 classes, 5 functions
+✗ create_embeddings_tool: unexpected indent (create_embeddings_tool.py, line 173)
+✓ background_task_tools: 6 classes, 3 functions
+✓ storage_tools: 5 classes, 4 functions
+✓ shard_embeddings_tool: 3 classes, 6 functions
+✓ sparse_embedding_tools: 6 classes, 4 functions
+✗ tool_wrapper: No module named 'mcp_server.tools.tool_registry'
+✓ vector_store_tools_new: 5 classes, 4 functions
+✗ vector_store_tools_old: No module named 'services.base_vector_store'
+
+Additional tools result: 13/16 modules working
+Success rate: 81.2%
+
+Tool structure analysis:
+--------------------------------------------------
+✓ Found 23 Python files in tools directory
+✓ Files with execute methods: 18
+✓ Files with async execute methods: 18
+
+============================================================
+FINAL SUMMARY
+============================================================
+Core tools: 5/6 working
+Additional tools: 13/16 working
+Overall: 18/22 tools working
+Overall success rate: 81.8%
+
+Detailed results for additional tools:
+  ✓ cache_tools: 5C, 2F
+  ✓ admin_tools: 5C, 3F
+  ✓ index_management_tools: 6C, 3F
+  ✓ monitoring_tools: 6C, 3F
+  ✓ workflow_tools: 7C, 8F
+  ✓ auth_tools: 7C, 2F
+  ✓ vector_store_tools: 5C, 10F
+  ✓ analysis_tools: 8C, 5F
+  ✗ create_embeddings_tool: unexpected indent (create_embeddings_tool.py, line 173)
+  ✓ background_task_tools: 6C, 3F
+  ✓ storage_tools: 5C, 4F
+  ✓ shard_embeddings_tool: 3C, 6F
+  ✓ sparse_embedding_tools: 6C, 4F
+  ✗ tool_wrapper: No module named 'mcp_server.tools.tool_registry'
+  ✓ vector_store_tools_new: 5C, 4F
+  ✗ vector_store_tools_old: No module named 'services.base_vector_store'
+
+Test completed with exit code: 1

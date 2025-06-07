@@ -14,8 +14,8 @@ class ipfs_accelerate_py:
         self.resources = resources
         self.metadata = metadata
         if "test_ipfs_embeddings_py" not in globals():
-            import test_ipfs_embeddings
-            from test_ipfs_embeddings import test_ipfs_embeddings_py
+            import test.ipfs.test_ipfs_embeddings
+            from test.ipfs.test_ipfs_embeddings import test.ipfs.test_ipfs_embeddings_py
             self.test_ipfs_embeddings = test_ipfs_embeddings_py(resources, metadata)
         else:
             self.test_ipfs_embeddings = test_ipfs_embeddings(resources, metadata) 
@@ -814,5 +814,5 @@ if __name__ == "__main__":
         ]
     }
     ipfs_accelerate_py = ipfs_accelerate_py(resources, metadata)
-    asyncio.run(ipfs_accelerate_py.__test__(resources, metadata))
+    asyncio.run(ipfs_kit.__test__(resources, metadata))
     print("test complete")

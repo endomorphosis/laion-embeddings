@@ -1,0 +1,40 @@
+WARNING:mcp_server.tools.data_processing_tools:ipfs_embeddings_py components not available: No module named 'ipfs_kit_py.ipfs_kit'
+LAION EMBEDDINGS PROJECT - PYTEST FIXES VALIDATION
+============================================================
+============================================================
+TESTING ALL TOOL IMPORTS
+============================================================
+✓ session_management_tools imported successfully
+✗ data_processing_tools import failed: cannot import name 'TextChunkingTool' from 'mcp_server.tools.data_processing_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/data_processing_tools.py)
+✗ rate_limiting_tools import failed: cannot import name 'RateLimitingTool' from 'mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+✗ embedding_tools import failed: cannot import name 'EmbeddingIndexingTool' from 'mcp_server.tools.embedding_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/embedding_tools.py)
+✗ search_tools import failed: cannot import name 'VectorSearchTool' from 'mcp_server.tools.search_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/search_tools.py)
+✗ ipfs_cluster_tools import failed: cannot import name 'ClusterStatusTool' from 'mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)
+
+============================================================
+TESTING TOOL INSTANTIATION
+============================================================
+✓ SessionCreationTool instantiated successfully
+✗ TextChunkingTool instantiation failed: cannot import name 'TextChunkingTool' from 'mcp_server.tools.data_processing_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/data_processing_tools.py)
+✗ RateLimitingTool instantiation failed: cannot import name 'RateLimitingTool' from 'mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+✗ EmbeddingGenerationTool instantiation failed: EmbeddingGenerationTool.__init__() missing 1 required positional argument: 'embedding_service'
+✗ VectorSearchTool instantiation failed: cannot import name 'VectorSearchTool' from 'mcp_server.tools.search_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/search_tools.py)
+✗ ClusterStatusTool instantiation failed: cannot import name 'ClusterStatusTool' from 'mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)
+
+============================================================
+FINAL VALIDATION SUMMARY
+============================================================
+✓ Total successful tests: 2
+✗ Total errors: 10
+
+Errors encountered:
+1. data_processing_tools import failed: cannot import name 'TextChunkingTool' from 'mcp_server.tools.data_processing_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/data_processing_tools.py)
+2. rate_limiting_tools import failed: cannot import name 'RateLimitingTool' from 'mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+3. embedding_tools import failed: cannot import name 'EmbeddingIndexingTool' from 'mcp_server.tools.embedding_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/embedding_tools.py)
+4. search_tools import failed: cannot import name 'VectorSearchTool' from 'mcp_server.tools.search_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/search_tools.py)
+5. ipfs_cluster_tools import failed: cannot import name 'ClusterStatusTool' from 'mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)
+6. TextChunkingTool instantiation failed: cannot import name 'TextChunkingTool' from 'mcp_server.tools.data_processing_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/data_processing_tools.py)
+7. RateLimitingTool instantiation failed: cannot import name 'RateLimitingTool' from 'mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+8. EmbeddingGenerationTool instantiation failed: EmbeddingGenerationTool.__init__() missing 1 required positional argument: 'embedding_service'
+9. VectorSearchTool instantiation failed: cannot import name 'VectorSearchTool' from 'mcp_server.tools.search_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/search_tools.py)
+10. ClusterStatusTool instantiation failed: cannot import name 'ClusterStatusTool' from 'mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)

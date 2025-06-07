@@ -1,7 +1,7 @@
-
 import datasets
 import sys
-import ipfs_embeddings_py
+from ipfs_kit_py.ipfs_kit import ipfs_kit
+from ipfs_embeddings_py import ipfs_embeddings_py, qdrant_kit_py, faiss_kit_py
 import numpy as np
 import os
 import json
@@ -21,28 +21,14 @@ class search_embeddings:
         if len(list(metadata.keys())) > 0:
             for key in metadata.keys():
                 setattr(self, key, metadata[key])
-        self.qdrant_kit_py = ipfs_embeddings_py.qdrant_kit_py(resources, metadata)
-        self.ipfs_embeddings_py = ipfs_embeddings_py.ipfs_embeddings_py(resources, metadata)
-        if "tei_endpoints" in resources.keys():
-            for endpoint in resources["tei_endpoints"]:
-                self.ipfs_embeddings_py.add_tei_endpoint(endpoint[0], endpoint[1], endpoint[2])
-        else:
-            self.ipfs_embeddings_py.add_tei_endpoint("BAAI/bge-m3", "http://62.146.169.111:80/embed",1)
-        if "openvino_endpoints" in resources.keys():
-            for endpoint in resources["openvino_endpoints"]:
-                self.ipfs_embeddings_py.add_openvino_endpoint(endpoint[0], endpoint[1], endpoint[2])
-        else:
-            pass
-        if "local_endpoints" in resources.keys():
-            for endpoint in resources["local_endpoints"]:
-                self.ipfs_embeddings_py.add_local_endpoint(endpoint[0], endpoint[1], endpoint[2])
-        else:
-            pass
-        if "libp2p_endpoints" in resources.keys():
-            for endpoint in resources["libp2p_endpoints"]:
-                self.ipfs_embeddings_py.add_libp2p_endpoint(endpoint[0], endpoint[1], endpoint[2])
-        else:
-            pass
+        
+        # Instantiate ipfs_kit
+        self.ipfs_kit = ipfs_kit.ipfs_kit(resources=resources, metadata=metadata) # Instantiate ipfs_kit
+        
+        self.qdrant_kit_py = qdrant_kit_py(resources=resources, metadata=metadata)
+        self.ipfs_embeddings_py = ipfs_embeddings_py(resources=resources, metadata=metadata)
+        # Removed calls to self.ipfs_kit.add_endpoint as the method does not exist.
+        # Endpoint management might be handled differently now or is not needed here.
         
         self.join_column = None
         self.qdrant_found = False
@@ -57,23 +43,6 @@ class search_embeddings:
                 print("Qdrant failed to start, fallback to faiss")
         else:
             self.qdrant_found = True
-        self.add_tei_endpoint = self.add_tei_endpoint
-        self.add_openvino_endpoint = self.add_openvino_endpoint
-        self.add_local_endpoint = self.add_local_endpoint
-        self.add_libp2p_endpoint = self.add_libp2p_endpoint
-
-    def add_tei_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_tei_endpoint(model, endpoint, ctx_length)
-    
-    def add_openvino_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_openvino_endpoint(model, endpoint, ctx_length)
-    
-    def add_local_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_local_endpoint(model, endpoint, ctx_length)
-
-    def add_libp2p_endpoint(self, model, endpoint, ctx_length):
-        return self.ipfs_embeddings_py.add_libp2p_endpoint(model, endpoint, ctx_length)
-    
     def rm_cache(self):
         homedir = os.path.expanduser("~")
         cache_dir = homedir + "/.cache/huggingface/datasets/"
@@ -88,9 +57,9 @@ class search_embeddings:
             query = [query]
         elif not isinstance(query, list):
             raise ValueError("Query must be a string or a list of strings")
-        self.ipfs_embeddings_py.index_knn(query, "")
-        selected_endpoint = self.ipfs_embeddings_py.choose_endpoint(self.model)
-        embeddings = await self.ipfs_embeddings_py.index_knn(selected_endpoint, self.model)
+        self.ipfs_kit.index_knn(query, "")
+        selected_endpoint = self.ipfs_kit.choose_endpoint(self.model)
+        embeddings = await self.ipfs_kit.index_knn(selected_endpoint, self.model)
         return embeddings
     
     # def search_embeddings(self, embeddings):
@@ -136,7 +105,7 @@ class search_embeddings:
 
             return search_results
         else:
-            start_faiss = self.ipfs_embeddings_py.start_faiss(collection, query)
+            start_faiss = self.ipfs_kit.start_faiss(collection, query)
             if start_faiss == True:
                 print("Faiss started")
                 datasets_pairs = ["",""]
@@ -147,8 +116,8 @@ class search_embeddings:
                 for i in range(len(datasets)):
                     if i % 2 == 0:
                         datasets_pairs.append(datasets[i-1], datasets[i])
-                    await self.ipfs_embeddings_py.load_faiss(datasets_pairs[0], datasets_pairs[1])
-                    await self.ipfs_embeddings_py.ingest_faiss(column)
+                    await self.ipfs_kit.load_faiss(datasets_pairs[0], datasets_pairs[1])
+                    await self.ipfs_kit.ingest_faiss(column)
                 for collection in collections:
                     results = await self.search(collection, query)
                     search_results[collection] = results
@@ -185,18 +154,100 @@ class search_embeddings:
         collection = "English-ConcatX-Abstract"
         search_results = await self.search(collection, query)
         print(search_results)
+
+    async def test_query(self):
+        query = "Machine Learning"
+        collection = "English-ConcatX-Abstract"
+        search_results = await self.search(collection, query)
+        print(search_results)
         return None
         
     async def start_faiss(self, collection, query):
-        return self.ipfs_embeddings_py.start_faiss(collection, query)
+        return self.ipfs_kit.start_faiss(collection, query)
     
     async def load_faiss(self, dataset, knn_index):
-        return self.ipfs_embeddings_py.load_faiss(dataset, knn_index)
+        return self.ipfs_kit.load_faiss(dataset, knn_index)
     
     async def ingest_faiss(self, column):
-        return self.ipfs_embeddings_py.ingest_faiss(column)
+        return self.ipfs_kit.ingest_faiss(column)
     
     
+if __name__ == "__main__":
+    metadata = {
+        "dataset": "TeraflopAI/Caselaw_Access_Project",
+        "column": "text",
+        "split": "train",
+        "models": [
+            "thenlper/gte-small",
+            "Alibaba-NLP/gte-large-en-v1.5",
+            "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+        ],
+        "chunk_settings": {
+            "chunk_size": 512,
+            "n_sentences": 8,
+            "step_size": 256,
+            "method": "fixed",
+            "embed_model": "thenlper/gte-small",
+            "tokenizer": None
+        },
+        "dst_path": "/storage/teraflopai/tmp",
+    }
+    resources = {
+        "local_endpoints": [
+            ["thenlper/gte-small", "cpu", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cpu", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cpu", 32768],
+            ["thenlper/gte-small", "cuda:0", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cuda:0", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:0", 32768],
+            ["thenlper/gte-small", "cuda:1", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "cuda:1", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "cuda:1", 32768],
+            ["thenlper/gte-small", "openvino", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "openvino", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "openvino", 32768],
+            ["thenlper/gte-small", "llama_cpp", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "llama_cpp", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "llama_cpp", 32768],
+            ["thenlper/gte-small", "ipex", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "ipex", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "ipex", 32768],
+        ],
+        "openvino_endpoints": [
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["neoALI/bge-m3-rag-ov", "https://bge-m3-rag-ov-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-rag-ov/infer", 4095],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx0-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx0/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx1-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx1/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx2-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx2/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx3-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx3/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx4-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx4/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx5-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx5/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx6-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx6/infer", 1024],
+            # ["aapot/bge-m3-onnx", "https://bge-m3-onnx7-endomorphosis-dev.apps.cluster.intel.sandbox1234.opentlc.com/v2/models/bge-m3-onnx7/infer", 1024]
+        ],
+        "tei_endpoints": [
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8080/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8080/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8081/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8081/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8081/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8082/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8082/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8082/embed-tiny", 512],
+            ["Alibaba-NLP/gte-large-en-v1.5", "http://62.146.169.111:8083/embed-small", 8192],
+            ["Alibaba-NLP/gte-Qwen2-1.5B-instruct", "http://62.146.169.111:8083/embed-medium", 32768],
+            ["thenlper/gte-small", "http://62.146.169.111:8083/embed-tiny", 512]
+        ]
+    }
+    search_embeddings = search_embeddings(resources, metadata)
+    # asyncio.run(search_embeddings.test_high_memory())
+    # asyncio.run(search_embeddings.test_low_memory())
+    asyncio.run(search_embeddings.test())
+    print()
+
+
 if __name__ == "__main__":
     metadata = {
         "dataset": "TeraflopAI/Caselaw_Access_Project",

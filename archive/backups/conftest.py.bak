@@ -1,0 +1,31 @@
+"""
+Pytest configuration file for test suite.
+
+This file sets up the test environment and provides fixtures for the tests.
+"""
+
+import pytest
+import os
+
+# Import mocks first to patch modules before any tests run
+from test.mocks import setup_test_environment
+
+# Initialize test environment
+setup_test_environment()
+
+# Add pytest marks
+def pytest_configure(config):
+    """Configure pytest with custom markers."""
+    config.addinivalue_line("markers", "performance: mark test as a performance test")
+    config.addinivalue_line("markers", "integration: mark test as an integration test")
+    config.addinivalue_line("markers", "slow: mark test as a slow test")
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_testing_environment():
+    """Set up the testing environment."""
+    # Ensure TESTING environment variable is set
+    os.environ["TESTING"] = "true"
+    yield
+    # Clean up after all tests
+    if "TEST_MISSING_IPFS" in os.environ:
+        del os.environ["TEST_MISSING_IPFS"]

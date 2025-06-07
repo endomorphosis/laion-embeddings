@@ -1,0 +1,100 @@
+=== PYTEST STDOUT ===
+============================= test session starts ==============================
+collecting ... collected 214 items / 5 errors
+
+==================================== ERRORS ====================================
+_____ ERROR collecting tests/test_mcp_tools/test_data_processing_tools.py ______
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_data_processing_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mcp_tools/test_data_processing_tools.py:9: in <module>
+    from src.mcp_server.tools.data_processing_tools import (
+src/mcp_server/tools/data_processing_tools.py:12: in <module>
+    from ipfs_embeddings_py.ipfs_embeddings import ipfs_embeddings_py
+ipfs_embeddings_py/__init__.py:1: in <module>
+    from .ipfs_embeddings import ipfs_embeddings_py
+ipfs_embeddings_py/ipfs_embeddings.py:28: in <module>
+    import ipfs_accelerate_py
+venv/lib/python3.12/site-packages/ipfs_accelerate_py/__init__.py:6: in <module>
+    from .ipfs_accelerate import ipfs_accelerate_py
+venv/lib/python3.12/site-packages/ipfs_accelerate_py/ipfs_accelerate.py:13: in <module>
+    import ipfs_kit_py
+E   ModuleNotFoundError: No module named 'ipfs_kit_py'
+_______ ERROR collecting tests/test_mcp_tools/test_ipfs_cluster_tools.py _______
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_ipfs_cluster_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mcp_tools/test_ipfs_cluster_tools.py:14: in <module>
+    from src.mcp_server.tools.ipfs_cluster_tools import (
+E   ImportError: cannot import name 'IPFSClusterManagementTool' from 'src.mcp_server.tools.ipfs_cluster_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/ipfs_cluster_tools.py)
+______ ERROR collecting tests/test_mcp_tools/test_rate_limiting_tools.py _______
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_rate_limiting_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mcp_tools/test_rate_limiting_tools.py:9: in <module>
+    from src.mcp_server.tools.rate_limiting_tools import (
+E   ImportError: cannot import name 'RateLimitEnforcementTool' from 'src.mcp_server.tools.rate_limiting_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/rate_limiting_tools.py)
+_______ ERROR collecting tests/test_mcp_tools/test_vector_store_tools.py _______
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_vector_store_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mcp_tools/test_vector_store_tools.py:14: in <module>
+    from src.mcp_server.tools.vector_store_tools import (
+E   ImportError: cannot import name 'create_vector_store_tool' from 'src.mcp_server.tools.vector_store_tools' (/home/barberb/laion-embeddings-1/src/mcp_server/tools/vector_store_tools.py)
+_________ ERROR collecting tests/test_mcp_tools/test_workflow_tools.py _________
+ImportError while importing test module '/home/barberb/laion-embeddings-1/tests/test_mcp_tools/test_workflow_tools.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.12/importlib/__init__.py:90: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_mcp_tools/test_workflow_tools.py:14: in <module>
+    from src.mcp_server.tools.workflow_tools import (
+src/mcp_server/tools/workflow_tools.py:12: in <module>
+    from create_embeddings.create_embeddings import CreateEmbeddingsProcessor
+E   ImportError: cannot import name 'CreateEmbeddingsProcessor' from 'create_embeddings.create_embeddings' (/home/barberb/laion-embeddings-1/create_embeddings/create_embeddings.py)
+------------------------------- Captured stdout --------------------------------
+⚠ Warning: Could not import ipfs_kit_py. Some functionality may be limited.
+=============================== warnings summary ===============================
+venv/lib/python3.12/site-packages/faiss/loader.py:49
+  /home/barberb/laion-embeddings-1/venv/lib/python3.12/site-packages/faiss/loader.py:49: DeprecationWarning: numpy.core._multiarray_umath is deprecated and has been renamed to numpy._core._multiarray_umath. The numpy._core namespace contains private NumPy internals and its use is discouraged, as NumPy internals can change without warning in any release. In practice, most real-world usage of numpy.core is to access functionality in the public NumPy API. If that is the case, use the public NumPy API. If not, you are using NumPy internals. If you would still like to access an internal attribute, use numpy._core._multiarray_umath.__cpu_features__.
+    from numpy.core._multiarray_umath import __cpu_features__
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+../../../usr/lib/python3.12/multiprocessing/popen_fork.py:66
+  /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=1178046) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/test_mcp_tools/test_data_processing_tools.py
+ERROR tests/test_mcp_tools/test_ipfs_cluster_tools.py
+ERROR tests/test_mcp_tools/test_rate_limiting_tools.py
+ERROR tests/test_mcp_tools/test_vector_store_tools.py
+ERROR tests/test_mcp_tools/test_workflow_tools.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 5 errors during collection !!!!!!!!!!!!!!!!!!!!
+======================== 5 warnings, 5 errors in 12.00s ========================
+
+=== PYTEST STDERR ===
+
+=== RETURN CODE: 2 ===

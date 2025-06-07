@@ -1,0 +1,7 @@
+INFO:__main__:Testing MCP server startup...
+ERROR:__main__:❌ Server startup test failed: MCPServer.__init__() missing 6 required positional arguments: 'name', 'version', 'session_manager', 'metrics_collector', 'tool_registry', and 'config'
+Traceback (most recent call last):
+  File "/home/barberb/laion-embeddings-1/test_mcp_server_startup.py", line 27, in test_server_startup
+    server = MCPServer()
+             ^^^^^^^^^^^
+TypeError: MCPServer.__init__() missing 6 required positional arguments: 'name', 'version', 'session_manager', 'metrics_collector', 'tool_registry', and 'config'
